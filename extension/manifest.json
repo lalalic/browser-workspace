@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Browser Workspace Manager",
+  "version": "0.2.0",
+  "description": "Own named Chrome tab-group workspaces and exact-size reusable tab pools for browser agents.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv7NU4eqCIkv793eZGTna5ntNKx42cj7wFWD0b+tEhGWHgXuYMDKXHuvtf1249vozaGGpDPFtH3d5uk0QNCl5yFA+kdL5RgTyg5qIpdFT4NET5Y8HSALxSjy27U4+Lf7XwYkQdSuClK7S9KxUI7OE9bloiDaSWbs9XjEBoeUGALXgqsIMgBVbyQ2RuMUo9mGpTreA+Tp2ATivU5ZnwmOuhJzniefbyAST/U6LY4VK/7jijnHLbfmTmCyi3xHWD2b8l9A7IsDBR1eRk6XY0YqZlC/H2wSmcUUQjhsgpiQK32iwwyNFspKgH4ReRPoO6RSuatUS8+J+/xevwCBF5eBq1QIDAQAB",
+  "permissions": ["storage", "tabs", "tabGroups"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "service-worker.mjs",
+    "type": "module"
+  }
+}
