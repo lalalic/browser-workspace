@@ -1,4 +1,4 @@
-# Browser Workspace Manager
+# Browser Workspace
 
 Chrome extension for named browser-agent workspaces inside the user's normal Chrome profile.
 
@@ -24,7 +24,7 @@ The extension owns only group/pool lifecycle. Page operations belong to Browser 
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select:
 
 ```
-~/Workspace/browser-workspace-manager/extension
+~/Workspace/browser-workspace/extension
 ```
 
 The manifest contains a stable public key, so the unpacked extension keeps extension ID:
