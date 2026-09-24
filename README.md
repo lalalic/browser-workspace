@@ -46,3 +46,29 @@ Build the same zip locally with:
 ```bash
 scripts/package-extension.sh
 ```
+
+
+## Install Browser Harness integration
+
+Clone the repository, then install the helper directly from the repo:
+
+```bash
+git clone git@github.com:lalalic/browser-workspace.git ~/Workspace/browser-workspace
+cd ~/Workspace/browser-workspace
+./scripts/install.sh
+```
+
+Defaults:
+
+```bash
+BH_WORKSPACE_NAME=Harness
+BH_WORKSPACE_POOL_SIZE=5
+```
+
+Override them for one install:
+
+```bash
+BH_WORKSPACE_NAME=Research BH_WORKSPACE_POOL_SIZE=4 ./scripts/install.sh
+```
+
+The installer copies `browser-harness/agent_helpers.py` into the Browser Harness agent workspace and persists the environment values in its `.env`.
