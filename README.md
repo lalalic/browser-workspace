@@ -39,7 +39,7 @@ node --test test/workspace-manager.test.mjs
 
 ## Extension zip
 
-Every push to `main` that changes extension source automatically runs the **Extension Zip** GitHub Action. It runs the tests, packages the contents of `extension/` with `manifest.json` at the zip root, verifies the archive, and uploads `browser-workspace-v<version>.zip` as a GitHub Actions artifact for 90 days.
+Every push to `main` that changes extension source automatically runs the **Extension Release** GitHub Action. It runs the tests, packages the contents of `extension/` with `manifest.json` at the zip root, verifies the archive, uploads `browser-workspace-v<version>.zip` as a workflow artifact, and creates a GitHub Release with the zip attached.
 
 Build the same zip locally with:
 

@@ -1,4 +1,4 @@
-name: Extension Zip
+name: Extension Release
 
 on:
   push:
@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  package:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,19 +26,38 @@ jobs:
         shell: bash
         run: |
           zip_path="$(scripts/package-extension.sh)"
+          version="$(node -p "require('./extension/manifest.json').version")"
           echo "zip_path=$zip_path" >> "$GITHUB_OUTPUT"
           echo "zip_name=$(basename "$zip_path")" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Verify zip
         shell: bash
         run: |
           unzip -l "${{ steps.package.outputs.zip_path }}"
+          test "$(unzip -Z1 "${{ steps.package.outputs.zip_path }}" | head -1)" = "manifest.json"
           unzip -p "${{ steps.package.outputs.zip_path }}" manifest.json >/dev/null
 
-      - name: Upload extension zip
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.zip_name }}
           path: ${{ steps.package.outputs.zip_path }}
           if-no-files-found: error
           retention-days: 90
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+          ZIP_PATH: ${{ steps.package.outputs.zip_path }}
+        shell: bash
+        run: |
+          tag="extension-v${VERSION}-${GITHUB_SHA::7}"
+          title="Browser Workspace v${VERSION} (${GITHUB_SHA::7})"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$ZIP_PATH" --clobber
+          else
+            gh release create "$tag" "$ZIP_PATH"               --target "$GITHUB_SHA"               --title "$title"               --notes "Automatic Browser Workspace extension build from commit $GITHUB_SHA."
+          fi
