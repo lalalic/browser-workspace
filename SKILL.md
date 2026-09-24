@@ -1,117 +1,131 @@
 ---
 name: browser-workspace
-description: Configure Browser Harness to operate only inside one named Browser Workspace Chrome tab group. Depends on the browser-harness skill.
+description: Set up and use Browser Workspace with Browser Harness. Depends on the browser-harness skill.
 ---
 
-# Browser Workspace + Browser Harness
+# Browser Workspace
 
-Use this skill whenever Browser Harness should operate inside a managed Chrome tab-group workspace instead of seeing the user's other Chrome tabs.
+Use this skill to set up Browser Workspace after the skill itself has been installed and loaded.
 
-The Chrome extension source lives in the standalone repository:
+This skill depends on the **browser-harness** skill. Browser Harness installation and base configuration belong to that skill.
 
-`~/Workspace/browser-workspace`
+## Setup entry point
 
-GitHub repository:
+When this skill is loaded for setup, do the following in order:
 
-`lalalic/browser-workspace`
+1. Ensure the `browser-harness` skill has been applied and `browser-harness` is available.
+2. Ask the user to install the bundled Chrome extension manually.
+3. Configure the Browser Workspace environment.
+4. Apply the bundled Browser Harness helper.
+5. Verify Browser Workspace can create and see the configured group.
 
-This repository owns the Chrome extension, Browser Harness helper, install script, and this skill.
+Do not assume a particular checkout directory, home directory, or project layout.
 
-## Setup order
+## 1. Install the bundled Chrome extension
 
-## Dependency
+The Chrome extension is bundled with this skill at:
 
-This skill depends on the **browser-harness skill**.
+`<browser-workspace>/extension`
 
-The browser-harness skill owns installation and base setup of Browser Harness. Do not duplicate that installation logic here. Before applying Browser Workspace, ensure the browser-harness skill has been installed/applied successfully and that `browser-harness` is available.
+Here, `<browser-workspace>` means the local directory containing this `SKILL.md`.
 
-Set up Browser Workspace in this order:
+Resolve that directory to an **absolute local path**, then tell the user exactly which folder to select.
 
-0. Apply the browser-harness skill.
-1. Install the Chrome extension.
-2. Set the workspace environment variables.
-3. Apply the Browser Workspace helper.
-
-### 1. Install the Chrome extension
-
-**Production / published extension:** open the Browser Workspace Chrome Web Store URL directly in the user's normal signed-in Chrome profile and install it. The skill should use the exact store URL once the extension is published; do not ask the user to search the store manually.
-
-**Development fallback until the store listing exists:**
+Ask the user to do this manually in Chrome:
 
 1. Open `chrome://extensions`.
-2. Enable Developer mode.
-3. Choose **Load unpacked**.
-4. Select `~/Workspace/browser-workspace/extension`.
+2. Enable **Developer mode**.
+3. Click **Load unpacked**.
+4. Select the exact local `<browser-workspace>/extension` directory you resolved above.
 
-Development extension ID:
+Do not direct the user to a store page. Do not mention a repository, clone location, or another machine's filesystem path.
+
+After the user confirms the extension is loaded, continue setup.
+
+Default extension ID:
 
 `kgbghhigmbpefppgkocgjgnnnbhjchic`
 
-The extension owns workspace/group/pool lifecycle only. Browser Harness remains responsible for page navigation, DOM/AX operations, clicks, typing, screenshots, uploads, and downloads.
+## 2. Configure Browser Workspace
 
-### 2. Set environment variables
-
-Set the Browser Harness workspace name and exact pool size before applying the helper:
+Defaults:
 
 ```bash
-export BH_WORKSPACE_NAME=Harness
-export BH_WORKSPACE_POOL_SIZE=5
-```
-
-Optionally override the extension ID:
-
-```bash
-export BH_WORKSPACE_MANAGER_EXTENSION_ID=kgbghhigmbpefppgkocgjgnnnbhjchic
+BH_WORKSPACE_NAME=Harness
+BH_WORKSPACE_POOL_SIZE=5
 ```
 
 `BH_WORKSPACE_POOL_SIZE=N` means exactly **N Chrome tabs total in the group**.
 
-### 3. Apply the Browser Workspace helper
-
-Run:
+The extension ID can be overridden when necessary:
 
 ```bash
-~/Workspace/browser-workspace/scripts/install.sh
+BH_WORKSPACE_MANAGER_EXTENSION_ID=<extension-id>
 ```
 
-The installer copies `browser-harness/agent_helpers.py` into:
+Do not expose or reuse machine-specific environment values from another installation.
 
-`$BH_AGENT_WORKSPACE/agent_helpers.py`
+## 3. Apply the bundled Browser Harness helper
 
-or, when `BH_AGENT_WORKSPACE` is unset:
+The installer is bundled at:
+
+`<browser-workspace>/scripts/install.sh`
+
+Run it from the resolved local skill directory, for example:
+
+```bash
+"<browser-workspace>/scripts/install.sh"
+```
+
+The installer copies:
+
+`<browser-workspace>/browser-harness/agent_helpers.py`
+
+into the Browser Harness agent workspace and persists the Browser Workspace environment settings in its `.env`.
+
+By default the target is:
 
 `~/.config/browser-harness/agent-workspace/agent_helpers.py`
 
-It also persists the current Browser Workspace environment values into the Browser Harness workspace `.env`, so future `browser-harness` processes use the same workspace by default.
+If `BH_AGENT_WORKSPACE` is set, use that Browser Harness agent workspace instead.
 
-Example one-shot setup:
+To override the defaults for this installation:
 
 ```bash
 BH_WORKSPACE_NAME=Research \
 BH_WORKSPACE_POOL_SIZE=4 \
-~/Workspace/browser-workspace/scripts/install.sh
+"<browser-workspace>/scripts/install.sh"
 ```
+
+## 4. Verify
+
+Start a new Browser Harness process after applying the helper.
+
+Verify that:
+
+- the configured group is created or reconciled;
+- the group name matches `BH_WORKSPACE_NAME`;
+- the group contains exactly `BH_WORKSPACE_POOL_SIZE` tabs;
+- Browser Harness exposes only tabs belonging to that workspace.
+
+If the extension is not available, stop and ask the user to confirm that the unpacked extension is loaded from the exact local `<browser-workspace>/extension` path.
 
 ## Runtime behavior
 
-After setup, use `browser-harness` normally.
-
-Each new Browser Harness process reads the configured environment. The helper:
+The helper:
 
 - creates the selected workspace automatically when it is missing;
 - exposes only tabs in `BH_WORKSPACE_NAME`;
 - leases `new_tab(url)` from that workspace pool;
 - returns `close_tab()` tabs to the pool;
 - refuses visible activation and operations on tabs outside the workspace;
-- fails closed when Chrome tab to CDP target mapping is ambiguous.
-
-`BH_WORKSPACE_POOL_SIZE=N` means exactly **N Chrome tabs total in the group**. There is no extra marker tab.
+- fails closed when Chrome-tab-to-CDP-target mapping is ambiguous.
 
 Workspace identity is the unique Chrome tab-group title. Chrome `groupId` is treated as ephemeral and rediscovered after restarts. Duplicate groups with the same workspace title are considered ambiguous and fail closed.
 
 ## Changing workspace
 
-Changing the env value affects the next Browser Harness process:
+Changing the environment affects the next Browser Harness process:
 
 ```bash
 export BH_WORKSPACE_NAME=Research
@@ -121,7 +135,7 @@ browser-harness
 
 An already-running Browser Harness process keeps the values it started with.
 
-For an existing workspace, `BH_WORKSPACE_POOL_SIZE` is the creation/default size. To resize an existing workspace explicitly, use:
+For an existing workspace, `BH_WORKSPACE_POOL_SIZE` is the creation/default size. To resize an existing workspace explicitly:
 
 ```python
 workspace_resize("Research", 6)
@@ -129,10 +143,10 @@ workspace_resize("Research", 6)
 
 ## Workspace helpers
 
-The installed helper also exposes:
+The installed helper exposes:
 
 ```python
-workspace_create("Research", 4)
+workspace_create("Research", 5)
 workspace_status()
 workspace_list()
 workspace_resize("Research", 6)
