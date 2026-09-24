@@ -1,0 +1,44 @@
+name: Extension Zip
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extension/**"
+      - "scripts/package-extension.sh"
+      - ".github/workflows/extension-zip.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        run: node --test test/workspace-manager.test.mjs
+
+      - name: Package extension
+        id: package
+        shell: bash
+        run: |
+          zip_path="$(scripts/package-extension.sh)"
+          echo "zip_path=$zip_path" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$(basename "$zip_path")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify zip
+        shell: bash
+        run: |
+          unzip -l "${{ steps.package.outputs.zip_path }}"
+          unzip -p "${{ steps.package.outputs.zip_path }}" manifest.json >/dev/null
+
+      - name: Upload extension zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.zip_name }}
+          path: ${{ steps.package.outputs.zip_path }}
+          if-no-files-found: error
+          retention-days: 90
