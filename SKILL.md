@@ -116,7 +116,7 @@ The helper:
 
 - creates the selected workspace automatically when it is missing;
 - exposes only tabs in `BH_WORKSPACE_NAME`;
-- leases `new_tab(url)` from that workspace pool;
+- leases `new_tab(url)` from that workspace pool, including `http(s)` and `chrome-extension://` pages;
 - returns `close_tab()` tabs to the pool;
 - refuses visible activation and operations on tabs outside the workspace;
 - fails closed when Chrome-tab-to-CDP-target mapping is ambiguous.

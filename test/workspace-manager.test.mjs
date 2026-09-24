@@ -44,6 +44,7 @@ function fakeChrome() {
           title: "Browser Workspace",
           url: options.url || "about:blank",
           active: Boolean(options.active),
+          ...(Number.isInteger(options.openerTabId) ? { openerTabId: options.openerTabId } : {}),
         };
         tabs.set(tab.id, tab);
         return clone(tab);
@@ -177,4 +178,75 @@ test("duplicate workspace titles fail closed", async () => {
     () => manager.status("Research"),
     /ambiguous/,
   );
+});
+
+
+
+test("workspace can lease a chrome-extension page inside the existing group", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const state = await manager.create("Harness", 5);
+  const leased = await manager.acquire(
+    "Harness",
+    "chrome-extension://teammate/main.html",
+  );
+
+  assert.equal(leased.groupId, state.groupId);
+  const after = await manager.status("Harness");
+  assert.equal(after.tabIds.length, 5);
+  assert.ok(after.tabs.some((tab) => tab.url === "chrome-extension://teammate/main.html"));
+});
+
+test("workspace still rejects unsupported URL schemes", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 2);
+  await assert.rejects(
+    () => manager.acquire("Harness", "file:///tmp/test.html"),
+    /http\(s\) or chrome-extension/,
+  );
+});
+
+test("child tab inherits workspace group and consumes an idle pool slot", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const state = await manager.create("Harness", 5);
+  const leased = await manager.acquire("Harness", "https://teams.cloud.microsoft/");
+  const child = await chrome.tabs.create({
+    url: "chrome-extension://teammate/main.html",
+    active: false,
+    openerTabId: leased.tabId,
+  });
+
+  const inherited = await manager.inheritWorkspaceForCreatedTab(child);
+  assert.deepEqual(inherited, {
+    workspace: "Harness",
+    groupId: state.groupId,
+    tabId: child.id,
+    inheritedFromTabId: leased.tabId,
+  });
+
+  const after = await manager.status("Harness");
+  assert.equal(after.tabIds.length, 5);
+  assert.ok(after.tabIds.includes(child.id));
+  assert.equal(after.idleTabIds.length, 3);
+  assert.equal(after.leasedTabIds.length, 2);
+});
+
+test("tab opened outside a workspace is not adopted", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 5);
+  const outside = await chrome.tabs.create({ url: "https://example.com/" });
+  const child = await chrome.tabs.create({
+    url: "chrome-extension://teammate/setup.html",
+    openerTabId: outside.id,
+  });
+
+  assert.equal(await manager.inheritWorkspaceForCreatedTab(child), null);
+  assert.equal(child.groupId, -1);
 });

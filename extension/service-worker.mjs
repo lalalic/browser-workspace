@@ -20,3 +20,9 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   globalThis.browserWorkspaceManagerRpc(request).then(sendResponse);
   return true;
 });
+
+chrome.tabs.onCreated.addListener((tab) => {
+  manager.inheritWorkspaceForCreatedTab(tab).catch((error) => {
+    console.warn("Browser Workspace failed to inherit child tab group", error);
+  });
+});

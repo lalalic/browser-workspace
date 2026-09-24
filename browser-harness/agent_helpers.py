@@ -197,8 +197,14 @@ def switch_tab(target, activate=False):
 
 
 def new_tab(url="about:blank"):
-    if not (url.startswith("http://") or url.startswith("https://")):
-        raise RuntimeError("Workspace new_tab requires an http(s) URL")
+    if not (
+        url.startswith("http://")
+        or url.startswith("https://")
+        or url.startswith("chrome-extension://")
+    ):
+        raise RuntimeError(
+            "Workspace new_tab requires an http(s) or chrome-extension URL"
+        )
     opened = _manager_call(
         "workspace.acquire",
         {"name": _WORKSPACE_NAME, "url": url},

@@ -85,6 +85,44 @@ export class WorkspaceManager {
     return await this.chrome.tabs.query({ groupId });
   }
 
+  async inheritWorkspaceForCreatedTab(tab) {
+    const tabId = Number(tab?.id);
+    const openerTabId = Number(tab?.openerTabId);
+    if (!Number.isInteger(tabId) || !Number.isInteger(openerTabId)) return null;
+
+    const allTabs = await this.chrome.tabs.query({});
+    const opener = allTabs.find((candidate) => candidate.id === openerTabId);
+    if (!opener || !Number.isInteger(opener.groupId) || opener.groupId < 0) return null;
+
+    const group = (await this.chrome.tabGroups.query({}))
+      .find((candidate) => candidate.id === opener.groupId);
+    if (!group?.title) return null;
+
+    const { entry } = await this.configuredWorkspace(group.title);
+    if (!entry) return null;
+
+    await this.chrome.tabs.group({ groupId: opener.groupId, tabIds: [tabId] });
+
+    const tabs = await this.groupTabs(opener.groupId);
+    if (tabs.length > entry.poolSize) {
+      const { idle } = this.classify(group.title, tabs);
+      const removable = idle.find((candidate) => candidate.id !== tabId);
+      if (removable) await this.chrome.tabs.remove(removable.id);
+    }
+
+    await this.chrome.tabGroups.update(opener.groupId, {
+      title: group.title,
+      collapsed: true,
+    });
+
+    return {
+      workspace: group.title,
+      groupId: opener.groupId,
+      tabId,
+      inheritedFromTabId: openerTabId,
+    };
+  }
+
   classify(name, tabs) {
     const idle = [];
     const leased = [];
@@ -225,8 +263,8 @@ export class WorkspaceManager {
   async acquire(name, url) {
     const normalizedName = normalizeWorkspaceName(name);
     const parsed = new URL(String(url || ""));
-    if (!["http:", "https:"].includes(parsed.protocol)) {
-      throw new Error("Workspace acquire requires an http(s) URL");
+    if (!["http:", "https:", "chrome-extension:"].includes(parsed.protocol)) {
+      throw new Error("Workspace acquire requires an http(s) or chrome-extension URL");
     }
 
     const ready = await this.ensureWorkspace(normalizedName);
