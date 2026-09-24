@@ -90,7 +90,7 @@ export class WorkspaceManager {
     const leased = [];
     for (const tab of tabs) {
       const meta = this.parseManagedUrl(tab.url || "");
-      if (meta?.workspace === name && meta.role === "idle") idle.push(tab);
+      if (meta?.workspace === name && ["idle", "marker"].includes(meta.role)) idle.push(tab);
       else leased.push(tab);
     }
     return { idle, leased };
