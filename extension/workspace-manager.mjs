@@ -201,6 +201,16 @@ export class WorkspaceManager {
     return { workspaces: result };
   }
 
+  async ensure(name, defaultPoolSize = 8) {
+    const normalizedName = normalizeWorkspaceName(name);
+    const { entry } = await this.configuredWorkspace(normalizedName);
+    if (entry) return await this.ensureWorkspace(normalizedName);
+    return await this.ensureWorkspace(
+      normalizedName,
+      normalizePoolSize(defaultPoolSize),
+    );
+  }
+
   async create(name, poolSize = 8) {
     return await this.ensureWorkspace(name, normalizePoolSize(poolSize));
   }
@@ -281,6 +291,7 @@ export class WorkspaceManager {
     const method = String(request?.method || "");
     const args = request?.args || {};
     if (method === "workspace.create") return await this.create(args.name, args.poolSize);
+    if (method === "workspace.ensure") return await this.ensure(args.name, args.poolSize);
     if (method === "workspace.status") return await this.status(args.name);
     if (method === "workspace.list") return await this.list();
     if (method === "workspace.acquire") return await this.acquire(args.name, args.url);

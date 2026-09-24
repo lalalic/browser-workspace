@@ -9,6 +9,7 @@ Each workspace is a Chrome tab group whose **total tab count equals the configur
 The MV3 service worker exposes:
 
 - `workspace.create(name, poolSize)`
+- `workspace.ensure(name, defaultPoolSize)`
 - `workspace.status(name)`
 - `workspace.list()`
 - `workspace.acquire(name, url)`
