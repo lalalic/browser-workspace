@@ -3,6 +3,11 @@
 import json as _json
 import os as _os
 import time as _time
+import uuid as _uuid
+from urllib.parse import parse_qsl as _parse_qsl
+from urllib.parse import urlencode as _urlencode
+from urllib.parse import urlsplit as _urlsplit
+from urllib.parse import urlunsplit as _urlunsplit
 
 from browser_harness import helpers as _bh
 
@@ -20,6 +25,9 @@ _TIMEOUT_SECONDS = 5.0
 _original_switch_tab = _bh.switch_tab
 _original_current_tab = _bh.current_tab
 _original_goto_url = _bh.goto_url
+
+_tab_to_target = {}
+_target_to_tab = {}
 
 
 def _worker_target():
@@ -112,15 +120,72 @@ def _page_targets():
     ]
 
 
+def _remember_mapping(tab_id, target_id):
+    old_target = _tab_to_target.get(tab_id)
+    if old_target and old_target != target_id:
+        _target_to_tab.pop(old_target, None)
+    old_tab = _target_to_tab.get(target_id)
+    if old_tab is not None and old_tab != tab_id:
+        _tab_to_target.pop(old_tab, None)
+    _tab_to_target[tab_id] = target_id
+    _target_to_tab[target_id] = tab_id
+
+
+def _forget_mapping(tab_id=None, target_id=None):
+    if tab_id is not None:
+        known_target = _tab_to_target.pop(tab_id, None)
+        if known_target:
+            _target_to_tab.pop(known_target, None)
+    if target_id is not None:
+        known_tab = _target_to_tab.pop(target_id, None)
+        if known_tab is not None:
+            _tab_to_target.pop(known_tab, None)
+
+
+def _lease_url(url):
+    parts = _urlsplit(url)
+    query = [
+        (key, value)
+        for key, value in _parse_qsl(parts.query, keep_blank_values=True)
+        if key != "__browser_workspace_lease"
+    ]
+    query.append(("__browser_workspace_lease", _uuid.uuid4().hex))
+    return _urlunsplit(parts._replace(query=_urlencode(query)))
+
+
 def _map_workspace_tabs(chrome_tabs, target_infos):
-    """Map Chrome tabs to CDP targets and drop every ambiguous match."""
+    """Map Chrome tabs to CDP targets, preferring mappings learned at acquire."""
     remaining = {
         target.get("targetId"): target
         for target in target_infos
         if target.get("targetId")
     }
     mapped = []
+
     for tab in chrome_tabs:
+        tab_id = tab.get("tabId")
+        target_id = _tab_to_target.get(tab_id)
+        target = remaining.get(target_id)
+        if target is None:
+            if target_id:
+                _forget_mapping(tab_id=tab_id)
+            continue
+        remaining.pop(target_id, None)
+        mapped.append(
+            {
+                "targetId": target_id,
+                "target_id": target_id,
+                "tabId": tab_id,
+                "groupId": tab.get("groupId"),
+                "title": target.get("title", ""),
+                "url": target.get("url", ""),
+            }
+        )
+
+    mapped_tab_ids = {tab["tabId"] for tab in mapped}
+    for tab in chrome_tabs:
+        if tab.get("tabId") in mapped_tab_ids:
+            continue
         url = tab.get("url") or ""
         candidates = [
             target
@@ -139,6 +204,7 @@ def _map_workspace_tabs(chrome_tabs, target_infos):
         target = candidates[0]
         target_id = target["targetId"]
         remaining.pop(target_id, None)
+        _remember_mapping(tab.get("tabId"), target_id)
         mapped.append(
             {
                 "targetId": target_id,
@@ -205,17 +271,25 @@ def new_tab(url="about:blank"):
         raise RuntimeError(
             "Workspace new_tab requires an http(s) or chrome-extension URL"
         )
+    lease_url = _lease_url(url)
     opened = _manager_call(
         "workspace.acquire",
-        {"name": _WORKSPACE_NAME, "url": url},
+        {"name": _WORKSPACE_NAME, "url": lease_url},
     )
     wanted_tab_id = opened.get("tabId")
     deadline = _time.monotonic() + _TIMEOUT_SECONDS
     while _time.monotonic() < deadline:
-        for tab in _workspace_tabs():
-            if tab.get("tabId") == wanted_tab_id:
-                _original_switch_tab(tab["targetId"], activate=False)
-                return tab["targetId"]
+        candidates = [
+            target
+            for target in _page_targets()
+            if (target.get("url") or "") == lease_url
+        ]
+        if len(candidates) == 1:
+            target_id = candidates[0]["targetId"]
+            _remember_mapping(wanted_tab_id, target_id)
+            _original_switch_tab(target_id, activate=False)
+            _original_goto_url(url)
+            return target_id
         _time.sleep(0.05)
 
     try:
@@ -230,10 +304,12 @@ def new_tab(url="about:blank"):
 
 def close_tab(target=None):
     tab = current_tab() if target is None else _workspace_tab_for_target(target)
-    return _manager_call(
+    result = _manager_call(
         "workspace.release",
         {"name": _WORKSPACE_NAME, "tabId": tab["tabId"]},
     )
+    _forget_mapping(tab_id=tab["tabId"])
+    return result
 
 
 def ensure_real_tab():

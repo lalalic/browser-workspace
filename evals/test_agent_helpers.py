@@ -80,7 +80,8 @@ class WorkspaceMappingTest(unittest.TestCase):
         self.assertGreaterEqual(calls["js"], 2)
 
     def test_unique_mapping_and_ambiguous_drop(self):
-        mapper = load_helper()["_map_workspace_tabs"]
+        module = load_helper()
+        mapper = module["_map_workspace_tabs"]
         chrome_tabs = [
             {"tabId": 1, "groupId": 7, "url": "https://one.test/", "title": "One"},
             {"tabId": 2, "groupId": 7, "url": "https://dup.test/", "title": "Same"},
@@ -101,6 +102,53 @@ class WorkspaceMappingTest(unittest.TestCase):
                 "url": "https://one.test/",
             }],
         )
+
+    def test_remembered_mapping_survives_identical_url_and_title(self):
+        module = load_helper()
+        module["_remember_mapping"](1, "b")
+        module["_remember_mapping"](2, "c")
+        chrome_tabs = [
+            {"tabId": 1, "groupId": 7, "url": "https://dup.test/", "title": "Same"},
+            {"tabId": 2, "groupId": 7, "url": "https://dup.test/", "title": "Same"},
+        ]
+        targets = [
+            {"targetId": "b", "type": "page", "url": "https://dup.test/", "title": "Same"},
+            {"targetId": "c", "type": "page", "url": "https://dup.test/", "title": "Same"},
+        ]
+        mapped = module["_map_workspace_tabs"](chrome_tabs, targets)
+        self.assertEqual(
+            [(tab["tabId"], tab["targetId"]) for tab in mapped],
+            [(1, "b"), (2, "c")],
+        )
+
+    def test_new_tab_learns_mapping_without_changing_caller_url(self):
+        module = load_helper()
+        calls = []
+        target = {"targetId": "target-1", "type": "page", "url": "", "title": ""}
+
+        def manager_call(method, args=None):
+            calls.append((method, args))
+            if method == "workspace.acquire":
+                target["url"] = args["url"]
+                return {"tabId": 42}
+            return {"released": True}
+
+        new_tab = module["new_tab"]
+        new_tab.__globals__["_manager_call"] = manager_call
+        new_tab.__globals__["_page_targets"] = lambda: [target.copy()]
+        new_tab.__globals__["_original_switch_tab"] = (
+            lambda target_id, activate=False: calls.append(("switch", target_id, activate))
+        )
+        new_tab.__globals__["_original_goto_url"] = lambda url: calls.append(("goto", url))
+
+        target_id = new_tab("https://chatgpt.com/?model=test")
+        self.assertEqual(target_id, "target-1")
+        acquire_url = calls[0][1]["url"]
+        self.assertIn("__browser_workspace_lease=", acquire_url)
+        self.assertIn("model=test", acquire_url)
+        self.assertEqual(calls[-1], ("goto", "https://chatgpt.com/?model=test"))
+        self.assertEqual(module["_tab_to_target"], {42: "target-1"})
+        self.assertEqual(module["_target_to_tab"], {"target-1": 42})
 
 
 if __name__ == "__main__":

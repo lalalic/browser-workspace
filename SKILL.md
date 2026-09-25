@@ -119,7 +119,8 @@ The helper:
 - leases `new_tab(url)` from that workspace pool, including `http(s)` and `chrome-extension://` pages;
 - returns `close_tab()` tabs to the pool;
 - refuses visible activation and operations on tabs outside the workspace;
-- fails closed when Chrome-tab-to-CDP-target mapping is ambiguous.
+- learns and owns the Chrome-tab-to-CDP-target mapping when a tab is leased, so downstream Browser Harness callers do not need identity workarounds;
+- fails closed only when an untracked Chrome tab cannot be mapped uniquely.
 
 Workspace identity is the unique Chrome tab-group title. Chrome `groupId` is treated as ephemeral and rediscovered after restarts. Duplicate groups with the same workspace title are considered ambiguous and fail closed.
 
