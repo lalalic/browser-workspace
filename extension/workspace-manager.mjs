@@ -88,40 +88,58 @@ export class WorkspaceManager {
   async inheritWorkspaceForCreatedTab(tab) {
     const tabId = Number(tab?.id);
     const openerTabId = Number(tab?.openerTabId);
-    const url = String(tab?.url || "");
-    if (!url.startsWith("chrome-extension://")) return null;
     if (!Number.isInteger(tabId) || !Number.isInteger(openerTabId)) return null;
 
     const allTabs = await this.chrome.tabs.query({});
-    const opener = allTabs.find((candidate) => candidate.id === openerTabId);
-    if (!opener || !Number.isInteger(opener.groupId) || opener.groupId < 0) return null;
+    const tabsById = new Map(allTabs.map((candidate) => [candidate.id, candidate]));
+    const groups = await this.chrome.tabGroups.query({});
+    const groupsById = new Map(groups.map((candidate) => [candidate.id, candidate]));
 
-    const group = (await this.chrome.tabGroups.query({}))
-      .find((candidate) => candidate.id === opener.groupId);
-    if (!group?.title) return null;
+    let ancestor = tabsById.get(openerTabId);
+    const visited = new Set();
+    let inherited = null;
 
-    const { entry } = await this.configuredWorkspace(group.title);
-    if (!entry) return null;
+    while (ancestor && !visited.has(ancestor.id)) {
+      visited.add(ancestor.id);
 
-    await this.chrome.tabs.group({ groupId: opener.groupId, tabIds: [tabId] });
+      if (Number.isInteger(ancestor.groupId) && ancestor.groupId >= 0) {
+        const group = groupsById.get(ancestor.groupId);
+        if (group?.title) {
+          const { entry } = await this.configuredWorkspace(group.title);
+          if (entry) {
+            inherited = { ancestor, group, entry };
+            break;
+          }
+        }
+      }
 
-    const tabs = await this.groupTabs(opener.groupId);
+      const parentId = Number(ancestor.openerTabId);
+      ancestor = Number.isInteger(parentId) ? tabsById.get(parentId) : null;
+    }
+
+    if (!inherited) return null;
+
+    const { ancestor: workspaceAncestor, group, entry } = inherited;
+    await this.chrome.tabs.group({ groupId: group.id, tabIds: [tabId] });
+
+    const tabs = await this.groupTabs(group.id);
     if (tabs.length > entry.poolSize) {
       const { idle } = this.classify(group.title, tabs);
       const removable = idle.find((candidate) => candidate.id !== tabId);
       if (removable) await this.chrome.tabs.remove(removable.id);
     }
 
-    await this.chrome.tabGroups.update(opener.groupId, {
+    await this.chrome.tabGroups.update(group.id, {
       title: group.title,
       collapsed: true,
     });
 
     return {
       workspace: group.title,
-      groupId: opener.groupId,
+      groupId: group.id,
       tabId,
       inheritedFromTabId: openerTabId,
+      workspaceAncestorTabId: workspaceAncestor.id,
     };
   }
 

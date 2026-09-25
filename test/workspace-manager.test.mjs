@@ -227,6 +227,7 @@ test("child tab inherits workspace group and consumes an idle pool slot", async 
     groupId: state.groupId,
     tabId: child.id,
     inheritedFromTabId: leased.tabId,
+    workspaceAncestorTabId: leased.tabId,
   });
 
   const after = await manager.status("Harness");
@@ -237,19 +238,53 @@ test("child tab inherits workspace group and consumes an idle pool slot", async 
 });
 
 
-test("ordinary web child tab is not auto-adopted into workspace", async () => {
+test("ordinary web child tab inherits workspace from its opener", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);
 
-  await manager.create("Harness", 5);
+  const state = await manager.create("Harness", 5);
   const leased = await manager.acquire("Harness", "chrome-extension://teammate/main.html");
   const teams = await chrome.tabs.create({
     url: "https://teams.cloud.microsoft/",
     openerTabId: leased.tabId,
   });
 
-  assert.equal(await manager.inheritWorkspaceForCreatedTab(teams), null);
-  assert.equal(teams.groupId, -1);
+  assert.deepEqual(await manager.inheritWorkspaceForCreatedTab(teams), {
+    workspace: "Harness",
+    groupId: state.groupId,
+    tabId: teams.id,
+    inheritedFromTabId: leased.tabId,
+    workspaceAncestorTabId: leased.tabId,
+  });
+  const after = await manager.status("Harness");
+  assert.ok(after.tabIds.includes(teams.id));
+});
+
+test("grandchild inherits workspace through opener ancestry", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const state = await manager.create("Harness", 5);
+  const root = await manager.acquire("Harness", "https://example.com/root");
+  const child = await chrome.tabs.create({
+    url: "https://example.com/child",
+    openerTabId: root.tabId,
+  });
+  const grandchild = await chrome.tabs.create({
+    url: "https://example.com/grandchild",
+    openerTabId: child.id,
+  });
+
+  const inherited = await manager.inheritWorkspaceForCreatedTab(grandchild);
+  assert.deepEqual(inherited, {
+    workspace: "Harness",
+    groupId: state.groupId,
+    tabId: grandchild.id,
+    inheritedFromTabId: child.id,
+    workspaceAncestorTabId: root.tabId,
+  });
+  const after = await manager.status("Harness");
+  assert.ok(after.tabIds.includes(grandchild.id));
 });
 
 test("tab opened outside a workspace is not adopted", async () => {
