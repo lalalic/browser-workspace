@@ -88,6 +88,8 @@ export class WorkspaceManager {
   async inheritWorkspaceForCreatedTab(tab) {
     const tabId = Number(tab?.id);
     const openerTabId = Number(tab?.openerTabId);
+    const url = String(tab?.url || "");
+    if (!url.startsWith("chrome-extension://")) return null;
     if (!Number.isInteger(tabId) || !Number.isInteger(openerTabId)) return null;
 
     const allTabs = await this.chrome.tabs.query({});

@@ -236,6 +236,22 @@ test("child tab inherits workspace group and consumes an idle pool slot", async 
   assert.equal(after.leasedTabIds.length, 2);
 });
 
+
+test("ordinary web child tab is not auto-adopted into workspace", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 5);
+  const leased = await manager.acquire("Harness", "chrome-extension://teammate/main.html");
+  const teams = await chrome.tabs.create({
+    url: "https://teams.cloud.microsoft/",
+    openerTabId: leased.tabId,
+  });
+
+  assert.equal(await manager.inheritWorkspaceForCreatedTab(teams), null);
+  assert.equal(teams.groupId, -1);
+});
+
 test("tab opened outside a workspace is not adopted", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);
