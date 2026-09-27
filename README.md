@@ -19,6 +19,13 @@ The MV3 service worker exposes:
 
 The extension owns only group/pool lifecycle. Page operations belong to Browser Harness.
 
+The Browser Harness helper exposes `workspace_capacity()` for routing decisions.
+It derives `name`, `poolSize`, `idle`, `leased`, and `available` from
+`workspace_status()`, where `available` is true exactly when at least one idle
+slot exists. If the status probe fails or is not initialized, the count fields
+and `available` are `None` rather than fabricated; failures also include an
+`error` message.
+
 ## Install for development
 
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select:

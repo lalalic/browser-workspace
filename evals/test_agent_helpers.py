@@ -78,6 +78,57 @@ class WorkspaceMappingTest(unittest.TestCase):
             [("workspace.ensure", {"name": "Research", "poolSize": 4})],
         )
 
+    def test_workspace_capacity_reports_available_counts(self):
+        module = load_helper()
+        capacity = module["workspace_capacity"]
+        capacity.__globals__["workspace_status"] = lambda: {
+            "name": "Research",
+            "initialized": True,
+            "poolSize": 5,
+            "idleTabIds": [1, 2, 3],
+            "leasedTabIds": [4, 5],
+        }
+
+        self.assertEqual(
+            capacity(),
+            {
+                "name": "Research",
+                "poolSize": 5,
+                "idle": 3,
+                "leased": 2,
+                "available": True,
+            },
+        )
+
+    def test_workspace_capacity_reports_exhausted_pool(self):
+        module = load_helper()
+        capacity_probe = module["workspace_capacity"]
+        capacity_probe.__globals__["workspace_status"] = lambda: {
+            "name": "Harness",
+            "initialized": True,
+            "poolSize": 2,
+            "idleTabIds": [],
+            "leasedTabIds": [7, 8],
+        }
+
+        capacity = capacity_probe()
+        self.assertEqual(capacity["idle"], 0)
+        self.assertEqual(capacity["leased"], 2)
+        self.assertFalse(capacity["available"])
+
+    def test_workspace_capacity_does_not_fabricate_failed_probe(self):
+        module = load_helper()
+
+        def unavailable():
+            raise RuntimeError("extension unavailable")
+
+        capacity_probe = module["workspace_capacity"]
+        capacity_probe.__globals__["workspace_status"] = unavailable
+        capacity = capacity_probe()
+        self.assertIsNone(capacity["available"])
+        self.assertIsNone(capacity["idle"])
+        self.assertEqual(capacity["error"], "extension unavailable")
+
     def test_worker_waits_for_rpc_ready(self):
         module = load_helper()
         calls = {"js": 0}
