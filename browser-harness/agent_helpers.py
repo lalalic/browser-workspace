@@ -111,6 +111,41 @@ def workspace_status():
     return _ensure_workspace()
 
 
+def workspace_capacity():
+    """Return routing-friendly capacity facts derived from workspace_status()."""
+    try:
+        status = workspace_status()
+    except Exception as exc:
+        return {
+            "name": _WORKSPACE_NAME,
+            "poolSize": None,
+            "idle": None,
+            "leased": None,
+            "available": None,
+            "error": str(exc),
+        }
+
+    idle_ids = status.get("idleTabIds")
+    leased_ids = status.get("leasedTabIds")
+    if not status.get("initialized") or not isinstance(idle_ids, list) or not isinstance(leased_ids, list):
+        return {
+            "name": status.get("name", _WORKSPACE_NAME),
+            "poolSize": status.get("poolSize"),
+            "idle": None,
+            "leased": None,
+            "available": None,
+        }
+
+    idle = len(idle_ids)
+    return {
+        "name": status.get("name", _WORKSPACE_NAME),
+        "poolSize": status.get("poolSize"),
+        "idle": idle,
+        "leased": len(leased_ids),
+        "available": idle > 0,
+    }
+
+
 def _target_id(target):
     if isinstance(target, dict):
         return target.get("targetId") or target.get("target_id")
