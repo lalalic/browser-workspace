@@ -169,10 +169,12 @@ export class WorkspaceManager {
   }
 
   async createGroup(name, poolSize) {
-    const created = [];
-    for (let slot = 0; slot < poolSize; slot += 1) {
-      created.push(await this.chrome.tabs.create({ url: this.idleUrl(name, slot), active: false }));
-    }
+    // Chrome groups are created by grouping a tab. Keep one seed tab so the
+    // workspace has an identity, then grow the physical pool on demand.
+    const created = [await this.chrome.tabs.create({
+      url: this.idleUrl(name, 0),
+      active: false,
+    })];
     const groupId = await this.chrome.tabs.group({ tabIds: created.map((tab) => tab.id) });
     await this.chrome.tabGroups.update(groupId, { title: name, collapsed: true });
     for (const tab of created) await this.waitForIdleTab(tab.id, name);
@@ -197,16 +199,9 @@ export class WorkspaceManager {
     const tabs = await this.groupTabs(groupId);
     const { idle } = this.classify(name, tabs);
 
-    if (tabs.length < poolSize) {
-      const added = [];
-      for (let slot = tabs.length; slot < poolSize; slot += 1) {
-        added.push(await this.chrome.tabs.create({ url: this.idleUrl(name, slot), active: false }));
-      }
-      if (added.length) {
-        await this.chrome.tabs.group({ groupId, tabIds: added.map((tab) => tab.id) });
-        for (const tab of added) await this.waitForIdleTab(tab.id, name);
-      }
-    } else if (tabs.length > poolSize && idle.length) {
+    // poolSize is a maximum concurrent capacity, not a target tab count.
+    // Only remove surplus idle tabs when shrinking; never refill a lazy pool.
+    if (tabs.length > poolSize && idle.length) {
       const removable = Math.min(idle.length, tabs.length - poolSize);
       await this.chrome.tabs.remove(idle.slice(0, removable).map((tab) => tab.id));
     }
@@ -236,6 +231,10 @@ export class WorkspaceManager {
       initialized: true,
       groupId: group.id,
       poolSize: entry.poolSize,
+      maxCapacity: entry.poolSize,
+      physicalTabs: tabs.length,
+      idle: idle.length,
+      leased: leased.length,
       tabIds: tabs.map((tab) => tab.id),
       idleTabIds: idle.map((tab) => tab.id),
       leasedTabIds: leased.map((tab) => tab.id),
@@ -289,12 +288,20 @@ export class WorkspaceManager {
 
     const ready = await this.ensureWorkspace(normalizedName);
     const tabs = await this.groupTabs(ready.groupId);
-    const { idle } = this.classify(normalizedName, tabs);
-    if (!idle.length) {
+    const { idle, leased } = this.classify(normalizedName, tabs);
+    if (!idle.length && leased.length >= ready.poolSize) {
       throw new Error(`Workspace ${normalizedName} pool is exhausted at size ${ready.poolSize}`);
     }
 
-    const tab = idle[0];
+    let tab = idle[0];
+    if (!tab) {
+      tab = await this.chrome.tabs.create({
+        url: this.idleUrl(normalizedName, tabs.length),
+        active: false,
+      });
+      await this.chrome.tabs.group({ groupId: ready.groupId, tabIds: [tab.id] });
+      tab = await this.waitForIdleTab(tab.id, normalizedName);
+    }
     const updated = await this.chrome.tabs.update(tab.id, { url: parsed.href, active: false });
     await this.chrome.tabGroups.update(ready.groupId, { title: normalizedName, collapsed: true });
     return {

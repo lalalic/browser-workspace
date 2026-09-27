@@ -114,28 +114,34 @@ function fakeChrome() {
   return api;
 }
 
-test("pool size is exactly the Chrome group tab count", async () => {
+test("pool size is a maximum and acquire grows the pool lazily", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);
 
   const state = await manager.create("MDB", 4);
   assert.equal(state.poolSize, 4);
-  assert.equal(state.tabIds.length, 4);
-  assert.equal(state.idleTabIds.length, 4);
+  assert.equal(state.tabIds.length, 1);
+  assert.equal(state.idleTabIds.length, 1);
   assert.equal(state.leasedTabIds.length, 0);
 
   const leased = await manager.acquire("MDB", "https://example.com/");
   assert.ok(state.tabIds.includes(leased.tabId));
 
   const active = await manager.status("MDB");
-  assert.equal(active.tabIds.length, 4);
-  assert.equal(active.idleTabIds.length, 3);
+  assert.equal(active.tabIds.length, 1);
+  assert.equal(active.idleTabIds.length, 0);
   assert.equal(active.leasedTabIds.length, 1);
 
   await manager.release("MDB", leased.tabId);
   const released = await manager.status("MDB");
-  assert.equal(released.tabIds.length, 4);
-  assert.equal(released.idleTabIds.length, 4);
+  assert.equal(released.tabIds.length, 1);
+  assert.equal(released.idleTabIds.length, 1);
+
+  const second = await manager.acquire("MDB", "https://example.com/second");
+  assert.equal(second.tabId, leased.tabId);
+  const grown = await manager.acquire("MDB", "https://example.com/third");
+  assert.notEqual(grown.tabId, leased.tabId);
+  assert.equal((await manager.status("MDB")).tabIds.length, 2);
 });
 
 test("multiple workspaces have independent exact pool sizes", async () => {
@@ -145,8 +151,8 @@ test("multiple workspaces have independent exact pool sizes", async () => {
   const alpha = await manager.create("Alpha", 2);
   const beta = await manager.create("Beta", 3);
 
-  assert.equal(alpha.tabIds.length, 2);
-  assert.equal(beta.tabIds.length, 3);
+  assert.equal(alpha.tabIds.length, 1);
+  assert.equal(beta.tabIds.length, 1);
   assert.notEqual(alpha.groupId, beta.groupId);
 
   const resized = await manager.resize("Beta", 1);
@@ -164,7 +170,7 @@ test("workspace identity survives groupId changes via unique group title", async
   const after = await manager.status("Research");
   assert.equal(after.initialized, true);
   assert.equal(after.groupId, 777);
-  assert.equal(after.tabIds.length, 2);
+  assert.equal(after.tabIds.length, 1);
 });
 
 test("duplicate workspace titles fail closed", async () => {
@@ -194,8 +200,43 @@ test("workspace can lease a chrome-extension page inside the existing group", as
 
   assert.equal(leased.groupId, state.groupId);
   const after = await manager.status("Harness");
-  assert.equal(after.tabIds.length, 5);
+  assert.equal(after.tabIds.length, 1);
   assert.ok(after.tabs.some((tab) => tab.url === "chrome-extension://teammate/main.html"));
+});
+
+test("closing a workspace tab does not eagerly recreate it", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const leased = await manager.acquire("Harness", "https://example.com/");
+  await chrome.tabs.remove(leased.tabId);
+
+  const afterClose = await manager.status("Harness");
+  assert.equal(afterClose.physicalTabs, 0);
+  assert.equal(afterClose.leased, 0);
+
+  const replacement = await manager.acquire("Harness", "https://example.com/replacement");
+  assert.equal((await manager.status("Harness")).physicalTabs, 1);
+  assert.equal(replacement.url, "https://example.com/replacement");
+});
+
+test("acquire exhausts at max capacity and reports allocatable slots", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 2);
+  const first = await manager.acquire("Harness", "https://example.com/one");
+  const second = await manager.acquire("Harness", "https://example.com/two");
+  const full = await manager.status("Harness");
+  assert.equal(full.physicalTabs, 2);
+  assert.equal(full.idle, 0);
+  assert.equal(full.leased, 2);
+  assert.equal(full.maxCapacity - full.leased, 0);
+  assert.notEqual(first.tabId, second.tabId);
+  await assert.rejects(
+    () => manager.acquire("Harness", "https://example.com/three"),
+    /pool is exhausted at size 2/,
+  );
 });
 
 test("workspace still rejects unsupported URL schemes", async () => {
@@ -231,9 +272,9 @@ test("child tab inherits workspace group and consumes an idle pool slot", async 
   });
 
   const after = await manager.status("Harness");
-  assert.equal(after.tabIds.length, 5);
+  assert.equal(after.tabIds.length, 2);
   assert.ok(after.tabIds.includes(child.id));
-  assert.equal(after.idleTabIds.length, 3);
+  assert.equal(after.idleTabIds.length, 0);
   assert.equal(after.leasedTabIds.length, 2);
 });
 

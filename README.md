@@ -2,7 +2,7 @@
 
 Chrome extension for named browser-agent workspaces inside the user's normal Chrome profile.
 
-Each workspace is a Chrome tab group whose **total tab count equals the configured pool size**. There is no extra marker tab. Workspace identity is the unique Chrome tab-group title, so runtime `groupId` changes are rediscovered after Chrome restarts.
+Each workspace is a Chrome tab group whose configured pool size is the **maximum concurrent capacity**. Physical tabs are created lazily as callers acquire them. Workspace identity is the unique Chrome tab-group title, so runtime `groupId` changes are rediscovered after Chrome restarts.
 
 ## Contract
 
@@ -20,11 +20,12 @@ The MV3 service worker exposes:
 The extension owns only group/pool lifecycle. Page operations belong to Browser Harness.
 
 The Browser Harness helper exposes `workspace_capacity()` for routing decisions.
-It derives `name`, `poolSize`, `idle`, `leased`, and `available` from
-`workspace_status()`, where `available` is true exactly when at least one idle
-slot exists. If the status probe fails or is not initialized, the count fields
-and `available` are `None` rather than fabricated; failures also include an
-`error` message.
+It derives `name`, `poolSize`, `maxCapacity`, `physicalTabs`, `idle`, `leased`,
+and `available` from `workspace_status()`. `available` is the number of
+allocatable slots (`maxCapacity - leased`, bounded at zero), not the number of
+physical idle tabs. If the status probe fails or is not initialized, the count
+fields and `available` are `None` rather than fabricated; failures also include
+an `error` message.
 
 ## Install for development
 
