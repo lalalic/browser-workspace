@@ -85,8 +85,10 @@ class WorkspaceMappingTest(unittest.TestCase):
             "name": "Research",
             "initialized": True,
             "poolSize": 5,
-            "idleTabIds": [1, 2, 3],
-            "leasedTabIds": [4, 5],
+            "maxCapacity": 5,
+            "physicalTabs": 3,
+            "idleTabIds": [],
+            "leasedTabIds": [1, 2, 3],
         }
 
         self.assertEqual(
@@ -94,9 +96,11 @@ class WorkspaceMappingTest(unittest.TestCase):
             {
                 "name": "Research",
                 "poolSize": 5,
-                "idle": 3,
-                "leased": 2,
-                "available": True,
+                "maxCapacity": 5,
+                "physicalTabs": 3,
+                "idle": 0,
+                "leased": 3,
+                "available": 2,
             },
         )
 
@@ -107,6 +111,8 @@ class WorkspaceMappingTest(unittest.TestCase):
             "name": "Harness",
             "initialized": True,
             "poolSize": 2,
+            "maxCapacity": 2,
+            "physicalTabs": 2,
             "idleTabIds": [],
             "leasedTabIds": [7, 8],
         }
@@ -114,7 +120,7 @@ class WorkspaceMappingTest(unittest.TestCase):
         capacity = capacity_probe()
         self.assertEqual(capacity["idle"], 0)
         self.assertEqual(capacity["leased"], 2)
-        self.assertFalse(capacity["available"])
+        self.assertEqual(capacity["available"], 0)
 
     def test_workspace_capacity_does_not_fabricate_failed_probe(self):
         module = load_helper()

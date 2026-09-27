@@ -55,7 +55,8 @@ BH_WORKSPACE_NAME=Harness
 BH_WORKSPACE_POOL_SIZE=5
 ```
 
-`BH_WORKSPACE_POOL_SIZE=N` means exactly **N Chrome tabs total in the group**.
+`BH_WORKSPACE_POOL_SIZE=N` means **N is the maximum concurrent capacity**;
+physical Chrome tabs are created lazily as callers acquire them.
 
 The extension ID can be overridden when necessary:
 
@@ -105,7 +106,7 @@ Verify that:
 
 - the configured group is created or reconciled;
 - the group name matches `BH_WORKSPACE_NAME`;
-- the group contains exactly `BH_WORKSPACE_POOL_SIZE` tabs;
+- the group contains no more than `BH_WORKSPACE_POOL_SIZE` tabs;
 - Browser Harness exposes only tabs belonging to that workspace.
 
 If the extension is not available, stop and ask the user to confirm that the unpacked extension is loaded from the exact local `<browser-workspace>/extension` path.

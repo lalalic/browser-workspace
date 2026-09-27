@@ -119,6 +119,8 @@ def workspace_capacity():
         return {
             "name": _WORKSPACE_NAME,
             "poolSize": None,
+            "maxCapacity": None,
+            "physicalTabs": None,
             "idle": None,
             "leased": None,
             "available": None,
@@ -131,18 +133,28 @@ def workspace_capacity():
         return {
             "name": status.get("name", _WORKSPACE_NAME),
             "poolSize": status.get("poolSize"),
+            "maxCapacity": status.get("maxCapacity", status.get("poolSize")),
+            "physicalTabs": None,
             "idle": None,
             "leased": None,
             "available": None,
         }
 
     idle = len(idle_ids)
+    leased = len(leased_ids)
+    max_capacity = status.get("maxCapacity", status.get("poolSize"))
+    physical_tabs = status.get("physicalTabs")
+    if physical_tabs is None:
+        physical_tabs = idle + leased
+    available = max(0, max_capacity - leased) if isinstance(max_capacity, int) else None
     return {
         "name": status.get("name", _WORKSPACE_NAME),
         "poolSize": status.get("poolSize"),
+        "maxCapacity": max_capacity,
+        "physicalTabs": physical_tabs,
         "idle": idle,
-        "leased": len(leased_ids),
-        "available": idle > 0,
+        "leased": leased,
+        "available": available,
     }
 
 
