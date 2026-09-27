@@ -1,3 +1,4 @@
+import ast
 import runpy
 import sys
 import types
@@ -34,6 +35,31 @@ def load_helper():
 
 
 class WorkspaceMappingTest(unittest.TestCase):
+    def test_rewritten_browser_harness_functions_keep_exact_signatures(self):
+        upstream = (
+            Path.home()
+            / ".local/share/uv/tools/browser-harness/lib/python3.12/site-packages/browser_harness/helpers.py"
+        )
+
+        def function_signatures(path):
+            tree = ast.parse(path.read_text())
+            return {
+                node.name: ast.dump(node.args, include_attributes=False)
+                for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+
+        upstream_signatures = function_signatures(upstream)
+        workspace_signatures = function_signatures(HELPER)
+        rewritten = sorted(set(upstream_signatures) & set(workspace_signatures))
+        self.assertTrue(rewritten)
+        mismatches = {
+            name: (upstream_signatures[name], workspace_signatures[name])
+            for name in rewritten
+            if upstream_signatures[name] != workspace_signatures[name]
+        }
+        self.assertEqual(mismatches, {})
+
     def test_ensure_uses_workspace_ensure(self):
         module = load_helper()
         calls = []

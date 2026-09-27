@@ -1,4 +1,9 @@
-"""Restrict Browser Harness tab operations to one named Browser Workspace."""
+"""Restrict Browser Harness tab operations to one named Browser Workspace.
+
+Any function that rewrites a ``browser_harness.helpers`` function must keep the
+upstream function's input signature exactly.  Browser Workspace may change
+behavior, but it must remain a drop-in helper layer.
+"""
 
 import json as _json
 import os as _os
