@@ -28,21 +28,6 @@ chrome.tabs.onCreated.addListener((tab) => {
   manager.inheritWorkspaceForCreatedTab(tab).catch((error) => {
     console.warn("Browser Workspace failed to inherit child tab group", error);
   });
-
-  // Chrome can assign a newly-created tab to the rightmost tab group only
-  // after tabs.onCreated fires. Re-read the live tab shortly afterward so a
-  // normal "+" tab cannot become an accidental Browser Workspace lease.
-  setTimeout(async () => {
-    try {
-      const current = await chrome.tabs.get(tab.id);
-      await manager.inheritWorkspaceForCreatedTab(current);
-    } catch (error) {
-      // The tab may already be gone; only surface real Chrome/API failures.
-      if (!/No tab with id|Invalid tab ID/i.test(String(error?.message || error))) {
-        console.warn("Browser Workspace failed delayed created-tab reconciliation", error);
-      }
-    }
-  }, 150);
 });
 
 chrome.tabs.onActivated.addListener((activeInfo) => {
