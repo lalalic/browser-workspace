@@ -71,6 +71,12 @@ function fakeChrome() {
         }
         return groupId;
       },
+      async ungroup(tabIds) {
+        for (const tabId of Array.isArray(tabIds) ? tabIds : [tabIds]) {
+          const tab = tabs.get(tabId);
+          if (tab) tab.groupId = -1;
+        }
+      },
       async update(tabId, options) {
         const tab = tabs.get(tabId);
         if (!tab) throw new Error(`Unknown tab ${tabId}`);
@@ -114,6 +120,11 @@ function fakeChrome() {
         title,
         collapsed: true,
       });
+    },
+    __setTab(tabId, patch) {
+      const tab = tabs.get(tabId);
+      if (!tab) throw new Error("Unknown tab " + tabId);
+      Object.assign(tab, clone(patch));
     },
   };
 
@@ -224,6 +235,53 @@ test("closing a workspace tab does not eagerly recreate it", async () => {
   const replacement = await manager.acquire("Harness", "https://example.com/replacement");
   assert.equal((await manager.status("Harness")).physicalTabs, 1);
   assert.equal(replacement.url, "https://example.com/replacement");
+});
+
+test("Chrome-created unrelated tab is removed from a configured workspace group", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const state = await manager.create("Harness", 5);
+  const unrelated = await chrome.tabs.create({ url: "chrome://newtab/" });
+  await chrome.tabs.group({ groupId: state.groupId, tabIds: [unrelated.id] });
+  const grouped = await chrome.tabs.get(unrelated.id);
+
+  assert.deepEqual(await manager.inheritWorkspaceForCreatedTab(grouped), {
+    workspace: "Harness",
+    groupId: state.groupId,
+    tabId: unrelated.id,
+    releasedUnexpected: true,
+  });
+  assert.equal((await chrome.tabs.get(unrelated.id)).groupId, -1);
+});
+
+test("stale inactive leased tabs are released without refilling the lazy pool", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const leased = await manager.acquire("Harness", "https://example.com/");
+  chrome.__setTab(leased.tabId, { lastAccessed: 1, active: false });
+
+  const result = await manager.reclaimStaleTabs(31 * 60 * 1000);
+  assert.deepEqual(result.reclaimedTabIds, [leased.tabId]);
+  const after = await manager.status("Harness");
+  assert.equal(after.physicalTabs, 1);
+  assert.equal(after.idle, 1);
+  assert.equal(after.leased, 0);
+});
+
+test("stale active leased tab is not reclaimed", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const leased = await manager.acquire("Harness", "https://example.com/");
+  chrome.__setTab(leased.tabId, { lastAccessed: 1, active: true });
+
+  assert.deepEqual(
+    (await manager.reclaimStaleTabs(31 * 60 * 1000)).reclaimedTabIds,
+    [],
+  );
+  assert.equal((await manager.status("Harness")).leased, 1);
 });
 
 test("acquire exhausts at max capacity and reports allocatable slots", async () => {

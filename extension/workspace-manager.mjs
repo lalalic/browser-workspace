@@ -2,6 +2,7 @@ const STORAGE_KEY = "browserWorkspaceManager.v1";
 const MIN_POOL_SIZE = 1;
 const MAX_POOL_SIZE = 64;
 const EXTENSION_MANAGEMENT_RECENCY_MS = 15_000;
+const STALE_LEASE_MS = 30 * 60 * 1000;
 
 export function normalizeWorkspaceName(value) {
   const name = String(value || "").trim();
@@ -196,7 +197,26 @@ export class WorkspaceManager {
       }
     }
 
-    if (!inherited) return null;
+    if (!inherited) {
+      const groupId = Number(tab?.groupId);
+      const group = Number.isInteger(groupId) && groupId >= 0
+        ? groupsById.get(groupId)
+        : null;
+      if (group?.title) {
+        const { entry } = await this.configuredWorkspace(group.title);
+        const meta = this.parseManagedUrl(this.tabUrl(tab));
+        if (entry && meta?.workspace !== group.title) {
+          await this.chrome.tabs.ungroup([tabId]);
+          return {
+            workspace: group.title,
+            groupId,
+            tabId,
+            releasedUnexpected: true,
+          };
+        }
+      }
+      return null;
+    }
 
     const { ancestor: workspaceAncestor, group, entry } = inherited;
     await this.chrome.tabs.group({ groupId: group.id, tabIds: [tabId] });
@@ -288,6 +308,25 @@ export class WorkspaceManager {
     }
 
     await this.chrome.tabGroups.update(groupId, { title: name, collapsed: true });
+  }
+
+  async reclaimStaleTabs(now = Date.now()) {
+    const config = await this.loadConfig();
+    const reclaimed = [];
+    for (const name of Object.keys(config.workspaces || {})) {
+      const group = await this.workspaceGroup(name);
+      if (!group) continue;
+      const tabs = await this.groupTabs(group.id);
+      const { leased } = this.classify(name, tabs);
+      for (const tab of leased) {
+        const lastAccessed = Number(tab.lastAccessed);
+        if (tab.active || !Number.isFinite(lastAccessed)) continue;
+        if (now - lastAccessed < STALE_LEASE_MS) continue;
+        await this.release(name, tab.id);
+        reclaimed.push(tab.id);
+      }
+    }
+    return { reclaimedTabIds: reclaimed };
   }
 
   async status(name) {

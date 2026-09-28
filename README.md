@@ -19,6 +19,8 @@ The MV3 service worker exposes:
 
 The extension owns only group/pool lifecycle. Page operations belong to Browser Harness.
 
+Inactive leased tabs are reclaimed after 30 minutes; active tabs are preserved. Chrome-created tabs that land in a workspace group without a valid workspace opener are immediately ungrouped.
+
 Tabs opened by a tab already inside a configured workspace inherit that workspace.
 For unpacked-extension installation flows, a `chrome-extension://` setup/onboarding
 tab opened from `chrome://extensions` (or immediately after that page was active)
