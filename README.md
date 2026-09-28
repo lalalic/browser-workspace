@@ -19,6 +19,12 @@ The MV3 service worker exposes:
 
 The extension owns only group/pool lifecycle. Page operations belong to Browser Harness.
 
+Tabs opened by a tab already inside a configured workspace inherit that workspace.
+For unpacked-extension installation flows, a `chrome-extension://` setup/onboarding
+tab opened from `chrome://extensions` (or immediately after that page was active)
+is adopted into the single unambiguous configured workspace. Browser Workspace
+fails closed when multiple configured workspaces could own the new tab.
+
 The Browser Harness helper exposes `workspace_capacity()` for routing decisions.
 It derives `name`, `poolSize`, `maxCapacity`, `physicalTabs`, `idle`, `leased`,
 and `available` from `workspace_status()`. `available` is the number of

@@ -1,6 +1,7 @@
 const STORAGE_KEY = "browserWorkspaceManager.v1";
 const MIN_POOL_SIZE = 1;
 const MAX_POOL_SIZE = 64;
+const EXTENSION_MANAGEMENT_RECENCY_MS = 15_000;
 
 export function normalizeWorkspaceName(value) {
   const name = String(value || "").trim();
@@ -24,6 +25,7 @@ function queryString(workspace, slot) {
 export class WorkspaceManager {
   constructor(chromeApi) {
     this.chrome = chromeApi;
+    this.recentExtensionManagementByWindow = new Map();
   }
 
   idleUrl(workspace, slot) {
@@ -85,22 +87,74 @@ export class WorkspaceManager {
     return await this.chrome.tabs.query({ groupId });
   }
 
+  tabUrl(tab) {
+    return String(tab?.pendingUrl || tab?.url || "");
+  }
+
+  isExtensionManagementUrl(url) {
+    return /^chrome:\/\/extensions(?:\/|\?|#|$)/.test(String(url || ""));
+  }
+
+  isExtensionPageUrl(url) {
+    return /^chrome-extension:\/\//.test(String(url || ""));
+  }
+
+  async noteActivatedTab(activeInfo, now = Date.now()) {
+    const tabId = Number(activeInfo?.tabId);
+    const windowId = Number(activeInfo?.windowId);
+    if (!Number.isInteger(tabId) || !Number.isInteger(windowId)) return null;
+    if (typeof this.chrome.tabs.get !== "function") return null;
+
+    const tab = await this.chrome.tabs.get(tabId);
+    if (!this.isExtensionManagementUrl(this.tabUrl(tab))) return null;
+
+    this.recentExtensionManagementByWindow.set(windowId, now);
+    return { windowId, tabId, recordedAt: now };
+  }
+
+  async uniqueConfiguredWorkspace() {
+    const config = await this.loadConfig();
+    const names = Object.keys(config.workspaces || {});
+    if (!names.length) return null;
+
+    const groups = await this.chrome.tabGroups.query({});
+    const candidates = [];
+    for (const name of names) {
+      const matches = groups.filter((group) => group.title === name);
+      if (matches.length > 1) {
+        throw new Error(`Workspace ${name} is ambiguous: ${matches.length} groups have that title`);
+      }
+      if (matches[0]) {
+        candidates.push({
+          group: matches[0],
+          entry: config.workspaces[name],
+        });
+      }
+    }
+    return candidates.length === 1 ? candidates[0] : null;
+  }
+
   async inheritWorkspaceForCreatedTab(tab) {
     const tabId = Number(tab?.id);
     const openerTabId = Number(tab?.openerTabId);
-    if (!Number.isInteger(tabId) || !Number.isInteger(openerTabId)) return null;
+    if (!Number.isInteger(tabId)) return null;
 
     const allTabs = await this.chrome.tabs.query({});
     const tabsById = new Map(allTabs.map((candidate) => [candidate.id, candidate]));
     const groups = await this.chrome.tabGroups.query({});
     const groupsById = new Map(groups.map((candidate) => [candidate.id, candidate]));
 
-    let ancestor = tabsById.get(openerTabId);
+    let ancestor = Number.isInteger(openerTabId) ? tabsById.get(openerTabId) : null;
     const visited = new Set();
     let inherited = null;
+    let extensionManagementAncestor = null;
 
     while (ancestor && !visited.has(ancestor.id)) {
       visited.add(ancestor.id);
+
+      if (this.isExtensionManagementUrl(this.tabUrl(ancestor))) {
+        extensionManagementAncestor = ancestor;
+      }
 
       if (Number.isInteger(ancestor.groupId) && ancestor.groupId >= 0) {
         const group = groupsById.get(ancestor.groupId);
@@ -115,6 +169,31 @@ export class WorkspaceManager {
 
       const parentId = Number(ancestor.openerTabId);
       ancestor = Number.isInteger(parentId) ? tabsById.get(parentId) : null;
+    }
+
+    let adoptionReason = "workspace-opener";
+    if (!inherited && this.isExtensionPageUrl(this.tabUrl(tab))) {
+      const windowId = Number(tab?.windowId);
+      const recentManagementAt = Number.isInteger(windowId)
+        ? this.recentExtensionManagementByWindow.get(windowId)
+        : null;
+      const hasRecentManagementContext =
+        Number.isFinite(recentManagementAt) &&
+        Date.now() - recentManagementAt <= EXTENSION_MANAGEMENT_RECENCY_MS;
+
+      if (extensionManagementAncestor || hasRecentManagementContext) {
+        const candidate = await this.uniqueConfiguredWorkspace();
+        if (candidate) {
+          inherited = {
+            ancestor: extensionManagementAncestor,
+            group: candidate.group,
+            entry: candidate.entry,
+          };
+          adoptionReason = extensionManagementAncestor
+            ? "extension-management-opener"
+            : "recent-extension-management";
+        }
+      }
     }
 
     if (!inherited) return null;
@@ -134,13 +213,15 @@ export class WorkspaceManager {
       collapsed: true,
     });
 
-    return {
+    const result = {
       workspace: group.title,
       groupId: group.id,
       tabId,
-      inheritedFromTabId: openerTabId,
-      workspaceAncestorTabId: workspaceAncestor.id,
+      inheritedFromTabId: Number.isInteger(openerTabId) ? openerTabId : null,
+      workspaceAncestorTabId: workspaceAncestor?.id ?? null,
     };
+    if (adoptionReason !== "workspace-opener") result.adoptionReason = adoptionReason;
+    return result;
   }
 
   classify(name, tabs) {
