@@ -5,6 +5,44 @@ const RECLAIM_ALARM = "browser-workspace.reclaim-stale";
 
 chrome.alarms.create(RECLAIM_ALARM, { periodInMinutes: 5 });
 
+const RELEASE_ALL_MENU_ID = "browser-workspace.release-all";
+
+async function ensureContextMenus() {
+  try {
+    await chrome.contextMenus.remove(RELEASE_ALL_MENU_ID);
+  } catch {
+    // Menu does not exist yet.
+  }
+  chrome.contextMenus.create({
+    id: RELEASE_ALL_MENU_ID,
+    title: "Release all tabs",
+    contexts: ["action"],
+  });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  ensureContextMenus().catch((error) => {
+    console.warn("Browser Workspace failed to create extension menu", error);
+  });
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureContextMenus().catch((error) => {
+    console.warn("Browser Workspace failed to create extension menu", error);
+  });
+});
+
+ensureContextMenus().catch((error) => {
+  console.warn("Browser Workspace failed to initialize extension menu", error);
+});
+
+chrome.contextMenus.onClicked.addListener((info) => {
+  if (info.menuItemId !== RELEASE_ALL_MENU_ID) return;
+  manager.releaseAll().catch((error) => {
+    console.warn("Browser Workspace failed to release all tabs", error);
+  });
+});
+
 globalThis.browserWorkspaceManagerRpc = async (request) => {
   try {
     return { ok: true, result: await manager.rpc(request) };
