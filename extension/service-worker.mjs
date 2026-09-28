@@ -30,6 +30,13 @@ chrome.tabs.onCreated.addListener((tab) => {
   });
 });
 
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+  if (!Object.prototype.hasOwnProperty.call(changeInfo, "groupId")) return;
+  manager.inheritWorkspaceForCreatedTab(tab).catch((error) => {
+    console.warn("Browser Workspace failed to reconcile tab group ownership", error);
+  });
+});
+
 chrome.tabs.onActivated.addListener((activeInfo) => {
   manager.noteActivatedTab(activeInfo).catch((error) => {
     console.warn("Browser Workspace failed to record active tab context", error);

@@ -2,7 +2,7 @@ const STORAGE_KEY = "browserWorkspaceManager.v1";
 const MIN_POOL_SIZE = 1;
 const MAX_POOL_SIZE = 64;
 const EXTENSION_MANAGEMENT_RECENCY_MS = 15_000;
-const STALE_LEASE_MS = 30 * 60 * 1000;
+const STALE_LEASE_MS = 5 * 60 * 1000;
 
 export function normalizeWorkspaceName(value) {
   const name = String(value || "").trim();
@@ -27,6 +27,19 @@ export class WorkspaceManager {
   constructor(chromeApi) {
     this.chrome = chromeApi;
     this.recentExtensionManagementByWindow = new Map();
+    this.ownedTabIds = new Set();
+  }
+
+  isOwnedTab(tab) {
+    const tabId = Number(tab?.id);
+    if (Number.isInteger(tabId) && this.ownedTabIds.has(tabId)) return true;
+    const meta = this.parseManagedUrl(this.tabUrl(tab));
+    return Boolean(meta?.workspace);
+  }
+
+  markOwned(tabId) {
+    const id = Number(tabId);
+    if (Number.isInteger(id)) this.ownedTabIds.add(id);
   }
 
   idleUrl(workspace, slot) {
@@ -157,7 +170,7 @@ export class WorkspaceManager {
         extensionManagementAncestor = ancestor;
       }
 
-      if (Number.isInteger(ancestor.groupId) && ancestor.groupId >= 0) {
+      if (this.isOwnedTab(ancestor) && Number.isInteger(ancestor.groupId) && ancestor.groupId >= 0) {
         const group = groupsById.get(ancestor.groupId);
         if (group?.title) {
           const { entry } = await this.configuredWorkspace(group.title);
@@ -198,6 +211,11 @@ export class WorkspaceManager {
     }
 
     if (!inherited) {
+      if (this.isOwnedTab(tab)) return {
+        tabId,
+        owned: true,
+      };
+
       const groupId = Number(tab?.groupId);
       const group = Number.isInteger(groupId) && groupId >= 0
         ? groupsById.get(groupId)
@@ -219,6 +237,7 @@ export class WorkspaceManager {
     }
 
     const { ancestor: workspaceAncestor, group, entry } = inherited;
+    this.markOwned(tabId);
     await this.chrome.tabs.group({ groupId: group.id, tabIds: [tabId] });
 
     const tabs = await this.groupTabs(group.id);
@@ -276,6 +295,7 @@ export class WorkspaceManager {
       url: this.idleUrl(name, 0),
       active: false,
     })];
+    for (const tab of created) this.markOwned(tab.id);
     const groupId = await this.chrome.tabs.group({ tabIds: created.map((tab) => tab.id) });
     await this.chrome.tabGroups.update(groupId, { title: name, collapsed: true });
     for (const tab of created) await this.waitForIdleTab(tab.id, name);
@@ -422,6 +442,7 @@ export class WorkspaceManager {
       await this.chrome.tabs.group({ groupId: ready.groupId, tabIds: [tab.id] });
       tab = await this.waitForIdleTab(tab.id, normalizedName);
     }
+    this.markOwned(tab.id);
     const updated = await this.chrome.tabs.update(tab.id, { url: parsed.href, active: false });
     await this.chrome.tabGroups.update(ready.groupId, { title: normalizedName, collapsed: true });
     return {

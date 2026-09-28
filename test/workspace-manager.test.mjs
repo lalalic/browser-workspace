@@ -255,6 +255,17 @@ test("Chrome-created unrelated tab is removed from a configured workspace group"
   assert.equal((await chrome.tabs.get(unrelated.id)).groupId, -1);
 });
 
+test("inactive leases are reclaimed at 5 minutes, not before", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const leased = await manager.acquire("Harness", "https://example.com/five-minute-boundary");
+  chrome.__setTab(leased.tabId, { lastAccessed: 1, active: false });
+
+  assert.deepEqual((await manager.reclaimStaleTabs(5 * 60 * 1000)).reclaimedTabIds, []);
+  assert.deepEqual((await manager.reclaimStaleTabs(5 * 60 * 1000 + 1)).reclaimedTabIds, [leased.tabId]);
+});
+
 test("stale inactive leased tabs are released without refilling the lazy pool", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);
