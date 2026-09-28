@@ -537,6 +537,11 @@ export class WorkspaceManager {
         await this.release(name, tab.id);
         released.push({ workspace: name, tabId: tab.id });
       }
+
+      // Chrome destroys a tab group when it becomes empty. Release-all must
+      // preserve workspace identity, so re-ensure the workspace after the
+      // release pass and leave at least one idle seed tab if necessary.
+      await this.ensureWorkspace(name);
     }
 
     return {
