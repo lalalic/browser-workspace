@@ -434,6 +434,15 @@ export class WorkspaceManager {
     };
   }
 
+  async restoreConfiguredWorkspaces() {
+    const config = await this.loadConfig();
+    const restored = [];
+    for (const name of Object.keys(config.workspaces || {}).sort()) {
+      restored.push(await this.ensureWorkspace(name));
+    }
+    return { workspaces: restored };
+  }
+
   async list() {
     const config = await this.loadConfig();
     const result = [];

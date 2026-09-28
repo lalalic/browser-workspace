@@ -5,6 +5,10 @@ const RECLAIM_ALARM = "browser-workspace.reclaim-stale";
 
 chrome.alarms.create(RECLAIM_ALARM, { periodInMinutes: 5 });
 
+manager.restoreConfiguredWorkspaces().catch((error) => {
+  console.warn("Browser Workspace failed to restore configured workspaces", error);
+});
+
 const RELEASE_ALL_MENU_ID = "browser-workspace.release-all";
 
 async function ensureContextMenus() {
