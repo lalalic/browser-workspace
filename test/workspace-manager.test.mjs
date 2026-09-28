@@ -105,6 +105,13 @@ function fakeChrome() {
         return clone(group);
       },
     },
+    __dropEmptyGroups() {
+      for (const groupId of [...groups.keys()]) {
+        if (![...tabs.values()].some((tab) => tab.groupId === groupId)) {
+          groups.delete(groupId);
+        }
+      }
+    },
     __moveGroup(oldGroupId, newGroupId) {
       const group = groups.get(oldGroupId);
       if (!group) throw new Error("group missing");
@@ -312,6 +319,32 @@ test("acquire exhausts at max capacity and reports allocatable slots", async () 
     () => manager.acquire("Harness", "https://example.com/three"),
     /pool is exhausted at size 2/,
   );
+});
+
+test("restoreConfiguredWorkspaces recreates missing groups from config", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 5);
+  await manager.create("Tutor", 3);
+
+  const harnessBefore = await manager.status("Harness");
+  const tutorBefore = await manager.status("Tutor");
+  await chrome.tabs.remove(harnessBefore.tabIds);
+  await chrome.tabs.remove(tutorBefore.tabIds);
+
+  // Simulate Chrome dropping empty tab groups after an extension reload.
+  chrome.__dropEmptyGroups?.();
+
+  const restored = await manager.restoreConfiguredWorkspaces();
+  assert.equal(restored.workspaces.length, 2);
+
+  const harness = await manager.status("Harness");
+  const tutor = await manager.status("Tutor");
+  assert.equal(harness.initialized, true);
+  assert.equal(tutor.initialized, true);
+  assert.equal(harness.idle, 1);
+  assert.equal(tutor.idle, 1);
 });
 
 test("releaseAll releases every leased tab across workspaces", async () => {
