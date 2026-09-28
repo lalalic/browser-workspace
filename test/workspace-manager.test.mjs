@@ -314,6 +314,29 @@ test("acquire exhausts at max capacity and reports allocatable slots", async () 
   );
 });
 
+test("releaseAll releases every leased tab across workspaces", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const a1 = await manager.acquire("Harness", "https://example.com/a1");
+  const a2 = await manager.acquire("Harness", "https://example.com/a2");
+  const b1 = await manager.acquire("Research", "https://example.com/b1");
+
+  const result = await manager.releaseAll();
+  assert.equal(result.releasedCount, 3);
+  assert.deepEqual(
+    new Set(result.released.map((item) => item.tabId)),
+    new Set([a1.tabId, a2.tabId, b1.tabId]),
+  );
+
+  const harness = await manager.status("Harness");
+  const research = await manager.status("Research");
+  assert.equal(harness.leased, 0);
+  assert.equal(research.leased, 0);
+  assert.equal(harness.idle, 2);
+  assert.equal(research.idle, 1);
+});
+
 test("workspace still rejects unsupported URL schemes", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);

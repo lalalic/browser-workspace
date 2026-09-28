@@ -521,6 +521,30 @@ export class WorkspaceManager {
     return { workspace: normalizedName, tabId: wanted, released: true };
   }
 
+  async releaseAll() {
+    const config = await this.loadConfig();
+    const released = [];
+
+    for (const name of Object.keys(config.workspaces || {}).sort()) {
+      const group = await this.workspaceGroup(name);
+      if (!group) continue;
+
+      // Snapshot first because release() mutates the group as tabs return idle
+      // or are removed when the group is above its configured capacity.
+      const tabs = await this.groupTabs(group.id);
+      const { leased } = this.classify(name, tabs);
+      for (const tab of leased) {
+        await this.release(name, tab.id);
+        released.push({ workspace: name, tabId: tab.id });
+      }
+    }
+
+    return {
+      released,
+      releasedCount: released.length,
+    };
+  }
+
   async delete(name, force = false) {
     const normalizedName = normalizeWorkspaceName(name);
     const state = await this.status(normalizedName);
@@ -547,6 +571,7 @@ export class WorkspaceManager {
     if (method === "workspace.list") return await this.list();
     if (method === "workspace.acquire") return await this.acquire(args.name, args.url);
     if (method === "workspace.release") return await this.release(args.name, args.tabId);
+    if (method === "workspace.releaseAll") return await this.releaseAll();
     if (method === "workspace.resize") return await this.resize(args.name, args.poolSize);
     if (method === "workspace.delete") return await this.delete(args.name, Boolean(args.force));
     throw new Error(`Unknown workspace method: ${method}`);
