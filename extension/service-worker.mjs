@@ -1,6 +1,9 @@
 import { WorkspaceManager } from "./workspace-manager.mjs";
 
 const manager = new WorkspaceManager(chrome);
+const RECLAIM_ALARM = "browser-workspace.reclaim-stale";
+
+chrome.alarms.create(RECLAIM_ALARM, { periodInMinutes: 5 });
 
 globalThis.browserWorkspaceManagerRpc = async (request) => {
   try {
@@ -30,5 +33,12 @@ chrome.tabs.onCreated.addListener((tab) => {
 chrome.tabs.onActivated.addListener((activeInfo) => {
   manager.noteActivatedTab(activeInfo).catch((error) => {
     console.warn("Browser Workspace failed to record active tab context", error);
+  });
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== RECLAIM_ALARM) return;
+  manager.reclaimStaleTabs().catch((error) => {
+    console.warn("Browser Workspace failed to reclaim stale tabs", error);
   });
 });
