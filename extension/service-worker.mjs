@@ -26,3 +26,9 @@ chrome.tabs.onCreated.addListener((tab) => {
     console.warn("Browser Workspace failed to inherit child tab group", error);
   });
 });
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  manager.noteActivatedTab(activeInfo).catch((error) => {
+    console.warn("Browser Workspace failed to record active tab context", error);
+  });
+});

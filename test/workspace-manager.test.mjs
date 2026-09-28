@@ -37,10 +37,16 @@ function fakeChrome() {
         }
         return values.map(clone);
       },
+      async get(tabId) {
+        const tab = tabs.get(tabId);
+        if (!tab) throw new Error(`Unknown tab ${tabId}`);
+        return clone(tab);
+      },
       async create(options) {
         const tab = {
           id: nextTabId++,
           groupId: -1,
+          windowId: Number.isInteger(options.windowId) ? options.windowId : 1,
           title: "Browser Workspace",
           url: options.url || "about:blank",
           active: Boolean(options.active),
@@ -341,4 +347,91 @@ test("tab opened outside a workspace is not adopted", async () => {
 
   assert.equal(await manager.inheritWorkspaceForCreatedTab(child), null);
   assert.equal(child.groupId, -1);
+});
+
+
+test("extension page opened from chrome://extensions is adopted into the unique workspace", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const state = await manager.create("Harness", 5);
+  const extensions = await chrome.tabs.create({
+    url: "chrome://extensions/",
+    active: true,
+  });
+  const setup = await chrome.tabs.create({
+    url: "chrome-extension://teammate/setup.html",
+    active: true,
+    openerTabId: extensions.id,
+  });
+
+  assert.deepEqual(await manager.inheritWorkspaceForCreatedTab(setup), {
+    workspace: "Harness",
+    groupId: state.groupId,
+    tabId: setup.id,
+    inheritedFromTabId: extensions.id,
+    workspaceAncestorTabId: extensions.id,
+    adoptionReason: "extension-management-opener",
+  });
+});
+
+test("extension page without opener uses recent chrome://extensions activation", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const state = await manager.create("Harness", 5);
+  const extensions = await chrome.tabs.create({
+    url: "chrome://extensions/",
+    active: true,
+    windowId: 7,
+  });
+  await manager.noteActivatedTab({ tabId: extensions.id, windowId: 7 }, Date.now());
+
+  const setup = await chrome.tabs.create({
+    url: "chrome-extension://teammate/setup.html",
+    active: true,
+    windowId: 7,
+  });
+  assert.deepEqual(await manager.inheritWorkspaceForCreatedTab(setup), {
+    workspace: "Harness",
+    groupId: state.groupId,
+    tabId: setup.id,
+    inheritedFromTabId: null,
+    workspaceAncestorTabId: null,
+    adoptionReason: "recent-extension-management",
+  });
+});
+
+test("extension page without install context is not adopted", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 5);
+  const setup = await chrome.tabs.create({
+    url: "chrome-extension://teammate/setup.html",
+    active: true,
+  });
+
+  assert.equal(await manager.inheritWorkspaceForCreatedTab(setup), null);
+  assert.equal(setup.groupId, -1);
+});
+
+test("extension install fallback fails closed when multiple workspaces are configured", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 5);
+  await manager.create("Research", 5);
+  const extensions = await chrome.tabs.create({
+    url: "chrome://extensions/",
+    active: true,
+  });
+  const setup = await chrome.tabs.create({
+    url: "chrome-extension://teammate/setup.html",
+    active: true,
+    openerTabId: extensions.id,
+  });
+
+  assert.equal(await manager.inheritWorkspaceForCreatedTab(setup), null);
+  assert.equal(setup.groupId, -1);
 });
