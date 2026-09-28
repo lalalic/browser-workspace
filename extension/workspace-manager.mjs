@@ -148,6 +148,51 @@ export class WorkspaceManager {
     return candidates.length === 1 ? candidates[0] : null;
   }
 
+  async inheritNavigationTarget(details) {
+    const sourceTabId = Number(details?.sourceTabId);
+    const tabId = Number(details?.tabId);
+    if (!Number.isInteger(sourceTabId) || !Number.isInteger(tabId)) return null;
+
+    const [source, target] = await Promise.all([
+      this.chrome.tabs.get(sourceTabId),
+      this.chrome.tabs.get(tabId),
+    ]);
+    if (!this.isOwnedTab(source)) return null;
+
+    const groupId = Number(source.groupId);
+    if (!Number.isInteger(groupId) || groupId < 0) return null;
+
+    const groups = await this.chrome.tabGroups.query({});
+    const group = groups.find((candidate) => candidate.id === groupId);
+    if (!group?.title) return null;
+
+    const { entry } = await this.configuredWorkspace(group.title);
+    if (!entry) return null;
+
+    this.markOwned(tabId);
+    await this.chrome.tabs.group({ groupId, tabIds: [tabId] });
+
+    const tabs = await this.groupTabs(groupId);
+    if (tabs.length > entry.poolSize) {
+      const { idle } = this.classify(group.title, tabs);
+      const removable = idle.find((candidate) => candidate.id !== tabId);
+      if (removable) await this.chrome.tabs.remove(removable.id);
+    }
+
+    await this.chrome.tabGroups.update(groupId, {
+      title: group.title,
+      collapsed: true,
+    });
+
+    return {
+      workspace: group.title,
+      groupId,
+      tabId,
+      sourceTabId,
+      adoptionReason: "navigation-target",
+    };
+  }
+
   async inheritWorkspaceForCreatedTab(tab) {
     const tabId = Number(tab?.id);
     const openerTabId = Number(tab?.openerTabId);

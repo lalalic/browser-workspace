@@ -325,6 +325,49 @@ test("workspace still rejects unsupported URL schemes", async () => {
   );
 });
 
+test("webNavigation target inherits ownership from an owned source tab", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const source = await manager.acquire("Harness", "https://news.sina.com.cn/china/");
+  const target = await chrome.tabs.create({
+    url: "https://news.sina.com.cn/c/target-blank.shtml",
+  });
+
+  assert.deepEqual(
+    await manager.inheritNavigationTarget({
+      sourceTabId: source.tabId,
+      tabId: target.id,
+    }),
+    {
+      workspace: "Harness",
+      groupId: source.groupId,
+      tabId: target.id,
+      sourceTabId: source.tabId,
+      adoptionReason: "navigation-target",
+    },
+  );
+  assert.equal((await chrome.tabs.get(target.id)).groupId, source.groupId);
+});
+
+test("webNavigation target from an unowned source is not adopted", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 5);
+  const source = await chrome.tabs.create({ url: "https://example.com/" });
+  const target = await chrome.tabs.create({ url: "https://example.com/child" });
+
+  assert.equal(
+    await manager.inheritNavigationTarget({
+      sourceTabId: source.id,
+      tabId: target.id,
+    }),
+    null,
+  );
+  assert.equal((await chrome.tabs.get(target.id)).groupId, -1);
+});
+
 test("child tab inherits workspace group and consumes an idle pool slot", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);

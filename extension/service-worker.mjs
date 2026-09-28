@@ -30,6 +30,12 @@ chrome.tabs.onCreated.addListener((tab) => {
   });
 });
 
+chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
+  manager.inheritNavigationTarget(details).catch((error) => {
+    console.warn("Browser Workspace failed to inherit navigation target", error);
+  });
+});
+
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
   if (!Object.prototype.hasOwnProperty.call(changeInfo, "groupId")) return;
   manager.inheritWorkspaceForCreatedTab(tab).catch((error) => {
