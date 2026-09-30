@@ -520,11 +520,25 @@ export class WorkspaceManager {
     if (tabs.length > ready.poolSize) {
       await this.chrome.tabs.remove(wanted);
     } else {
-      await this.chrome.tabs.update(wanted, {
-        url: this.idleUrl(normalizedName, wanted),
-        active: false,
-      });
-      await this.waitForIdleTab(wanted, normalizedName);
+      try {
+        await this.chrome.tabs.update(wanted, {
+          url: this.idleUrl(normalizedName, wanted),
+          active: false,
+        });
+        await this.waitForIdleTab(wanted, normalizedName);
+      } catch {
+        // Legacy/unowned leases may refuse or fail to finish navigation back to
+        // the extension idle page. Preserve pool capacity by creating a clean
+        // idle replacement in the same group before removing the stale tab.
+        const replacement = await this.chrome.tabs.create({
+          url: this.idleUrl(normalizedName, wanted),
+          active: false,
+        });
+        this.markOwned(replacement.id);
+        await this.chrome.tabs.group({ groupId: ready.groupId, tabIds: [replacement.id] });
+        await this.waitForIdleTab(replacement.id, normalizedName);
+        await this.chrome.tabs.remove(wanted);
+      }
     }
     await this.chrome.tabGroups.update(ready.groupId, { title: normalizedName, collapsed: true });
     return { workspace: normalizedName, tabId: wanted, released: true };

@@ -115,7 +115,7 @@ If the extension is not available, stop and ask the user to confirm that the unp
 
 The helper:
 
-- relies on the extension to reclaim inactive leased tabs after 30 minutes and to eject unrelated Chrome-created tabs from the workspace group;
+- relies on the extension to reclaim inactive leased tabs after 5 minutes and to eject unrelated Chrome-created tabs from the workspace group;
 
 - creates the selected workspace automatically when it is missing;
 - exposes only tabs in `BH_WORKSPACE_NAME`;
