@@ -500,6 +500,9 @@ export class WorkspaceManager {
         url: this.idleUrl(normalizedName, tabs.length),
         active: false,
       });
+      // Group reconciliation can fire before the extension idle URL is visible.
+      // Mark ownership first so a legitimate Browser Harness lease is not ejected.
+      this.markOwned(tab.id);
       await this.chrome.tabs.group({ groupId: ready.groupId, tabIds: [tab.id] });
       tab = await this.waitForIdleTab(tab.id, normalizedName);
     }
