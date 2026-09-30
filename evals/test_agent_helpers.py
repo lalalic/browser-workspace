@@ -204,16 +204,20 @@ class WorkspaceMappingTest(unittest.TestCase):
             [(1, "b"), (2, "c")],
         )
 
-    def test_new_tab_learns_mapping_without_changing_caller_url(self):
+    def test_new_tab_learns_mapping_from_tabid_title_not_url(self):
         module = load_helper()
         calls = []
-        target = {"targetId": "target-1", "type": "page", "url": "", "title": ""}
+        target = {
+            "targetId": "target-1",
+            "type": "page",
+            "url": "chrome-extension://workspace/workspace.html?role=lease&slot=42",
+            "title": "__BW_TAB_42__",
+        }
 
         def manager_call(method, args=None):
             calls.append((method, args))
-            if method == "workspace.acquire":
-                target["url"] = args["url"]
-                return {"tabId": 42}
+            if method == "workspace.acquireIdentity":
+                return {"tabId": 42, "identityTitle": "__BW_TAB_42__"}
             return {"released": True}
 
         new_tab = module["new_tab"]
@@ -224,14 +228,44 @@ class WorkspaceMappingTest(unittest.TestCase):
         )
         new_tab.__globals__["_original_goto_url"] = lambda url: calls.append(("goto", url))
 
-        target_id = new_tab("https://chatgpt.com/?model=test")
+        target_id = new_tab("https://example.com")
         self.assertEqual(target_id, "target-1")
-        acquire_url = calls[0][1]["url"]
-        self.assertIn("__browser_workspace_lease=", acquire_url)
-        self.assertIn("model=test", acquire_url)
-        self.assertEqual(calls[-1], ("goto", "https://chatgpt.com/?model=test"))
+        self.assertEqual(calls[0], ("workspace.acquireIdentity", {"name": "Harness"}))
+        self.assertEqual(calls[-1], ("goto", "https://example.com"))
         self.assertEqual(module["_tab_to_target"], {42: "target-1"})
         self.assertEqual(module["_target_to_tab"], {"target-1": 42})
+
+    def test_new_tab_ignores_destination_url_when_identifying_target(self):
+        module = load_helper()
+        calls = []
+        targets = [
+            {
+                "targetId": "target-1",
+                "type": "page",
+                "url": "https://example.com/",
+                "title": "__BW_TAB_77__",
+            },
+            {
+                "targetId": "wrong-url-match",
+                "type": "page",
+                "url": "https://example.com",
+                "title": "Other page",
+            },
+        ]
+
+        def manager_call(method, args=None):
+            if method == "workspace.acquireIdentity":
+                return {"tabId": 77, "identityTitle": "__BW_TAB_77__"}
+            return {"released": True}
+
+        new_tab = module["new_tab"]
+        new_tab.__globals__["_manager_call"] = manager_call
+        new_tab.__globals__["_page_targets"] = lambda: [item.copy() for item in targets]
+        new_tab.__globals__["_original_switch_tab"] = lambda *args, **kwargs: None
+        new_tab.__globals__["_original_goto_url"] = lambda url: calls.append(url)
+
+        self.assertEqual(new_tab("https://example.com"), "target-1")
+        self.assertEqual(calls, ["https://example.com"])
 
 
 if __name__ == "__main__":
