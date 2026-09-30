@@ -228,6 +228,20 @@ test("workspace can lease a chrome-extension page inside the existing group", as
   assert.ok(after.tabs.some((tab) => tab.url === "chrome-extension://teammate/main.html"));
 });
 
+test("delayed native grouping ejects an unowned user tab", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const workspace = await manager.create("Harness", 5);
+  const userTab = await chrome.tabs.create({ url: "chrome://newtab/", active: true });
+
+  chrome.__setTab(userTab.id, { groupId: workspace.groupId });
+  const result = await manager.reconcileCreatedTab(userTab.id);
+
+  assert.equal(result.releasedUnexpected, true);
+  assert.equal((await chrome.tabs.get(userTab.id)).groupId, -1);
+});
+
 test("closing a workspace tab does not eagerly recreate it", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);

@@ -70,6 +70,14 @@ chrome.tabs.onCreated.addListener((tab) => {
   manager.inheritWorkspaceForCreatedTab(tab).catch((error) => {
     console.warn("Browser Workspace failed to inherit child tab group", error);
   });
+
+  setTimeout(() => {
+    manager.reconcileCreatedTab(tab.id).catch((error) => {
+      if (!/No tab with id|Invalid tab ID/i.test(String(error?.message || error))) {
+        console.warn("Browser Workspace failed delayed created-tab reconciliation", error);
+      }
+    });
+  }, 150);
 });
 
 chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
