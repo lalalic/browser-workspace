@@ -46,6 +46,19 @@ export class WorkspaceManager {
     return this.chrome.runtime.getURL(`workspace.html?${queryString(workspace, slot)}`);
   }
 
+  identityTitle(tabId) {
+    return `__BW_TAB_${tabId}__`;
+  }
+
+  identityUrl(workspace, tabId) {
+    const query = new URLSearchParams({
+      workspace,
+      role: "lease",
+      slot: String(tabId),
+    }).toString();
+    return this.chrome.runtime.getURL(`workspace.html?${query}`);
+  }
+
   parseManagedUrl(url) {
     try {
       const parsed = new URL(url);
@@ -480,6 +493,41 @@ export class WorkspaceManager {
     return await this.ensureWorkspace(normalizedName, wanted);
   }
 
+  async acquireIdentity(name) {
+    const normalizedName = normalizeWorkspaceName(name);
+    const ready = await this.ensureWorkspace(normalizedName);
+    const tabs = await this.groupTabs(ready.groupId);
+    const { idle, leased } = this.classify(normalizedName, tabs);
+    if (!idle.length && leased.length >= ready.poolSize) {
+      throw new Error(`Workspace ${normalizedName} pool is exhausted at size ${ready.poolSize}`);
+    }
+
+    let tab = idle[0];
+    if (!tab) {
+      tab = await this.chrome.tabs.create({
+        url: this.idleUrl(normalizedName, tabs.length),
+        active: false,
+      });
+      this.markOwned(tab.id);
+      await this.chrome.tabs.group({ groupId: ready.groupId, tabIds: [tab.id] });
+      tab = await this.waitForIdleTab(tab.id, normalizedName);
+    }
+
+    this.markOwned(tab.id);
+    const identityTitle = this.identityTitle(tab.id);
+    const identityUrl = this.identityUrl(normalizedName, tab.id);
+    const updated = await this.chrome.tabs.update(tab.id, { url: identityUrl, active: false });
+    await this.chrome.tabGroups.update(ready.groupId, { title: normalizedName, collapsed: true });
+    return {
+      workspace: normalizedName,
+      groupId: ready.groupId,
+      tabId: updated.id,
+      identityTitle,
+      identityUrl,
+      active: Boolean(updated.active),
+    };
+  }
+
   async acquire(name, url) {
     const normalizedName = normalizeWorkspaceName(name);
     const parsed = new URL(String(url || ""));
@@ -608,6 +656,7 @@ export class WorkspaceManager {
     if (method === "workspace.status") return await this.status(args.name);
     if (method === "workspace.list") return await this.list();
     if (method === "workspace.acquire") return await this.acquire(args.name, args.url);
+    if (method === "workspace.acquireIdentity") return await this.acquireIdentity(args.name);
     if (method === "workspace.release") return await this.release(args.name, args.tabId);
     if (method === "workspace.releaseAll") return await this.releaseAll();
     if (method === "workspace.resize") return await this.resize(args.name, args.poolSize);

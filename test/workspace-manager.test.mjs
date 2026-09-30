@@ -168,6 +168,22 @@ test("pool size is a maximum and acquire grows the pool lazily", async () => {
   assert.equal((await manager.status("MDB")).tabIds.length, 2);
 });
 
+test("acquireIdentity exposes tabId through controlled lease page", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 2);
+  const leased = await manager.acquireIdentity("Harness");
+
+  assert.equal(leased.identityTitle, `__BW_TAB_${leased.tabId}__`);
+  assert.match(leased.identityUrl, /workspace\.html\?/);
+  assert.match(leased.identityUrl, /role=lease/);
+  assert.match(leased.identityUrl, new RegExp(`slot=${leased.tabId}(?:&|$)`));
+
+  const state = await manager.status("Harness");
+  assert.deepEqual(state.leasedTabIds, [leased.tabId]);
+});
+
 test("multiple workspaces have independent exact pool sizes", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);

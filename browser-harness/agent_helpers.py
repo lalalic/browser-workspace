@@ -8,11 +8,6 @@ behavior, but it must remain a drop-in helper layer.
 import json as _json
 import os as _os
 import time as _time
-import uuid as _uuid
-from urllib.parse import parse_qsl as _parse_qsl
-from urllib.parse import urlencode as _urlencode
-from urllib.parse import urlsplit as _urlsplit
-from urllib.parse import urlunsplit as _urlunsplit
 
 from browser_harness import helpers as _bh
 
@@ -194,16 +189,6 @@ def _forget_mapping(tab_id=None, target_id=None):
             _tab_to_target.pop(known_tab, None)
 
 
-def _lease_url(url):
-    parts = _urlsplit(url)
-    query = [
-        (key, value)
-        for key, value in _parse_qsl(parts.query, keep_blank_values=True)
-        if key != "__browser_workspace_lease"
-    ]
-    query.append(("__browser_workspace_lease", _uuid.uuid4().hex))
-    return _urlunsplit(parts._replace(query=_urlencode(query)))
-
 
 def _map_workspace_tabs(chrome_tabs, target_infos):
     """Map Chrome tabs to CDP targets, preferring mappings learned at acquire."""
@@ -323,18 +308,18 @@ def new_tab(url="about:blank"):
         raise RuntimeError(
             "Workspace new_tab requires an http(s) or chrome-extension URL"
         )
-    lease_url = _lease_url(url)
     opened = _manager_call(
-        "workspace.acquire",
-        {"name": _WORKSPACE_NAME, "url": lease_url},
+        "workspace.acquireIdentity",
+        {"name": _WORKSPACE_NAME},
     )
     wanted_tab_id = opened.get("tabId")
+    identity_title = opened.get("identityTitle") or f"__BW_TAB_{wanted_tab_id}__"
     deadline = _time.monotonic() + _TIMEOUT_SECONDS
     while _time.monotonic() < deadline:
         candidates = [
             target
             for target in _page_targets()
-            if (target.get("url") or "") == lease_url
+            if (target.get("title") or "") == identity_title
         ]
         if len(candidates) == 1:
             target_id = candidates[0]["targetId"]
