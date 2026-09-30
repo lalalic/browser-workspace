@@ -308,6 +308,13 @@ export class WorkspaceManager {
     return result;
   }
 
+  async reconcileCreatedTab(tabId) {
+    const id = Number(tabId);
+    if (!Number.isInteger(id)) return null;
+    const tab = await this.chrome.tabs.get(id);
+    return await this.inheritWorkspaceForCreatedTab(tab);
+  }
+
   classify(name, tabs) {
     const idle = [];
     const leased = [];
