@@ -242,6 +242,33 @@ test("delayed native grouping ejects an unowned user tab", async () => {
   assert.equal((await chrome.tabs.get(userTab.id)).groupId, -1);
 });
 
+test("acquire keeps a newly-created owned tab grouped during reconciliation race", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  await manager.create("Harness", 2);
+  await manager.acquire("Harness", "https://example.com/first");
+
+  const originalGroup = chrome.tabs.group.bind(chrome.tabs);
+  chrome.tabs.group = async (options) => {
+    const groupId = await originalGroup(options);
+    const tabId = options.tabIds?.[0];
+    if (Number.isInteger(options.groupId) && Number.isInteger(tabId)) {
+      const before = await chrome.tabs.get(tabId);
+      chrome.__setTab(tabId, { url: "about:blank" });
+      await manager.reconcileCreatedTab(tabId);
+      chrome.__setTab(tabId, { url: before.url });
+    }
+    return groupId;
+  };
+
+  const leased = await manager.acquire("Harness", "https://example.com/second");
+  const state = await manager.status("Harness");
+
+  assert.equal((await chrome.tabs.get(leased.tabId)).groupId, state.groupId);
+  assert.ok(state.tabIds.includes(leased.tabId));
+});
+
 test("closing a workspace tab does not eagerly recreate it", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);
