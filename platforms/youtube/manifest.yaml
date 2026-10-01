@@ -1,0 +1,20 @@
+platform: youtube
+status: migrated_unverified
+last_verified: null
+actions:
+  post: "actions/_post.py"
+verification:
+  status: migrated_unverified
+  last_verified: null
+  evidence: "Existing Studio upload mechanics migrated from the working post adapter. Current Browser Workspace live verification pending."
+url_patterns:
+  - "https://www.youtube.com/upload"
+  - "https://studio.youtube.com/*"
+authentication:
+  required: true
+  notes: "Use the caller's authenticated browser context; never store credentials."
+provenance:
+  source: "skills/post/scripts/platforms/youtube"
+  migrated_code: true
+flows:
+  post: {status: migrated_unverified, evidence: "Migrated action; current Browser Workspace live verification pending."}

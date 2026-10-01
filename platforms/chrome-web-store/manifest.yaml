@@ -1,0 +1,33 @@
+platform: chrome-web-store
+status: partially_verified
+last_verified: 2026-09-26
+actions:
+  chrome-web-store: "actions/_chrome_web_store.py"
+verification:
+  status: partially_verified
+  last_verified: 2026-09-26
+  evidence: "Live verification covers new-item draft creation/reopen plus Teammate and Family Tutor existing-item draft reopen/save regressions. Submit/review/publication lifecycle remains implemented but not live-verified."
+url_patterns:
+  - "https://chromewebstore.google.com/devconsole/*"
+  - "https://chrome.google.com/webstore/developer/dashboard*"
+authentication:
+  required: true
+  notes: "Use an already authenticated publisher browser context; never store credentials or browser state."
+side_effects:
+  - "upload-package changes a draft/package upload"
+  - "update-listing edits listing metadata"
+  - "submit-review sends a listing for review"
+provenance:
+  source: "Neo platform skeleton"
+  migrated_code: false
+flows:
+  resolve-item: {status: verified, evidence: "Live runs resolved and reopened the intended Browser Workspace, Teammate, and Family Tutor developer items."}
+  create-item: {status: verified, evidence: "Browser Workspace was created as a new developer item from a store-compatible package, then reopened at exact version 0.2.3."}
+  verify-draft: {status: verified, evidence: "Draft/version was verified after reopen; Teammate and Family Tutor existing-item drafts were also reopened successfully."}
+  save-draft: {status: verified, evidence: "Draft save/reopen was exercised on Browser Workspace plus existing-item regressions for Teammate and Family Tutor."}
+  open-item: {status: verified, evidence: "Publisher-scoped item navigation was exercised across the three real extension items."}
+  upload-package: {status: verified, evidence: "Initial package upload was exercised during real new-item creation."}
+  update-listing: {status: implemented_unverified, evidence: "Action maps approved Market Package fields, but complete live listing-field coverage has not been verified as a release gate."}
+  submit-review: {status: implemented_unverified, evidence: "Action requires commit plus explicit external-submit authorization; no real review submission has been performed by this verification."}
+  check-status: {status: implemented_unverified, evidence: "Read-only review/listing-state classification is implemented; post-submission external review states have not been live-verified."}
+  verify-published: {status: implemented_unverified, evidence: "Public exact-version verification is implemented; no authorized published listing lifecycle has been exercised by this verification."}

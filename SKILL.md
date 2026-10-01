@@ -1,153 +1,187 @@
 ---
 name: browser-workspace
-description: Set up and use Browser Workspace with Browser Harness. Depends on the browser-harness skill.
+description: Control the real browser through one Browser Workspace skill and CLI, with leased tab workspaces, persistent Python sessions, compact snapshots, and built-in platform workflows.
 ---
 
 # Browser Workspace
 
-Use this skill to set up Browser Workspace after the skill itself has been installed and loaded.
+Browser Workspace is the **only browser skill agents should load**. It includes the browser-control runtime, workspace/tab leasing, persistent Python sessions, snapshot refs, and site-specific platform workflows. Do not load or invoke a separate `browser-harness` or `browser-platforms` skill.
 
-This skill depends on the **browser-harness** skill. Browser Harness installation and base configuration belong to that skill.
+## Agent contract
 
-## Setup entry point
+Use one of two execution paths:
 
-When this skill is loaded for setup, do the following in order:
+```text
+known platform flow
+  -> browser-workspace platform run <platform> <action> [--config FILE]
+  -> runner creates the browser session
+  -> runner executes the platform action
+  -> runner always stops and cleans up
 
-1. Ensure the `browser-harness` skill has been applied and `browser-harness` is available.
-2. Ask the user to install the bundled Chrome extension manually.
-3. Configure the Browser Workspace environment.
-4. Apply the bundled Browser Harness helper.
-5. Verify Browser Workspace can create and see the configured group.
+custom browser workflow
+  -> browser-workspace session start
+  -> browser-workspace session exec <session_id>
+  -> browser-workspace session stop <session_id>
+```
 
-Do not assume a particular checkout directory, home directory, or project layout.
+Do not manually create a session around a platform action unless product code intentionally owns a longer-lived browser context. There are no separate top-level `open`, `tabs`, `status`, or `screenshot` commands.
 
-## 1. Install the bundled Chrome extension
+Every logical browser workflow must follow:
 
-The Chrome extension is bundled with this skill at:
+```text
+start
+  -> exec
+  -> exec
+  -> ...
+finally
+  -> stop
+```
 
-`<browser-workspace>/extension`
+Rules:
 
-Here, `<browser-workspace>` means the local directory containing this `SKILL.md`.
+- Start one session per logical browser workflow and retain its `session_id`.
+- Reuse that same session for every action/observation turn.
+- Always stop the session in cleanup/finally, including on failure or cancellation.
+- A session owns one leased browser tab and a persistent Python namespace.
+- Multiple independent workflows may use different sessions concurrently.
 
-Resolve that directory to an **absolute local path**, then tell the user exactly which folder to select.
+## Start
 
-Ask the user to do this manually in Chrome:
-
-1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Click **Load unpacked**.
-4. Select the exact local `<browser-workspace>/extension` directory you resolved above.
-
-Do not direct the user to a store page. Do not mention a repository, clone location, or another machine's filesystem path.
-
-After the user confirms the extension is loaded, continue setup.
-
-Default extension ID:
-
-`kgbghhigmbpefppgkocgjgnnnbhjchic`
-
-## 2. Configure Browser Workspace
-
-Defaults:
+Default workspace is `Harness`:
 
 ```bash
+browser-workspace session start
+```
+
+Normal agents do not choose a workspace. `session start` defaults to `Harness`; the `--workspace` implementation option is hidden from normal CLI help. Product integrations such as Family Tutor or Agents Relay may set an explicit workspace in their own code/config when isolation is a product requirement.
+
+Start directly at a URL when known:
+
+```bash
+browser-workspace session start --url https://example.com
+```
+
+The result is JSON containing `session_id`, `workspace`, `target_id`, the starting `url`, and `workspace_supported`.
+
+The Chrome workspace extension is optional. If it is not installed, `session start` still succeeds and browser automation continues without workspace grouping/lease isolation. The result includes a soft `warning` and `extension_url` pointing to the Chrome Web Store. Do not treat this warning as a session failure.
+
+## Exec
+
+`session exec` reads Python from stdin. Helpers are already imported; do not import another browser package.
+
+```bash
+browser-workspace session exec <session_id> <<'PY'
+print(page_info())
+print(snapshot())
+PY
+```
+
+Python state persists across later calls in the same session:
+
+```bash
+browser-workspace session exec <session_id> <<'PY'
+meeting_name = "Demo"
+print(current_tab())
+PY
+```
+
+Then later:
+
+```bash
+browser-workspace session exec <session_id> <<'PY'
+print(meeting_name)
+PY
+```
+
+A Python file may also be used with `--code-file`.
+
+## Stop
+
+```bash
+browser-workspace session stop <session_id>
+```
+
+Stopping closes every tab owned or opened by that session—including tabs created with `new_tab()`, `bh.new_tab()`, direct `Target.createTarget`, and detected child/popup tabs—then destroys the session's Python namespace. It does not close unrelated browser tabs. Do not reuse the ID afterward.
+
+A safe shell structure is:
+
+```bash
+SESSION_JSON=$(browser-workspace session start)
+SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
+trap 'browser-workspace session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
+
+browser-workspace session exec "$SESSION_ID" <<'PY'
+print(snapshot())
+PY
+```
+
+## Browser helpers
+
+The session exposes the browser primitives directly, including:
+
+```python
+page_info()
+goto_url(url)
+current_tab()
+new_tab(url)
+close_tab(...)
+js(expression, target_id=None)
+cdp(method, ...)
+wait_for_load()
+wait_for_element(...)
+fill_input(selector, text)
+click(selector)
+capture_screenshot(...)
+```
+
+Use the higher-level helpers first. Use raw `js(...)`/`cdp(...)` only when needed.
+
+Interaction-specific reference material is bundled under `interaction-skills/` inside this skill.
+
+## Snapshot refs
+
+`snapshot()` returns a compact accessibility-oriented view and writes each returned ref directly onto the corresponding live DOM element as `data-ref="eN"`.
+
+Example:
+
+```text
+- button "Calendar" [ref=e1]
+- button "Meet now" [ref=e2]
+- textbox "Meeting name" [ref=e3]
+```
+
+The live DOM then contains equivalent annotations such as:
+
+```html
+<button data-ref="e2">Meet now</button>
+```
+
+Refs are ordinary CSS selectors. Use normal helpers:
+
+```python
+print(snapshot())
+click('[data-ref="e2"]')
+fill_input('[data-ref="e3"]', 'Demo meeting')
+```
+
+Do **not** invent `click("e2")`, `click_ref("e2")`, or an `@e2` API. After navigation or a substantial DOM update, call `snapshot()` again and use the new refs.
+
+`snapshot(interactive_only=False)` may include named content roles in addition to interactive elements. `target_id=` may be used for target-specific inspection.
+
+## Workspaces
+
+Default configuration:
+
+```text
 BH_WORKSPACE_NAME=Harness
 BH_WORKSPACE_POOL_SIZE=5
 ```
 
-`BH_WORKSPACE_POOL_SIZE=N` means **N is the maximum concurrent capacity**;
-physical Chrome tabs are created lazily as callers acquire them.
+When the Browser Workspace Chrome extension is installed, the pool size is the maximum concurrent capacity; tabs are created lazily. The extension owns grouping, lease/release, idle reclaim, and workspace isolation.
 
-The extension ID can be overridden when necessary:
+Without the extension, browser sessions still work using the built-in browser core. Workspace names, grouping, pool capacity, lease isolation, and idle reclaim are unavailable; tab/navigation/input/snapshot/platform helpers continue to work. `workspace_status()` reports `supported: false` instead of failing.
 
-```bash
-BH_WORKSPACE_MANAGER_EXTENSION_ID=<extension-id>
-```
-
-Do not expose or reuse machine-specific environment values from another installation.
-
-## 3. Apply the bundled Browser Harness helper
-
-The installer is bundled at:
-
-`<browser-workspace>/scripts/install.sh`
-
-Run it from the resolved local skill directory, for example:
-
-```bash
-"<browser-workspace>/scripts/install.sh"
-```
-
-The installer copies:
-
-`<browser-workspace>/browser-harness/agent_helpers.py`
-
-into the Browser Harness agent workspace and persists the Browser Workspace environment settings in its `.env`.
-
-By default the target is:
-
-`~/.config/browser-harness/agent-workspace/agent_helpers.py`
-
-If `BH_AGENT_WORKSPACE` is set, use that Browser Harness agent workspace instead.
-
-To override the defaults for this installation:
-
-```bash
-BH_WORKSPACE_NAME=Research \
-BH_WORKSPACE_POOL_SIZE=4 \
-"<browser-workspace>/scripts/install.sh"
-```
-
-## 4. Verify
-
-Start a new Browser Harness process after applying the helper.
-
-Verify that:
-
-- the configured group is created or reconciled;
-- the group name matches `BH_WORKSPACE_NAME`;
-- the group contains no more than `BH_WORKSPACE_POOL_SIZE` tabs;
-- Browser Harness exposes only tabs belonging to that workspace.
-
-If the extension is not available, stop and ask the user to confirm that the unpacked extension is loaded from the exact local `<browser-workspace>/extension` path.
-
-## Runtime behavior
-
-The helper:
-
-- relies on the extension to reclaim inactive leased tabs after 5 minutes and to eject unrelated Chrome-created tabs from the workspace group;
-
-- creates the selected workspace automatically when it is missing;
-- exposes only tabs in `BH_WORKSPACE_NAME`;
-- leases `new_tab(url)` from that workspace pool, including `http(s)` and `chrome-extension://` pages;
-- returns `close_tab()` tabs to the pool;
-- refuses visible activation and operations on tabs outside the workspace;
-- learns and owns the Chrome-tab-to-CDP-target mapping when a tab is leased, so downstream Browser Harness callers do not need identity workarounds;
-- fails closed only when an untracked Chrome tab cannot be mapped uniquely.
-
-Workspace identity is the unique Chrome tab-group title. Chrome `groupId` is treated as ephemeral and rediscovered after restarts. Duplicate groups with the same workspace title are considered ambiguous and fail closed.
-
-## Changing workspace
-
-Changing the environment affects the next Browser Harness process:
-
-```bash
-export BH_WORKSPACE_NAME=Research
-export BH_WORKSPACE_POOL_SIZE=4
-browser-harness
-```
-
-An already-running Browser Harness process keeps the values it started with.
-
-For an existing workspace, `BH_WORKSPACE_POOL_SIZE` is the creation/default size. To resize an existing workspace explicitly:
-
-```python
-workspace_resize("Research", 6)
-```
-
-## Workspace helpers
-
-The installed helper exposes:
+Available workspace helpers include:
 
 ```python
 workspace_create("Research", 5)
@@ -157,4 +191,100 @@ workspace_resize("Research", 6)
 workspace_delete("Research")
 ```
 
-Normal Browser Harness page operations remain unchanged.
+Never use URL as tab identity. Workspace ownership and leased target identity are authoritative.
+
+## Platform contract
+
+Known-site knowledge is bundled under `platforms/`. A platform contains **site/domain behavior only**.
+
+```text
+platforms/<name>/
+├── SKILL.md        site behavior and rules
+├── manifest.yaml   actions + verification metadata
+├── actions/        reusable browser action code
+└── flows/          optional flow documentation
+```
+
+Platform rules:
+
+- Platform actions may use browser helpers such as `new_tab()`, `current_tab()`, `snapshot()`, `js()`, `cdp()`, uploads, downloads, and screenshots.
+- Platform actions must **not** create/stop Browser Workspace sessions, choose a workspace, call workspace-management APIs, invoke the Browser Workspace CLI, or import session/workspace infrastructure.
+- Platform `SKILL.md` and flow docs should describe site behavior, preconditions, side effects, and verification evidence—not Browser Workspace lifecycle mechanics.
+- Platform actions must remain usable in either a generic runner-owned session or a product-owned browser context.
+- The generic runner owns the normal lifecycle: start a default Harness session, inject browser helpers/config, execute the action, then always stop the session and close its owned tabs.
+- Products that require a dedicated or persistent browser context (for example Family Tutor or Agents Relay) may execute the same platform action inside product-owned infrastructure. The platform code itself stays unchanged.
+- Do not rediscover a known site's mechanics when a verified platform flow/action already exists.
+
+Run a platform action through the generic runner:
+
+```bash
+browser-workspace platform run microsoft-teams meeting --config /path/to/config.json
+```
+
+The runner output hides the raw session ID. It returns the platform/action result, optional workspace-extension warning, and cleanup evidence.
+
+### Platform verification contract
+
+Every `platforms/<name>/manifest.yaml` must declare:
+
+```text
+platform:
+status:
+last_verified:
+actions:
+verification:
+  status:
+  last_verified:
+  evidence:
+```
+
+Verification rules:
+
+- `verified`: exercised against the live site and supported by concrete evidence.
+- `partially_verified`: some declared flows are live-verified while others remain implemented but unverified.
+- `migrated_unverified`: code was migrated from a previously working adapter but has not yet been live-verified in the current Browser Workspace integration.
+- Never upgrade a status merely because code compiles or contract tests pass.
+- Flow-level verification in `manifest.yaml` should be more specific than the platform-wide status.
+- When live behavior changes, update `last_verified`, evidence, and affected flow status in the same change.
+
+Current bundled platforms:
+
+```text
+platforms/chatgpt/
+platforms/chrome-web-store/
+platforms/microsoft-teams/
+platforms/tiktok/
+platforms/wechat-channels/
+platforms/xhs/
+platforms/youtube/
+```
+
+Read the matching platform `SKILL.md` and `manifest.yaml` before invoking or modifying a known flow.
+
+## Installation
+
+Run the bundled installer from the skill directory:
+
+```bash
+./scripts/install.sh
+```
+
+It creates a Browser Workspace-owned `.venv`, installs the vendored browser runtime and dependencies, writes Browser Workspace environment configuration to `agent-workspace/.env`, and links `browser-workspace` into `~/.local/bin` by default.
+
+There is no required separate Browser Harness installation.
+
+The Chrome extension is recommended but not required. Without it Browser Workspace runs in plain-browser mode and `session start` provides the installation link. The public Web Store URL is:
+
+```text
+https://chromewebstore.google.com/detail/kgbghhigmbpefppgkocgjgnnnbhjchic
+```
+
+The extension is also bundled at `extension/` for unpacked/development installs. Default extension ID:
+
+```text
+kgbghhigmbpefppgkocgjgnnnbhjchic
+```
+
+## Internal provenance
+
+The low-level browser runtime is forked from `browser-use/browser-harness` and kept internally under `src/browser_harness/`. Browser Workspace is the public product/skill/CLI surface. Upstream licensing is preserved under `licenses/`.
