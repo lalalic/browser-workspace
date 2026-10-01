@@ -6,8 +6,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parent
 RUNTIME_DIR=Path(os.environ.get('BROWSER_WORKSPACE_RUNTIME_DIR',Path.home()/'.config/browser-workspace/runtime'))
 SOCKET_PATH=Path(os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET',RUNTIME_DIR/'session.sock'))
-HARNESS_SKILL=Path(os.environ.get('BROWSER_HARNESS_SKILL',Path.home()/'.agents/skills/browser-harness'))
-PYTHON=Path(os.environ.get('BROWSER_WORKSPACE_SESSION_PYTHON',HARNESS_SKILL/'.venv/bin/python'))
+PYTHON=Path(os.environ.get('BROWSER_WORKSPACE_SESSION_PYTHON',ROOT/'.venv/bin/python'))
 
 def request(payload, ensure=True):
     if ensure: ensure_daemon()

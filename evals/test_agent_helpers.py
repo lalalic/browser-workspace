@@ -5,7 +5,7 @@ import types
 import unittest
 from pathlib import Path
 
-HELPER = Path(__file__).resolve().parents[1] / "browser-harness" / "agent_helpers.py"
+HELPER = Path(__file__).resolve().parents[1] / "agent-workspace" / "agent_helpers.py"
 
 
 def load_helper():
@@ -36,10 +36,7 @@ def load_helper():
 
 class WorkspaceMappingTest(unittest.TestCase):
     def test_rewritten_browser_harness_functions_keep_exact_signatures(self):
-        upstream = (
-            Path.home()
-            / ".local/share/uv/tools/browser-harness/lib/python3.12/site-packages/browser_harness/helpers.py"
-        )
+        upstream = Path(__file__).resolve().parents[1] / "src" / "browser_harness" / "helpers.py"
 
         def function_signatures(path):
             tree = ast.parse(path.read_text())

@@ -4,8 +4,13 @@ import ast, atexit, contextlib, io, json, os, secrets, socket, sys, threading, t
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-os.environ.setdefault('BH_HOME', str(Path.home()/'.config/browser-harness'))
-os.environ.setdefault('BH_AGENT_WORKSPACE', str(ROOT/'browser-harness'))
+sys.path.insert(0, str(ROOT/'src'))
+os.environ.setdefault('BH_HOME', str(Path.home()/'.config/browser-workspace/browser-core'))
+# Preserve the canonical single Browser Harness daemon socket during migration.
+# This is runtime-state compatibility only; Browser Workspace owns the code/venv.
+os.environ.setdefault('BH_RUNTIME_DIR', str(Path.home()/'.config/browser-harness/runtime'))
+os.environ.setdefault('BH_RUNTIME_DIR_SHARED', '1')
+os.environ.setdefault('BH_AGENT_WORKSPACE', str(ROOT/'agent-workspace'))
 os.environ.setdefault('BH_WORKSPACE_NAME', 'Harness')
 
 from browser_harness.admin import ensure_daemon
@@ -51,14 +56,15 @@ def execute(source, namespace):
         traceback.print_exc(file=err)
         return {'ok':False,'stdout':out.getvalue(),'stderr':err.getvalue(),'error':f'{type(exc).__name__}: {exc}'}
 
-def start_session(workspace=None):
+def start_session(workspace=None, url=None):
     workspace=(workspace or DEFAULT_WORKSPACE).strip()
     if not workspace: raise ValueError('workspace must not be empty')
     sid=secrets.token_hex(8)
-    with BROWSER_LOCK, with_workspace(workspace): tid=bh.new_tab('about:blank')
+    start_url=(url or 'about:blank').strip()
+    with BROWSER_LOCK, with_workspace(workspace): tid=bh.new_tab(start_url)
     s=Session(sid,workspace,tid)
     with SESSIONS_LOCK: SESSIONS[sid]=s
-    return {'session_id':sid,'workspace':workspace,'target_id':tid}
+    return {'session_id':sid,'workspace':workspace,'target_id':tid,'url':start_url}
 
 def get_session(sid):
     with SESSIONS_LOCK: s=SESSIONS.get(sid)
@@ -96,7 +102,7 @@ atexit.register(cleanup)
 def handle(req):
     op=req.get('op')
     if op=='ping': return {'ok':True,'pid':os.getpid(),'session_count':len(SESSIONS)}
-    if op=='start': return start_session(req.get('workspace'))
+    if op=='start': return start_session(req.get('workspace'), req.get('url'))
     if op=='exec': return exec_session(req['session_id'],req.get('code',''))
     if op=='stop': return stop_session(req['session_id'])
     raise ValueError(f'unknown op: {op}')

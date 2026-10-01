@@ -1,114 +1,58 @@
 # Browser Workspace
 
-Chrome extension for named browser-agent workspaces inside the user's normal Chrome profile.
+Browser Workspace is a single browser automation skill and CLI built around persistent Python sessions, workspace-owned Chrome tabs, compact snapshot refs, and built-in platform workflows.
 
-Each workspace is a Chrome tab group whose configured pool size is the **maximum concurrent capacity**. Physical tabs are created lazily as callers acquire them. Workspace identity is the unique Chrome tab-group title, so runtime `groupId` changes are rediscovered after Chrome restarts.
+## Public interface
 
-## Contract
-
-The MV3 service worker exposes:
-
-- `workspace.create(name, poolSize)`
-- `workspace.ensure(name, defaultPoolSize)`
-- `workspace.status(name)`
-- `workspace.list()`
-- `workspace.acquire(name, url)`
-- `workspace.release(name, tabId)`
-- `workspace.resize(name, poolSize)`
-- `workspace.delete(name, force=false)`
-
-The extension owns only group/pool lifecycle. Page operations belong to Browser Harness.
-
-Inactive leased tabs are reclaimed after 30 minutes; active tabs are preserved. Chrome-created tabs that land in a workspace group without a valid workspace opener are immediately ungrouped.
-
-Tabs opened by a tab already inside a configured workspace inherit that workspace.
-For unpacked-extension installation flows, a `chrome-extension://` setup/onboarding
-tab opened from `chrome://extensions` (or immediately after that page was active)
-is adopted into the single unambiguous configured workspace. Browser Workspace
-fails closed when multiple configured workspaces could own the new tab.
-
-The Browser Harness helper exposes `workspace_capacity()` for routing decisions.
-It derives `name`, `poolSize`, `maxCapacity`, `physicalTabs`, `idle`, `leased`,
-and `available` from `workspace_status()`. `available` is the number of
-allocatable slots (`maxCapacity - leased`, bounded at zero), not the number of
-physical idle tabs. If the status probe fails or is not initialized, the count
-fields and `available` are `None` rather than fabricated; failures also include
-an `error` message.
-
-## Install for development
-
-Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select:
-
-```
-~/Workspace/browser-workspace/extension
-```
-
-The manifest contains a stable public key, so the unpacked extension keeps extension ID:
-
-`kgbghhigmbpefppgkocgjgnnnbhjchic`
-
-## Tests
+Only session lifecycle is exposed at the shell level:
 
 ```bash
-node --test test/workspace-manager.test.mjs
+browser-workspace session start [--workspace NAME] [--url URL]
+browser-workspace session exec SESSION_ID <<'PY'
+print(snapshot())
+PY
+browser-workspace session stop SESSION_ID
 ```
 
-## Extension zip
+Browser operations are Python helpers inside the session. There are intentionally no parallel top-level `open`, `tabs`, `status`, or `screenshot` commands.
 
-Every push to `main` that changes extension source automatically runs the **Extension Release** GitHub Action. It runs the tests, packages the contents of `extension/` with `manifest.json` at the zip root, verifies the archive, uploads `browser-workspace-v<version>.zip` as a workflow artifact, and creates a GitHub Release with the zip attached.
+## Included layers
 
-Build the same zip locally with:
-
-```bash
-scripts/package-extension.sh
+```text
+browser-workspace
+├── src/browser_harness/     low-level browser/CDP runtime (forked internally)
+├── agent-workspace/         Browser Workspace helper layer
+├── extension/               Chrome workspace/tab manager
+├── session_daemon.py        persistent Python session service
+├── platforms/               built-in site workflows
+├── interaction-skills/      browser interaction references
+└── SKILL.md                 single agent-facing skill contract
 ```
 
+Agents should load only the Browser Workspace skill. `browser-harness` and `browser-platforms` are no longer separate runtime/skill dependencies.
 
-## Install Browser Harness integration
-
-Clone the repository, then install the helper directly from the repo:
+## Install
 
 ```bash
-git clone git@github.com:lalalic/browser-workspace.git ~/Workspace/browser-workspace
-cd ~/Workspace/browser-workspace
 ./scripts/install.sh
 ```
 
-Defaults:
+The installer creates the skill-owned `.venv` and links `browser-workspace` to `~/.local/bin` by default.
 
-```bash
-BH_WORKSPACE_NAME=Harness
-BH_WORKSPACE_POOL_SIZE=5
+For first-time Chrome setup, load `extension/` as an unpacked extension.
+
+## Snapshot model
+
+`snapshot()` uses Chrome's accessibility tree to identify useful controls/content, annotates the corresponding live DOM elements with `data-ref="eN"`, and emits a compact representation. Interact using normal CSS selectors:
+
+```python
+print(snapshot())
+click('[data-ref="e2"]')
+fill_input('[data-ref="e3"]', 'hello')
 ```
 
-Override them for one install:
+There is no separate ref registry.
 
-```bash
-BH_WORKSPACE_NAME=Research BH_WORKSPACE_POOL_SIZE=4 ./scripts/install.sh
-```
+## Upstream
 
-The installer copies `browser-harness/agent_helpers.py` into the Browser Harness agent workspace and persists the environment values in its `.env`.
-
-## MCP persistent Python sessions
-
-`mcp/browser-workspace-mcp` is a stdio MCP server with three tools:
-
-- `session.start(workspace?)` leases one tab from the named workspace (default `Harness`) and starts a persistent Python Browser Harness runtime. It returns a `session_id`.
-- `session.exec(session_id, code)` executes arbitrary Python in that same runtime; globals, imports, variables, helper state, and the leased tab survive across calls.
-- `session.stop(session_id)` releases the tab and terminates the runtime.
-
-Sessions are independent and may coexist concurrently. The MCP server reuses one Browser Harness daemon/CDP connection and keeps one persistent Python namespace plus one leased `target_id` per session. Before each `session.exec`, the server attaches the shared daemon to that session target under a short browser lock, so sessions can interleave turns without opening additional Chrome remote-debug connections. This is designed for Mac Developer Bridge stdio federation. Products can use dedicated workspace names, e.g. `Family Tutor`.
-
-### CLI session interface
-
-The CLI is the primary portable interface; MCP is an optional transport over the same local session daemon.
-
-```bash
-browser-workspace session start --workspace "Family Tutor"
-browser-workspace session exec <session_id> <<'PY'
-print(page_info())
-PY
-browser-workspace session stop <session_id>
-```
-
-`session exec` also accepts Python from stdin or `--code-file`. The installer links the command to `~/.local/bin/browser-workspace` by default. CLI and MCP share the same persistent daemon and session IDs.
+The internal browser-control core is forked from `browser-use/browser-harness`. Its license is retained in `licenses/browser-harness-MIT.txt`.

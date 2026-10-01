@@ -1,0 +1,22 @@
+platform: microsoft-teams
+status: verified
+last_verified: 2026-10-01
+browser_workspace:
+  compatible: true
+  runner: "runner/_meeting.py"
+  evidence: "Verified live on 2026-10-01: Calendar -> Meet now -> Start meeting -> pre-join -> Join now -> in-call in one Browser Workspace session on teams.cloud.microsoft."
+url_patterns:
+  - "https://teams.cloud.microsoft/*"
+  - "https://outlook.office.com/hosted/calendar/*"
+authentication:
+  required: true
+  notes: "Use an already authenticated Microsoft Teams browser session; never store credentials or session state."
+side_effects:
+  - "start-instant-meeting can create and join a real Teams meeting"
+  - "leave exits the current meeting in the leased Teams tab"
+provenance:
+  source: "Live Browser Workspace exploration for MeetMate E2E"
+  migrated_code: false
+flows:
+  instant-meeting: {status: verified, evidence: "Verified Calendar -> Meet now -> Start meeting intermediate dialog discovery; complete join/leave path pending final live verification."}
+  meeting-status: {status: verified, evidence: "Live call state observed via call duration and hangup controls on teams.cloud.microsoft."}

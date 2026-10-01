@@ -1,0 +1,17 @@
+platform: wechat-channels
+status: working
+last_verified: null
+browser_workspace:
+  compatible: true
+  evidence: "Migrated from the working skills/post adapter."
+url_patterns:
+  - "https://channels.weixin.qq.com/*"
+authentication:
+  required: true
+  notes: "Use the caller's authenticated browser session; never store credentials."
+provenance:
+  source: "skills/post/scripts/platforms/wechat-channels"
+  migrated_code: true
+flows:
+  post: {status: working, evidence: "Existing post and shadow-DOM mechanics migrated."}
+  manage: {status: working, evidence: "Existing manager/status mechanics migrated."}

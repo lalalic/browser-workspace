@@ -1,0 +1,17 @@
+platform: chatgpt
+status: verified_from_existing_worker
+last_verified: 2026-09-30
+browser_workspace:
+  compatible: true
+  runner: "runner/_thread_turn.py"
+flows:
+  - existing-thread-turn
+  - project-setup
+capabilities:
+  - persistent-thread
+  - attachments
+  - submit-verification
+  - assistant-completion
+  - project-bootstrap
+  - project-instructions
+  - project-memory

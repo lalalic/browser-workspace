@@ -1,211 +1,25 @@
 ---
 name: browser-workspace
-description: Set up and use Browser Workspace with Browser Harness. Depends on the browser-harness skill.
+description: Control the real browser through one Browser Workspace skill and CLI, with leased tab workspaces, persistent Python sessions, compact snapshots, and built-in platform workflows.
 ---
 
 # Browser Workspace
 
-Use this skill to set up Browser Workspace after the skill itself has been installed and loaded.
+Browser Workspace is the **only browser skill agents should load**. It includes the browser-control runtime, workspace/tab leasing, persistent Python sessions, snapshot refs, and site-specific platform workflows. Do not load or invoke a separate `browser-harness` or `browser-platforms` skill.
 
-This skill depends on the **browser-harness** skill. Browser Harness installation and base configuration belong to that skill.
+## Agent contract
 
-## Setup entry point
-
-When this skill is loaded for setup, do the following in order:
-
-1. Ensure the `browser-harness` skill has been applied and `browser-harness` is available.
-2. Ask the user to install the bundled Chrome extension manually.
-3. Configure the Browser Workspace environment.
-4. Apply the bundled Browser Harness helper.
-5. Verify Browser Workspace can create and see the configured group.
-
-Do not assume a particular checkout directory, home directory, or project layout.
-
-## 1. Install the bundled Chrome extension
-
-The Chrome extension is bundled with this skill at:
-
-`<browser-workspace>/extension`
-
-Here, `<browser-workspace>` means the local directory containing this `SKILL.md`.
-
-Resolve that directory to an **absolute local path**, then tell the user exactly which folder to select.
-
-Ask the user to do this manually in Chrome:
-
-1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Click **Load unpacked**.
-4. Select the exact local `<browser-workspace>/extension` directory you resolved above.
-
-Do not direct the user to a store page. Do not mention a repository, clone location, or another machine's filesystem path.
-
-After the user confirms the extension is loaded, continue setup.
-
-Default extension ID:
-
-`kgbghhigmbpefppgkocgjgnnnbhjchic`
-
-## 2. Configure Browser Workspace
-
-Defaults:
-
-```bash
-BH_WORKSPACE_NAME=Harness
-BH_WORKSPACE_POOL_SIZE=5
-```
-
-`BH_WORKSPACE_POOL_SIZE=N` means **N is the maximum concurrent capacity**;
-physical Chrome tabs are created lazily as callers acquire them.
-
-The extension ID can be overridden when necessary:
-
-```bash
-BH_WORKSPACE_MANAGER_EXTENSION_ID=<extension-id>
-```
-
-Do not expose or reuse machine-specific environment values from another installation.
-
-## 3. Apply the bundled Browser Harness helper
-
-The installer is bundled at:
-
-`<browser-workspace>/scripts/install.sh`
-
-Run it from the resolved local skill directory, for example:
-
-```bash
-"<browser-workspace>/scripts/install.sh"
-```
-
-The installer copies:
-
-`<browser-workspace>/browser-harness/agent_helpers.py`
-
-into the Browser Harness agent workspace and persists the Browser Workspace environment settings in its `.env`.
-
-By default the target is:
-
-`~/.config/browser-harness/agent-workspace/agent_helpers.py`
-
-If `BH_AGENT_WORKSPACE` is set, use that Browser Harness agent workspace instead.
-
-To override the defaults for this installation:
-
-```bash
-BH_WORKSPACE_NAME=Research \
-BH_WORKSPACE_POOL_SIZE=4 \
-"<browser-workspace>/scripts/install.sh"
-```
-
-## 4. Verify
-
-Start a new Browser Harness process after applying the helper.
-
-Verify that:
-
-- the configured group is created or reconciled;
-- the group name matches `BH_WORKSPACE_NAME`;
-- the group contains no more than `BH_WORKSPACE_POOL_SIZE` tabs;
-- Browser Harness exposes only tabs belonging to that workspace.
-
-If the extension is not available, stop and ask the user to confirm that the unpacked extension is loaded from the exact local `<browser-workspace>/extension` path.
-
-## Runtime behavior
-
-The helper:
-
-- relies on the extension to reclaim inactive leased tabs after 5 minutes and to eject unrelated Chrome-created tabs from the workspace group;
-
-- creates the selected workspace automatically when it is missing;
-- exposes only tabs in `BH_WORKSPACE_NAME`;
-- leases `new_tab(url)` from that workspace pool, including `http(s)` and `chrome-extension://` pages;
-- returns `close_tab()` tabs to the pool;
-- refuses visible activation and operations on tabs outside the workspace;
-- learns and owns the Chrome-tab-to-CDP-target mapping when a tab is leased, so downstream Browser Harness callers do not need identity workarounds;
-- fails closed only when an untracked Chrome tab cannot be mapped uniquely.
-
-Workspace identity is the unique Chrome tab-group title. Chrome `groupId` is treated as ephemeral and rediscovered after restarts. Duplicate groups with the same workspace title are considered ambiguous and fail closed.
-
-## Changing workspace
-
-Changing the environment affects the next Browser Harness process:
-
-```bash
-export BH_WORKSPACE_NAME=Research
-export BH_WORKSPACE_POOL_SIZE=4
-browser-harness
-```
-
-An already-running Browser Harness process keeps the values it started with.
-
-For an existing workspace, `BH_WORKSPACE_POOL_SIZE` is the creation/default size. To resize an existing workspace explicitly:
-
-```python
-workspace_resize("Research", 6)
-```
-
-## Workspace helpers
-
-The installed helper exposes:
-
-```python
-workspace_create("Research", 5)
-workspace_status()
-workspace_list()
-workspace_resize("Research", 6)
-workspace_delete("Research")
-```
-
-Normal Browser Harness page operations remain unchanged.
-
-
-## Snapshot refs
-
-Browser Workspace provides a `snapshot()` helper for compact, agent-friendly inspection of the current page. The snapshot helper does not create a separate persistent ref registry. Instead, it annotates matching live DOM elements directly with temporary `data-ref` attributes and returns a compact textual representation of those elements.
-
-Example snapshot output:
+Use only this shell lifecycle:
 
 ```text
-- button "Calendar" [ref=e1]
-- button "Meet now" [ref=e2]
-- textbox "Meeting name" [ref=e3]
-- button "Start meeting" [ref=e4]
+browser-workspace session start
+browser-workspace session exec <session_id>
+browser-workspace session stop <session_id>
 ```
 
-Conceptually, the live page has been annotated like:
+All browser actions happen as Python inside `session exec`. Do not look for separate CLI commands such as `open`, `tabs`, `status`, or `screenshot`.
 
-```html
-<button data-ref="e1">Calendar</button>
-<button data-ref="e2">Meet now</button>
-<input data-ref="e3" aria-label="Meeting name">
-<button data-ref="e4">Start meeting</button>
-```
-
-Refs from `snapshot()` are ordinary DOM selectors, not a separate interaction API. Use existing Browser Harness helpers with a CSS selector built from the returned ref.
-
-```python
-snapshot()
-click('[data-ref="e2"]')
-fill_input('[data-ref="e3"]', 'Test meeting')
-click('[data-ref="e4"]')
-```
-
-Do not invent calls such as `click("e2")` or `click_ref("e2")`. The supported pattern is always the normal Browser Harness helper plus a selector such as `[data-ref="e2"]`.
-
-A later `snapshot()` may rewrite or replace existing `data-ref` attributes. Treat refs as a short-lived description of the current DOM, not as stable element identity across navigation or major page changes. If a ref no longer matches, take a new snapshot and use the new ref.
-
-For iframe/target-specific work, take the snapshot in the intended target and use the corresponding Browser Harness target-aware helper/selector pattern for that same target.
-
-## Persistent Python browser sessions
-
-Use Browser Workspace sessions for multi-turn browser work. The CLI is the primary portable interface and works on any Mac where this skill has been applied; MCP, when available, is only another transport over the same local session daemon.
-
-Before executing Python in a session, load the **browser-harness** skill to learn the available helper methods, interaction workflow, and constraints. Helpers are preloaded automatically in the session Python namespace.
-
-### Session lifecycle contract
-
-Every workflow must follow this lifecycle:
+Every logical browser workflow must follow:
 
 ```text
 start
@@ -218,36 +32,75 @@ finally
 
 Rules:
 
-- Call `session start` exactly once for one logical browser workflow and keep the returned `session_id`.
-- Reuse that same `session_id` for every action-observe-action turn in the workflow.
-- Do not start a new session just to continue interacting with the same leased tab.
-- Python globals, imports, functions, intermediate values, and the leased tab persist across `session exec` calls.
-- Multiple independent workflows may use different session IDs concurrently.
-- Always call `session stop` when the workflow finishes, fails, is cancelled, or throws. Treat stop as a `finally` cleanup operation.
-- `session stop` releases the leased Browser Workspace tab and discards the Python namespace. Do not reuse the session ID afterward.
-- If a caller owns the session, that caller owns cleanup. Do not stop another caller's session.
+- Start one session per logical browser workflow and retain its `session_id`.
+- Reuse that same session for every action/observation turn.
+- Always stop the session in cleanup/finally, including on failure or cancellation.
+- A session owns one leased browser tab and a persistent Python namespace.
+- Multiple independent workflows may use different sessions concurrently.
 
-The installer places the CLI at `~/.local/bin/browser-workspace` by default. If it is on `PATH`, use `browser-workspace`; otherwise invoke that absolute path.
+## Start
 
-Start a session, optionally selecting a dedicated workspace:
+Default workspace is `Harness`:
+
+```bash
+browser-workspace session start
+```
+
+Choose a named workspace:
 
 ```bash
 browser-workspace session start --workspace "Family Tutor"
 ```
 
-The command returns JSON containing `session_id`, `workspace`, and `target_id`. Save `session_id` and use it for all later calls.
+Start directly at a URL when known:
 
-Execute Python using the same stdin/heredoc convention as `browser-harness`:
+```bash
+browser-workspace session start \
+  --workspace Harness \
+  --url https://example.com
+```
+
+The result is JSON containing `session_id`, `workspace`, `target_id`, and the starting `url`.
+
+## Exec
+
+`session exec` reads Python from stdin. Helpers are already imported; do not import another browser package.
 
 ```bash
 browser-workspace session exec <session_id> <<'PY'
 print(page_info())
+print(snapshot())
 PY
 ```
 
-Use additional `session exec` calls for later observe/action turns; do not recreate state manually.
+Python state persists across later calls in the same session:
 
-A shell workflow should structurally resemble:
+```bash
+browser-workspace session exec <session_id> <<'PY'
+meeting_name = "Demo"
+print(current_tab())
+PY
+```
+
+Then later:
+
+```bash
+browser-workspace session exec <session_id> <<'PY'
+print(meeting_name)
+PY
+```
+
+A Python file may also be used with `--code-file`.
+
+## Stop
+
+```bash
+browser-workspace session stop <session_id>
+```
+
+Stopping releases the leased tab and destroys that session's Python namespace. Do not reuse the ID afterward.
+
+A safe shell structure is:
 
 ```bash
 SESSION_JSON=$(browser-workspace session start --workspace Harness)
@@ -255,25 +108,122 @@ SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session
 trap 'browser-workspace session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
 
 browser-workspace session exec "$SESSION_ID" <<'PY'
-print(page_info())
-PY
-
-browser-workspace session exec "$SESSION_ID" <<'PY'
-# next action/observe turn; prior Python state is still available
-print(current_tab())
+print(snapshot())
 PY
 ```
 
-For a Python file:
+## Browser helpers
 
-```bash
-browser-workspace session exec <session_id> --code-file /path/to/action.py
+The session exposes the browser primitives directly, including:
+
+```python
+page_info()
+goto_url(url)
+current_tab()
+new_tab(url)
+close_tab(...)
+js(expression, target_id=None)
+cdp(method, ...)
+wait_for_load()
+wait_for_element(...)
+fill_input(selector, text)
+click(selector)
+capture_screenshot(...)
 ```
 
-Explicit cleanup:
+Use the higher-level helpers first. Use raw `js(...)`/`cdp(...)` only when needed.
 
-```bash
-browser-workspace session stop <session_id>
+Interaction-specific reference material is bundled under `interaction-skills/` inside this skill.
+
+## Snapshot refs
+
+`snapshot()` returns a compact accessibility-oriented view and writes each returned ref directly onto the corresponding live DOM element as `data-ref="eN"`.
+
+Example:
+
+```text
+- button "Calendar" [ref=e1]
+- button "Meet now" [ref=e2]
+- textbox "Meeting name" [ref=e3]
 ```
 
-CLI and MCP share the same local session daemon and session IDs, so a session started through one transport can be continued through the other.
+The live DOM then contains equivalent annotations such as:
+
+```html
+<button data-ref="e2">Meet now</button>
+```
+
+Refs are ordinary CSS selectors. Use normal helpers:
+
+```python
+print(snapshot())
+click('[data-ref="e2"]')
+fill_input('[data-ref="e3"]', 'Demo meeting')
+```
+
+Do **not** invent `click("e2")`, `click_ref("e2")`, or an `@e2` API. After navigation or a substantial DOM update, call `snapshot()` again and use the new refs.
+
+`snapshot(interactive_only=False)` may include named content roles in addition to interactive elements. `target_id=` may be used for target-specific inspection.
+
+## Workspaces
+
+Default configuration:
+
+```text
+BH_WORKSPACE_NAME=Harness
+BH_WORKSPACE_POOL_SIZE=5
+```
+
+The pool size is the maximum concurrent capacity; tabs are created lazily. The bundled Chrome extension owns grouping, lease/release, idle reclaim, and workspace isolation.
+
+Available workspace helpers include:
+
+```python
+workspace_create("Research", 5)
+workspace_status()
+workspace_list()
+workspace_resize("Research", 6)
+workspace_delete("Research")
+```
+
+Never use URL as tab identity. Workspace ownership and leased target identity are authoritative.
+
+## Platform workflows
+
+Known-site knowledge is bundled into this same skill under `platforms/`:
+
+```text
+platforms/chatgpt/
+platforms/chrome-web-store/
+platforms/microsoft-teams/
+platforms/tiktok/
+platforms/wechat-channels/
+platforms/xhs/
+platforms/youtube/
+```
+
+When the current task matches a known platform, read that platform's `SKILL.md`/flow files and reuse its runner/helper code instead of rediscovering the site with raw DOM automation. These are internal references of Browser Workspace, not separate skills.
+
+For example, Microsoft Teams meeting automation is documented under `platforms/microsoft-teams/` and includes the verified `Calendar -> Meet now -> Start meeting -> pre-join -> Join now -> in-call` flow.
+
+## Installation
+
+Run the bundled installer from the skill directory:
+
+```bash
+./scripts/install.sh
+```
+
+It creates a Browser Workspace-owned `.venv`, installs the vendored browser runtime and dependencies, writes Browser Workspace environment configuration to `agent-workspace/.env`, and links `browser-workspace` into `~/.local/bin` by default.
+
+There is no required separate Browser Harness installation.
+
+The Chrome extension is bundled at `extension/`. On a new machine, load that folder unpacked in Chrome with Developer mode enabled. Default extension ID:
+
+```text
+kgbghhigmbpefppgkocgjgnnnbhjchic
+```
+
+## Internal provenance
+
+The low-level browser runtime is forked from `browser-use/browser-harness` and kept internally under `src/browser_harness/`. Browser Workspace is the public product/skill/CLI surface. Upstream licensing is preserved under `licenses/`.

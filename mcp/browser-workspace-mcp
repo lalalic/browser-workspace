@@ -1,6 +1,0 @@
-#!/bin/sh
-set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-HARNESS_SKILL="${BROWSER_HARNESS_SKILL:-$HOME/.agents/skills/browser-harness}"
-PYTHON="${BROWSER_WORKSPACE_MCP_PYTHON:-$HARNESS_SKILL/.venv/bin/python}"
-exec "$PYTHON" "$ROOT/mcp/server.py"
