@@ -68,6 +68,78 @@ There is no separate ref registry.
 The internal browser-control core is forked from `browser-use/browser-harness`. Its license is retained in `licenses/browser-harness-MIT.txt`.
 
 
+
+## Product-owned workspaces
+
+Normal browser automation uses the default `Harness` workspace. Products that need isolated browser capacity—such as Agents Relay or Family Tutor—may explicitly configure and use their own workspace.
+
+These integration commands are intentionally **hidden from normal agent help**. They are for product/runtime code, not for ordinary browsing decisions.
+
+### Create or configure a workspace
+
+```bash
+browser-workspace create <name> [size=5]
+```
+
+Examples:
+
+```bash
+browser-workspace create "Agents Relay"
+browser-workspace create "Agents Relay" 6
+```
+
+`create` is idempotent:
+
+- if the workspace does not exist, it is created;
+- if it already exists with the same size, it is kept;
+- if it already exists with a different size, its capacity is updated.
+
+The size is the maximum concurrent workspace lease capacity. The physical tab pool grows lazily up to that limit; configuring size `6` does not eagerly create six tabs.
+
+The command returns JSON suitable for Node.js or other product runtimes:
+
+```json
+{
+  "name": "Agents Relay",
+  "poolSize": 6,
+  "maxCapacity": 6,
+  "initialized": true,
+  "workspace_supported": true
+}
+```
+
+A Node.js service can run this during startup, for example:
+
+```js
+execFileSync(browserWorkspaceCli, ["create", "Agents Relay", "6"]);
+```
+
+### Start a session in a product-owned workspace
+
+```bash
+browser-workspace session start --workspace <name> [--url URL]
+```
+
+Example:
+
+```bash
+browser-workspace session start --workspace "Agents Relay" --url https://example.com
+```
+
+`--workspace` is also intentionally hidden from normal CLI help. Product code owns the workspace choice; platform actions remain unaware of workspace/session policy.
+
+Recommended product lifecycle:
+
+```text
+product startup
+  -> browser-workspace create "Agents Relay" 6
+
+browser task
+  -> browser-workspace session start --workspace "Agents Relay"
+  -> browser-workspace session exec <session_id>
+  -> browser-workspace session stop <session_id>
+```
+
 ## Platform boundary
 
 Platform action code is infrastructure-agnostic. It may use browser helpers, but it must not create/stop Browser Workspace sessions, choose workspaces, or import session/workspace infrastructure. The generic platform runner wraps actions in a default Harness session and always cleans up. Product code may execute the same action in a product-owned browser context when longer-lived isolation is required.

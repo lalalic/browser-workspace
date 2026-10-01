@@ -198,12 +198,29 @@ def cleanup():
     except Exception: pass
 atexit.register(cleanup)
 
+def create_workspace(name, pool_size=5):
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError('workspace name must be a non-empty string')
+    size=int(pool_size)
+    if size < 1:
+        raise ValueError('workspace pool size must be at least 1')
+    with BROWSER_LOCK:
+        result=bh.workspace_create(name.strip(), size)
+    return {
+        'name': result.get('name', name.strip()),
+        'poolSize': result.get('poolSize', size),
+        'maxCapacity': result.get('maxCapacity', result.get('poolSize', size)),
+        'initialized': result.get('initialized', True),
+        'workspace_supported': True,
+    }
+
 def handle(req):
     op=req.get('op')
     if op=='ping': return {'ok':True,'pid':os.getpid(),'session_count':len(SESSIONS)}
     if op=='start': return start_session(req.get('workspace'), req.get('url'))
     if op=='exec': return exec_session(req['session_id'],req.get('code',''))
     if op=='stop': return stop_session(req['session_id'])
+    if op=='workspace-create': return create_workspace(req['name'], req.get('pool_size', 5))
     raise ValueError(f'unknown op: {op}')
 
 def serve_conn(conn):
