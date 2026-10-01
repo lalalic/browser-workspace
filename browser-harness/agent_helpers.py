@@ -5,6 +5,7 @@ upstream function's input signature exactly.  Browser Workspace may change
 behavior, but it must remain a drop-in helper layer.
 """
 
+import contextvars as _contextvars
 import json as _json
 import os as _os
 import time as _time
@@ -15,10 +16,23 @@ _EXTENSION_ID = _os.environ.get(
     "BH_WORKSPACE_MANAGER_EXTENSION_ID",
     "kgbghhigmbpefppgkocgjgnnnbhjchic",
 )
-_WORKSPACE_NAME = _os.environ.get(
+_DEFAULT_WORKSPACE_NAME = _os.environ.get(
     "BH_WORKSPACE_NAME",
     _os.environ.get("BH_MDB_GROUP_NAME", "Harness"),
 )
+_WORKSPACE_NAME = _DEFAULT_WORKSPACE_NAME
+_WORKSPACE_CONTEXT = _contextvars.ContextVar("browser_workspace_name", default=None)
+
+def workspace_name():
+    return _WORKSPACE_CONTEXT.get() or _WORKSPACE_NAME
+
+def workspace_set_name(name):
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("workspace name must be a non-empty string")
+    return _WORKSPACE_CONTEXT.set(name.strip())
+
+def workspace_reset_name(token):
+    _WORKSPACE_CONTEXT.reset(token)
 _POOL_SIZE = int(_os.environ.get("BH_WORKSPACE_POOL_SIZE", "5"))
 _TIMEOUT_SECONDS = 5.0
 
@@ -98,7 +112,7 @@ def workspace_delete(name, force=False):
 def _ensure_workspace():
     return _manager_call(
         "workspace.ensure",
-        {"name": _WORKSPACE_NAME, "poolSize": _POOL_SIZE},
+        {"name": workspace_name(), "poolSize": _POOL_SIZE},
     )
 
 
@@ -112,7 +126,7 @@ def workspace_capacity():
         status = workspace_status()
     except Exception as exc:
         return {
-            "name": _WORKSPACE_NAME,
+            "name": workspace_name(),
             "poolSize": None,
             "maxCapacity": None,
             "physicalTabs": None,
@@ -126,7 +140,7 @@ def workspace_capacity():
     leased_ids = status.get("leasedTabIds")
     if not status.get("initialized") or not isinstance(idle_ids, list) or not isinstance(leased_ids, list):
         return {
-            "name": status.get("name", _WORKSPACE_NAME),
+            "name": status.get("name", workspace_name()),
             "poolSize": status.get("poolSize"),
             "maxCapacity": status.get("maxCapacity", status.get("poolSize")),
             "physicalTabs": None,
@@ -143,7 +157,7 @@ def workspace_capacity():
         physical_tabs = idle + leased
     available = max(0, max_capacity - leased) if isinstance(max_capacity, int) else None
     return {
-        "name": status.get("name", _WORKSPACE_NAME),
+        "name": status.get("name", workspace_name()),
         "poolSize": status.get("poolSize"),
         "maxCapacity": max_capacity,
         "physicalTabs": physical_tabs,
@@ -265,7 +279,7 @@ def _workspace_tab_for_target(target):
     matches = [tab for tab in _workspace_tabs() if tab["targetId"] == wanted]
     if len(matches) != 1:
         raise RuntimeError(
-            f"Refusing Browser Harness access outside workspace {_WORKSPACE_NAME!r}"
+            f"Refusing Browser Harness access outside workspace {workspace_name()!r}"
         )
     return matches[0]
 
@@ -301,7 +315,8 @@ def switch_tab(target, activate=False):
 
 def new_tab(url="about:blank"):
     if not (
-        url.startswith("http://")
+        url == "about:blank"
+        or url.startswith("http://")
         or url.startswith("https://")
         or url.startswith("chrome-extension://")
     ):
@@ -310,7 +325,7 @@ def new_tab(url="about:blank"):
         )
     opened = _manager_call(
         "workspace.acquireIdentity",
-        {"name": _WORKSPACE_NAME},
+        {"name": workspace_name()},
     )
     wanted_tab_id = opened.get("tabId")
     identity_title = opened.get("identityTitle") or f"__BW_TAB_{wanted_tab_id}__"
@@ -319,7 +334,7 @@ def new_tab(url="about:blank"):
         candidates = [
             target
             for target in _page_targets()
-            if (target.get("title") or "") == identity_title
+            if (target.get("title") or "").removeprefix("🐴 ") == identity_title
         ]
         if len(candidates) == 1:
             target_id = candidates[0]["targetId"]
@@ -332,7 +347,7 @@ def new_tab(url="about:blank"):
     try:
         _manager_call(
             "workspace.release",
-            {"name": _WORKSPACE_NAME, "tabId": wanted_tab_id},
+            {"name": workspace_name(), "tabId": wanted_tab_id},
         )
     except Exception:
         pass
@@ -343,7 +358,7 @@ def close_tab(target=None):
     tab = current_tab() if target is None else _workspace_tab_for_target(target)
     result = _manager_call(
         "workspace.release",
-        {"name": _WORKSPACE_NAME, "tabId": tab["tabId"]},
+        {"name": workspace_name(), "tabId": tab["tabId"]},
     )
     _forget_mapping(tab_id=tab["tabId"])
     return result

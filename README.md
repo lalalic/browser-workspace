@@ -88,3 +88,13 @@ BH_WORKSPACE_NAME=Research BH_WORKSPACE_POOL_SIZE=4 ./scripts/install.sh
 ```
 
 The installer copies `browser-harness/agent_helpers.py` into the Browser Harness agent workspace and persists the environment values in its `.env`.
+
+## MCP persistent Python sessions
+
+`mcp/browser-workspace-mcp` is a stdio MCP server with three tools:
+
+- `session.start(workspace?)` leases one tab from the named workspace (default `Harness`) and starts a persistent Python Browser Harness runtime. It returns a `session_id`.
+- `session.exec(session_id, code)` executes arbitrary Python in that same runtime; globals, imports, variables, helper state, and the leased tab survive across calls.
+- `session.stop(session_id)` releases the tab and terminates the runtime.
+
+Sessions are independent and may coexist concurrently. The MCP server reuses one Browser Harness daemon/CDP connection and keeps one persistent Python namespace plus one leased `target_id` per session. Before each `session.exec`, the server attaches the shared daemon to that session target under a short browser lock, so sessions can interleave turns without opening additional Chrome remote-debug connections. This is designed for Mac Developer Bridge stdio federation. Products can use dedicated workspace names, e.g. `Family Tutor`.
