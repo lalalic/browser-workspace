@@ -2,12 +2,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTION = (ROOT / "actions" / "_meeting.py").read_text()
-SKILL = (ROOT / "SKILL.md").read_text()
+README = (ROOT / "README.md").read_text()
 MANIFEST = (ROOT / "manifest.yaml").read_text()
 
 
 def test_canonical_instant_meeting_path():
-    assert "Calendar -> Meet now -> Start meeting (when shown) -> pre-join -> Join now" in SKILL
+    assert "Calendar -> Meet now -> Start meeting (when shown) -> pre-join -> Join now" in README
     assert "Start an instant Teams meeting." in ACTION
     assert "#prejoin-join-button" in ACTION
     assert "Start meeting" in ACTION

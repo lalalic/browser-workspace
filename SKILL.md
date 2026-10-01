@@ -207,7 +207,7 @@ Known-site knowledge is bundled under `platforms/`. A platform contains **site/d
 
 ```text
 platforms/<name>/
-├── SKILL.md        site behavior and rules
+├── README.md       site behavior and rules
 ├── manifest.yaml   actions + verification metadata
 ├── actions/        reusable browser action code
 └── flows/          optional flow documentation
@@ -217,7 +217,7 @@ Platform rules:
 
 - Platform actions may use browser helpers such as `new_tab()`, `current_tab()`, `snapshot()`, `js()`, `cdp()`, uploads, downloads, and screenshots.
 - Platform actions must **not** create/stop Browser Workspace sessions, choose a workspace, call workspace-management APIs, invoke the Browser Workspace CLI, or import session/workspace infrastructure.
-- Platform `SKILL.md` and flow docs should describe site behavior, preconditions, side effects, and verification evidence—not Browser Workspace lifecycle mechanics.
+- Platform `README.md` and flow docs should describe site behavior, preconditions, side effects, and verification evidence—not Browser Workspace lifecycle mechanics.
 - Platform actions must remain usable in either a generic runner-owned session or a product-owned browser context.
 - The generic runner owns the normal lifecycle: start a default Harness session, inject browser helpers/config, execute the action, then always stop the session and close its owned tabs.
 - Products that require a dedicated or persistent browser context (for example Family Tutor or Agents Relay) may execute the same platform action inside product-owned infrastructure. The platform code itself stays unchanged.
@@ -267,7 +267,7 @@ platforms/xhs/
 platforms/youtube/
 ```
 
-Read the matching platform `SKILL.md` and `manifest.yaml` before invoking or modifying a known flow.
+Read the matching platform `README.md` and `manifest.yaml` before invoking or modifying a known flow. The platform README is documentation owned by this root Browser Workspace skill; it is not a separately loadable skill.
 
 ## Installation
 
