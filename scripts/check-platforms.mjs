@@ -10,15 +10,15 @@ if (platforms.length === 0) throw new Error("No browser platforms found");
 
 for (const platform of platforms) {
   const dir = new URL(`../platforms/${platform}/`, import.meta.url);
-  const skillUrl = new URL("SKILL.md", dir);
+  const readmeUrl = new URL("README.md", dir);
   const manifestUrl = new URL("manifest.yaml", dir);
   const actionsUrl = new URL("actions/", dir);
 
-  for (const target of [skillUrl, manifestUrl, actionsUrl]) await stat(target);
+  for (const target of [readmeUrl, manifestUrl, actionsUrl]) await stat(target);
 
-  const skill = await readFile(skillUrl, "utf8");
+  const readme = await readFile(readmeUrl, "utf8");
   const manifest = await readFile(manifestUrl, "utf8");
-  if (!skill.trim()) throw new Error(`${platform}/SKILL.md is empty`);
+  if (!readme.trim()) throw new Error(`${platform}/README.md is empty`);
   if (!manifest.trim()) throw new Error(`${platform}/manifest.yaml is empty`);
 
   for (const required of ["platform:", "status:", "last_verified:", "actions:", "verification:"]) {
