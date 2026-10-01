@@ -13,8 +13,8 @@ def test_agent_helper_dynamic_workspace_symbols():
     assert 'ContextVar' in src
 
 
-def test_exec_requires_browser_harness_skill_ack_source():
+
+def test_exec_description_requires_browser_harness_skill():
     src=(ROOT/'mcp/server.py').read_text()
-    assert 'browser_harness_skill_loaded' in src
-    assert 'Before the first session.exec, load the browser-harness skill' in src
-    assert 'self.skill_loaded=False' in src
+    assert 'use/load the `browser-harness` skill' in src
+    assert 'browser_harness_skill_loaded' not in src

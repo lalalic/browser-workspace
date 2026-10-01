@@ -22,7 +22,6 @@ class Session:
     def __init__(self, sid, workspace, target_id):
         self.session_id=sid; self.workspace=workspace; self.target_id=target_id
         self.lock=threading.Lock()
-        self.skill_loaded=False
         self.namespace={'__name__':'__browser_workspace_session__','bh':bh,'target_id':target_id}
         for name in dir(bh):
             if not name.startswith('_'): self.namespace[name]=getattr(bh,name)
@@ -66,12 +65,8 @@ def get_session(sid):
     if not s: raise KeyError(f'unknown session_id: {sid}')
     return s
 
-def exec_session(sid,code,browser_harness_skill_loaded=False):
+def exec_session(sid,code):
     s=get_session(sid)
-    if not s.skill_loaded:
-        if browser_harness_skill_loaded is not True:
-            raise RuntimeError('Before the first session.exec, load the browser-harness skill and retry with browser_harness_skill_loaded=true')
-        s.skill_loaded=True
     with s.lock, BROWSER_LOCK, with_workspace(s.workspace):
         bh.switch_tab(s.target_id,activate=False)
         r=execute(code,s.namespace)
@@ -98,7 +93,7 @@ atexit.register(cleanup)
 
 TOOLS=[
  {'name':'session.start','description':'Start a persistent Python Browser Harness session and lease one tab from the requested Browser Workspace. Multiple sessions can coexist concurrently.','inputSchema':{'type':'object','properties':{'workspace':{'type':'string','minLength':1,'description':'Workspace/tab-group name. Defaults to Harness.'}},'additionalProperties':False}},
- {'name':'session.exec','description':'Execute arbitrary Python in the persistent session. IMPORTANT: before the first exec in each session, the agent MUST load/read the browser-harness skill so it knows the helper API and workflow, then call this tool with browser_harness_skill_loaded=true. The session remembers this acknowledgement, so later exec calls do not need to repeat it. Globals, imports, variables and the leased tab survive across calls. Browser actions are attached to this session target before each turn.','inputSchema':{'type':'object','properties':{'session_id':{'type':'string'},'code':{'type':'string'},'browser_harness_skill_loaded':{'type':'boolean','description':'Set true on the first exec only, after loading/reading the browser-harness skill.'}},'required':['session_id','code'],'additionalProperties':False}},
+ {'name':'session.exec','description':'Execute arbitrary Python in the persistent Browser Harness session. Before using this tool, use/load the `browser-harness` skill to learn the available helper methods, recommended workflow, and interaction rules. Helpers are already preloaded in the Python namespace; globals, imports, variables and the leased tab survive across calls. Browser actions are attached to this session target before each turn.','inputSchema':{'type':'object','properties':{'session_id':{'type':'string'},'code':{'type':'string'}},'required':['session_id','code'],'additionalProperties':False}},
  {'name':'session.stop','description':'Release the session workspace tab and discard its persistent Python namespace.','inputSchema':{'type':'object','properties':{'session_id':{'type':'string'}},'required':['session_id'],'additionalProperties':False}},
 ]
 
@@ -115,7 +110,7 @@ def handle(msg):
         try:
             if name=='session.start': return tool_result(start_session(args.get('workspace')))
             if name=='session.exec':
-                r=exec_session(args['session_id'],args['code'],args.get('browser_harness_skill_loaded',False)); return tool_result(r,is_error=not r.get('ok',False))
+                r=exec_session(args['session_id'],args['code']); return tool_result(r,is_error=not r.get('ok',False))
             if name=='session.stop': return tool_result(stop_session(args['session_id']))
             return tool_result({'error':f'unknown tool: {name}'},True)
         except Exception as exc: return tool_result({'error':f'{type(exc).__name__}: {exc}'},True)
