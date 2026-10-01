@@ -37,7 +37,7 @@ def test_runtime_is_vendored():
     assert (ROOT / "src/browser_harness/helpers.py").exists()
     assert (ROOT / "src/browser_harness/daemon.py").exists()
     client = (ROOT / "session_client.py").read_text()
-    assert "ROOT/'.venv/bin/python'" in client
+    assert "RUNTIME_DIR/'venv'/package_version()/'bin/python'" in client
     assert "BROWSER_HARNESS_SKILL" not in client
 
 
@@ -84,3 +84,17 @@ def test_hidden_workspace_create_command():
     assert "def create_workspace(name, pool_size=5):" in daemon
     assert "bh.workspace_create(name.strip(), size)" in daemon
     assert "if op=='workspace-create'" in daemon
+
+
+def test_npm_package_exposes_browser_workspace_bin_and_persistent_runtime():
+    package = (ROOT / "package.json").read_text()
+    client = (ROOT / "session_client.py").read_text()
+    assert '"browser-workspace": "bin/browser-workspace"' in package
+    assert "RUNTIME_DIR/'packages'/package_version()" in client
+    assert "RUNTIME_DIR/'venv'/package_version()/'bin/python'" in client
+    assert "str(SOURCE/'session_daemon.py')" in client
+
+def test_npm_publish_workflow_uses_oidc():
+    workflow = (ROOT / ".github/workflows/npm-publish.yml").read_text()
+    assert "id-token: write" in workflow
+    assert "npm publish --access public" in workflow

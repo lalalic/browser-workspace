@@ -6,7 +6,37 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parent
 RUNTIME_DIR=Path(os.environ.get('BROWSER_WORKSPACE_RUNTIME_DIR',Path.home()/'.config/browser-workspace/runtime'))
 SOCKET_PATH=Path(os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET',RUNTIME_DIR/'session.sock'))
-PYTHON=Path(os.environ.get('BROWSER_WORKSPACE_SESSION_PYTHON',ROOT/'.venv/bin/python'))
+
+def package_version():
+    try:
+        return json.loads((ROOT/'package.json').read_text()).get('version','dev')
+    except Exception:
+        return 'dev'
+
+def runtime_source():
+    configured=os.environ.get('BROWSER_WORKSPACE_RUNTIME_SOURCE')
+    if configured: return Path(configured)
+    if not (ROOT/'package.json').exists(): return ROOT
+    target=RUNTIME_DIR/'packages'/package_version()
+    marker=target/'.ready'
+    if marker.exists(): return target
+    target.parent.mkdir(parents=True,exist_ok=True)
+    tmp=target.with_name(target.name+'.tmp')
+    shutil.rmtree(tmp,ignore_errors=True)
+    tmp.mkdir(parents=True)
+    for name in ['pyproject.toml','session_daemon.py','platform_runner.py','src','agent-workspace','interaction-skills','platforms','licenses']:
+        source=ROOT/name
+        if not source.exists(): continue
+        destination=tmp/name
+        if source.is_dir(): shutil.copytree(source,destination)
+        else: shutil.copy2(source,destination)
+    (tmp/'.ready').write_text(package_version())
+    shutil.rmtree(target,ignore_errors=True)
+    tmp.rename(target)
+    return target
+
+SOURCE=runtime_source()
+PYTHON=Path(os.environ.get('BROWSER_WORKSPACE_SESSION_PYTHON',RUNTIME_DIR/'venv'/package_version()/'bin/python'))
 
 
 
@@ -21,16 +51,16 @@ def ensure_runtime_python():
             return PYTHON
         uv=shutil.which('uv')
         if uv:
-            subprocess.run([uv,'venv','--python','3.11',str(ROOT/'.venv')],check=True)
-            subprocess.run([uv,'pip','install','--python',str(PYTHON),'-e',str(ROOT)],check=True)
+            subprocess.run([uv,'venv','--python','3.11',str(PYTHON.parent.parent)],check=True)
+            subprocess.run([uv,'pip','install','--python',str(PYTHON),'-e',str(SOURCE)],check=True)
             return PYTHON
         if sys.version_info < (3,11):
             raise RuntimeError(
                 'Browser Workspace needs Python 3.11+ for first-use bootstrap. '
                 'Install uv or Python 3.11+, then retry.'
             )
-        subprocess.run([sys.executable,'-m','venv',str(ROOT/'.venv')],check=True)
-        subprocess.run([str(PYTHON),'-m','pip','install','-e',str(ROOT)],check=True)
+        subprocess.run([sys.executable,'-m','venv',str(PYTHON.parent.parent)],check=True)
+        subprocess.run([str(PYTHON),'-m','pip','install','-e',str(SOURCE)],check=True)
         return PYTHON
 
 def request(payload, ensure=True):
@@ -59,7 +89,7 @@ def ensure_daemon():
         if p and p.get('ok'): return p
         runtime_python=ensure_runtime_python()
         log=open(RUNTIME_DIR/'session-daemon.log','ab',buffering=0)
-        subprocess.Popen([str(runtime_python),str(ROOT/'session_daemon.py')],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True,close_fds=True)
+        subprocess.Popen([str(runtime_python),str(SOURCE/'session_daemon.py')],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True,close_fds=True)
         deadline=time.time()+15
         while time.time()<deadline:
             time.sleep(.1); p=ping()
