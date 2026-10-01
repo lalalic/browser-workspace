@@ -73,3 +73,8 @@ The internal browser-control core is forked from `browser-use/browser-harness`. 
 Platform action code is infrastructure-agnostic. It may use browser helpers, but it must not create/stop Browser Workspace sessions, choose workspaces, or import session/workspace infrastructure. The generic platform runner wraps actions in a default Harness session and always cleans up. Product code may execute the same action in a product-owned browser context when longer-lived isolation is required.
 
 Each platform manifest records explicit verification status and evidence. `verified` means live-site verification; migrated code is labeled `migrated_unverified` until exercised in the current integration.
+
+
+## npx skills installation
+
+After `npx skills add ...`, invoke `~/.agents/skills/browser-workspace/bin/browser-workspace` directly. The first session start bootstraps the skill-owned Python virtual environment automatically; running `scripts/install.sh` is optional.

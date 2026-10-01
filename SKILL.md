@@ -9,19 +9,27 @@ Browser Workspace is the **only browser skill agents should load**. It includes 
 
 ## Agent contract
 
+When installed with `npx skills`, use the CLI from the skill itself; no separate install step is required:
+
+```bash
+BW_CLI="$HOME/.agents/skills/browser-workspace/bin/browser-workspace"
+```
+
+On first use, Browser Workspace bootstraps its own `.venv` automatically.
+
 Use one of two execution paths:
 
 ```text
 known platform flow
-  -> browser-workspace platform run <platform> <action> [--config FILE]
+  -> $BW_CLI platform run <platform> <action> [--config FILE]
   -> runner creates the browser session
   -> runner executes the platform action
   -> runner always stops and cleans up
 
 custom browser workflow
-  -> browser-workspace session start
-  -> browser-workspace session exec <session_id>
-  -> browser-workspace session stop <session_id>
+  -> $BW_CLI session start
+  -> $BW_CLI session exec <session_id>
+  -> $BW_CLI session stop <session_id>
 ```
 
 Do not manually create a session around a platform action unless product code intentionally owns a longer-lived browser context. There are no separate top-level `open`, `tabs`, `status`, or `screenshot` commands.
@@ -50,7 +58,7 @@ Rules:
 Default workspace is `Harness`:
 
 ```bash
-browser-workspace session start
+$BW_CLI session start
 ```
 
 Normal agents do not choose a workspace. `session start` defaults to `Harness`; the `--workspace` implementation option is hidden from normal CLI help. Product integrations such as Family Tutor or Agents Relay may set an explicit workspace in their own code/config when isolation is a product requirement.
@@ -58,7 +66,7 @@ Normal agents do not choose a workspace. `session start` defaults to `Harness`; 
 Start directly at a URL when known:
 
 ```bash
-browser-workspace session start --url https://example.com
+$BW_CLI session start --url https://example.com
 ```
 
 The result is JSON containing `session_id`, `workspace`, `target_id`, the starting `url`, and `workspace_supported`.
@@ -70,7 +78,7 @@ The Chrome workspace extension is optional. If it is not installed, `session sta
 `session exec` reads Python from stdin. Helpers are already imported; do not import another browser package.
 
 ```bash
-browser-workspace session exec <session_id> <<'PY'
+$BW_CLI session exec <session_id> <<'PY'
 print(page_info())
 print(snapshot())
 PY
@@ -79,7 +87,7 @@ PY
 Python state persists across later calls in the same session:
 
 ```bash
-browser-workspace session exec <session_id> <<'PY'
+$BW_CLI session exec <session_id> <<'PY'
 meeting_name = "Demo"
 print(current_tab())
 PY
@@ -88,7 +96,7 @@ PY
 Then later:
 
 ```bash
-browser-workspace session exec <session_id> <<'PY'
+$BW_CLI session exec <session_id> <<'PY'
 print(meeting_name)
 PY
 ```
@@ -98,7 +106,7 @@ A Python file may also be used with `--code-file`.
 ## Stop
 
 ```bash
-browser-workspace session stop <session_id>
+$BW_CLI session stop <session_id>
 ```
 
 Stopping closes every tab owned or opened by that session—including tabs created with `new_tab()`, `bh.new_tab()`, direct `Target.createTarget`, and detected child/popup tabs—then destroys the session's Python namespace. It does not close unrelated browser tabs. Do not reuse the ID afterward.
@@ -106,11 +114,11 @@ Stopping closes every tab owned or opened by that session—including tabs creat
 A safe shell structure is:
 
 ```bash
-SESSION_JSON=$(browser-workspace session start)
+SESSION_JSON=$($BW_CLI session start)
 SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
-trap 'browser-workspace session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
+trap '$BW_CLI session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
 
-browser-workspace session exec "$SESSION_ID" <<'PY'
+$BW_CLI session exec "$SESSION_ID" <<'PY'
 print(snapshot())
 PY
 ```
@@ -218,7 +226,7 @@ Platform rules:
 Run a platform action through the generic runner:
 
 ```bash
-browser-workspace platform run microsoft-teams meeting --config /path/to/config.json
+$BW_CLI platform run microsoft-teams meeting --config /path/to/config.json
 ```
 
 The runner output hides the raw session ID. It returns the platform/action result, optional workspace-extension warning, and cleanup evidence.
