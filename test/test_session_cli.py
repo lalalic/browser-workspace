@@ -34,3 +34,14 @@ def test_session_start_returns_soft_workspace_warning_contract():
     assert "workspace_supported" in src
     assert "Browser Workspace extension is not installed" in src
     assert "extension_url" in src
+
+
+def test_session_tracks_all_created_tabs_for_cleanup():
+    src = (ROOT / 'session_daemon.py').read_text()
+    assert "self.owned_target_ids={target_id}" in src
+    assert "self.namespace['new_tab']=self._new_tab" in src
+    assert "self.namespace['cdp']=self._cdp" in src
+    assert "def absorb_owned_children(session):" in src
+    assert "info.get('openerId')" in src
+    assert "bh.cdp('Target.closeTarget', targetId=tid)" in src
+    assert "'closed_tabs':closed_count" in src

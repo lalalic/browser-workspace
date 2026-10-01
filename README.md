@@ -16,6 +16,8 @@ browser-workspace session stop SESSION_ID
 
 Browser operations are Python helpers inside the session. There are intentionally no parallel top-level `open`, `tabs`, `status`, or `screenshot` commands.
 
+`session stop` closes all tabs created/owned by that session while leaving unrelated browser tabs untouched.
+
 ## Included layers
 
 ```text

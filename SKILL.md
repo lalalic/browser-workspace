@@ -100,7 +100,7 @@ A Python file may also be used with `--code-file`.
 browser-workspace session stop <session_id>
 ```
 
-Stopping releases the leased tab and destroys that session's Python namespace. Do not reuse the ID afterward.
+Stopping closes every tab owned or opened by that session—including tabs created with `new_tab()`, `bh.new_tab()`, direct `Target.createTarget`, and detected child/popup tabs—then destroys the session's Python namespace. It does not close unrelated browser tabs. Do not reuse the ID afterward.
 
 A safe shell structure is:
 
