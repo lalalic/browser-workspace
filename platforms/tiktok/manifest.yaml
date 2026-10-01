@@ -1,16 +1,19 @@
 platform: tiktok
-status: working
+status: migrated_unverified
 last_verified: null
-browser_workspace:
-  compatible: true
-  evidence: "Migrated from the working skills/post adapter."
+actions:
+  post: "actions/_post.py"
+verification:
+  status: migrated_unverified
+  last_verified: null
+  evidence: "Existing upload mechanics migrated from the working post adapter. Current Browser Workspace live verification pending."
 url_patterns:
   - "https://www.tiktok.com/creator*"
 authentication:
   required: true
-  notes: "Use the caller's authenticated browser session; never store credentials."
+  notes: "Use the caller's authenticated browser context; never store credentials."
 provenance:
   source: "skills/post/scripts/platforms/tiktok"
   migrated_code: true
 flows:
-  post: {status: working, evidence: "Existing upload mechanics migrated."}
+  post: {status: migrated_unverified, evidence: "Migrated action; current Browser Workspace live verification pending."}

@@ -1,7 +1,6 @@
-"""Chrome Web Store mechanics for Browser Workspace session.
+"""Chrome Web Store browser mechanics.
 
-This file is executed inside ``Browser Workspace session``. It deliberately contains no
-credentials and defaults to read-only/dry-run behavior.
+This action contains no credentials and defaults to read-only/dry-run behavior.
 """
 
 import json
@@ -131,10 +130,10 @@ def field_by_label(keys):
     )
 
 
-def require_session():
+def require_publisher_login():
     url = page_info().get("url", "")
     if "accounts.google.com" in url or text_exists(["sign in", "log in"]):
-        fail("authenticated Chrome Web Store publisher session required")
+        fail("authenticated Chrome Web Store publisher login required")
 
 
 def publisher_id_from_url(url):
@@ -159,22 +158,22 @@ def open_item():
                 # store and cannot prove the requested item was opened.
                 goto_url(CONSOLE_URL)
                 wait_for_load()
-                require_session()
+                require_publisher_login()
                 publisher_id = publisher_id_from_url(page_info().get("url", ""))
             if not publisher_id:
                 fail("publisher-scoped developer console route not observed")
             url = f"https://chrome.google.com/webstore/devconsole/{publisher_id}/{ITEM_ID}/edit"
-    # Browser Workspace leases can briefly expose more than one target for a
+    # Browser automation can briefly expose more than one target for a
     # requested URL. Reuse the harness-verified real tab instead of asking the
-    # workspace layer to create another lease; this keeps navigation stable
-    # without bypassing Browser Workspace session or changing the user's browser state.
+    # browser controller to create another target; this keeps navigation stable
+    # without changing unrelated browser state.
     if ensure_real_tab():
         goto_url(url)
     else:
         # A fresh isolated browser may not have a usable page yet.
         new_tab(url)
     wait_for_load()
-    require_session()
+    require_publisher_login()
     if ITEM_ID and ITEM_ID not in page_info().get("url", ""):
         fail("observed URL does not contain the requested item id")
     return evidence("unknown", observed_item_id=ITEM_ID or None)
@@ -200,7 +199,7 @@ def dashboard_item_version(item_id):
 def open_dashboard():
     goto_url(CONSOLE_URL)
     wait_for_load()
-    require_session()
+    require_publisher_login()
 
 
 def create_or_resolve_item():
@@ -251,14 +250,14 @@ def create_item():
                         package_path=CFG["package_path"], package_version=observed_version)
     goto_url(CONSOLE_URL)
     wait_for_load()
-    require_session()
+    require_publisher_login()
     if not publisher_id_from_url(page_info().get("url", "")):
         fail("publisher-scoped developer console route not observed")
     if not click_text("New item") and not click_text("Add a new item"):
         fail("new item control not observed")
     upload_file("input[type=file]", CFG["package_path"].strip())
     wait_for_load()
-    require_session()
+    require_publisher_login()
     if text_exists(["key field is not allowed"]):
         fail("new item upload rejected: manifest key field is not allowed")
     if text_exists(["there was a problem uploading your file"]):

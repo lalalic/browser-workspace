@@ -1,17 +1,21 @@
 platform: xhs
-status: working
+status: migrated_unverified
 last_verified: null
-browser_workspace:
-  compatible: true
-  evidence: "Migrated from the working skills/post adapter."
+actions:
+  post: "actions/_post.py"
+  manage: "actions/_manage.py"
+verification:
+  status: migrated_unverified
+  last_verified: null
+  evidence: "Existing post and creator-manager mechanics migrated from the working post adapter. Current Browser Workspace live verification pending."
 url_patterns:
   - "https://creator.xiaohongshu.com/*"
 authentication:
   required: true
-  notes: "Use the caller's authenticated browser session; never store credentials."
+  notes: "Use the caller's authenticated browser context; never store credentials."
 provenance:
   source: "skills/post/scripts/platforms/xhs"
   migrated_code: true
 flows:
-  post: {status: working, evidence: "Existing post adapter mechanics migrated."}
-  manage: {status: working, evidence: "Existing creator-manager mechanics migrated."}
+  post: {status: migrated_unverified, evidence: "Migrated action; current Browser Workspace live verification pending."}
+  manage: {status: migrated_unverified, evidence: "Migrated manager action; current Browser Workspace live verification pending."}

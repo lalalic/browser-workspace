@@ -1,9 +1,14 @@
 platform: chatgpt
-status: verified_from_existing_worker
-last_verified: 2026-09-30
-browser_workspace:
-  compatible: true
-  runner: "runner/_thread_turn.py"
+status: migrated_unverified
+last_verified: null
+actions:
+  thread-turn: "actions/_thread_turn.py"
+  project-setup: "actions/_project_setup.py"
+  bootstrap-start: "actions/_bootstrap_start.py"
+verification:
+  status: migrated_unverified
+  last_verified: null
+  evidence: "The source ChatGPT worker flow was previously live-verified, but the migrated Browser Workspace platform action has not yet been live-verified through the current generic platform runner."
 flows:
   - existing-thread-turn
   - project-setup

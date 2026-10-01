@@ -1,22 +1,22 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNNER = (ROOT / "runner" / "_meeting.py").read_text()
+ACTION = (ROOT / "actions" / "_meeting.py").read_text()
 SKILL = (ROOT / "SKILL.md").read_text()
 MANIFEST = (ROOT / "manifest.yaml").read_text()
 
 
 def test_canonical_instant_meeting_path():
     assert "Calendar -> Meet now -> Start meeting (when shown) -> pre-join -> Join now" in SKILL
-    assert "Start an instant Teams meeting." in RUNNER
-    assert "#prejoin-join-button" in RUNNER
-    assert "Start meeting" in RUNNER
-    assert "#call-duration-custom" in RUNNER
+    assert "Start an instant Teams meeting." in ACTION
+    assert "#prejoin-join-button" in ACTION
+    assert "Start meeting" in ACTION
+    assert "#call-duration-custom" in ACTION
 
 
-def test_runner_uses_browser_harness_workspace_path():
-    assert "new_tab(TEAMS_URL)" in RUNNER
-    assert "websocket" not in RUNNER.lower()
+def test_action_uses_browser_helper_path():
+    assert "new_tab(TEAMS_URL)" in ACTION
+    assert "websocket" not in ACTION.lower()
 
 
 def test_manifest_declares_side_effects():

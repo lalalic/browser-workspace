@@ -1,11 +1,9 @@
 import json
 import os
-import sys
 import time
 from urllib.parse import urlparse
 
-sys.path.insert(0, "__ADAPTER_DIR__")
-from _common_bh import (
+from _common import (
     MANAGER_URL,
     choose_manager_row,
     extract_stable_id,

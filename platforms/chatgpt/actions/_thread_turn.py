@@ -3,6 +3,7 @@ import os
 import re
 import time
 from urllib.parse import urlsplit
+from _readiness import wait_until_stable, submission_receipt
 
 
 CFG = json.load(open("__CFG_PATH__", encoding="utf-8"))
@@ -311,9 +312,8 @@ def _open_thread():
             switch_tab(target_id)
             current_path=urlsplit(page_info().get("url","")).path.rstrip("/")
             if current_path!=expected_path:
-                # The Tutor slot is the durable identity. If its CDP target still
-                # exists but was navigated elsewhere, recover in-place rather than
-                # acquiring another Browser Workspace lease.
+                # If the bound target still exists but was navigated elsewhere,
+                # recover it in place rather than opening another browser target.
                 goto_url(thread_url)
                 wait_for_load()
                 recovered=True

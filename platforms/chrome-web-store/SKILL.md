@@ -7,7 +7,7 @@ description: "Chrome Web Store platform flows for Browser Workspace platform bun
 
 Use the parent Browser Workspace skill contract first.
 These assets document the verified platform contract and use the
-Browser Workspace session runner as the reusable interaction boundary. Live actions still
+platform action as the reusable interaction boundary. Live actions still
 require explicit authorization and report observed evidence instead of
 inferring success.
 
@@ -17,7 +17,7 @@ explicit user request.
 
 ## Runner
 
-Invoke `runner/_chrome_web_store.py` through `Browser Workspace session` with
+Invoke `actions/_chrome_web_store.py` through `Browser Workspace` with
 an approved JSON configuration. The supported actions are:
 
 `resolve-item`, `create-item`, `open-item`, `upload-package`, `update-listing`, `verify-draft`, `save-draft`, `submit-review`,

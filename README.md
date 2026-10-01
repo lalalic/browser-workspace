@@ -4,17 +4,21 @@ Browser Workspace is a single browser automation skill and CLI built around pers
 
 ## Public interface
 
-Only session lifecycle is exposed at the shell level:
+The CLI has two public execution paths:
 
 ```bash
-browser-workspace session start [--workspace NAME] [--url URL]
+# Known platform action: runner owns start/stop.
+browser-workspace platform run PLATFORM ACTION [--config FILE] [--url URL]
+
+# Custom browser workflow: caller owns lifecycle.
+browser-workspace session start [--url URL]
 browser-workspace session exec SESSION_ID <<'PY'
 print(snapshot())
 PY
 browser-workspace session stop SESSION_ID
 ```
 
-Browser operations are Python helpers inside the session. There are intentionally no parallel top-level `open`, `tabs`, `status`, or `screenshot` commands.
+`--workspace` is hidden from normal CLI help. Normal sessions use `Harness`; product integrations may set an explicit workspace internally when they require isolation.
 
 `session stop` closes all tabs created/owned by that session while leaving unrelated browser tabs untouched.
 
@@ -26,7 +30,7 @@ browser-workspace
 ├── agent-workspace/         Browser Workspace helper layer
 ├── extension/               Chrome workspace/tab manager
 ├── session_daemon.py        persistent Python session service
-├── platforms/               built-in site workflows
+├── platforms/               site/domain actions + verification metadata
 ├── interaction-skills/      browser interaction references
 └── SKILL.md                 single agent-facing skill contract
 ```
@@ -62,3 +66,10 @@ There is no separate ref registry.
 ## Upstream
 
 The internal browser-control core is forked from `browser-use/browser-harness`. Its license is retained in `licenses/browser-harness-MIT.txt`.
+
+
+## Platform boundary
+
+Platform action code is infrastructure-agnostic. It may use browser helpers, but it must not create/stop Browser Workspace sessions, choose workspaces, or import session/workspace infrastructure. The generic platform runner wraps actions in a default Harness session and always cleans up. Product code may execute the same action in a product-owned browser context when longer-lived isolation is required.
+
+Each platform manifest records explicit verification status and evidence. `verified` means live-site verification; migrated code is labeled `migrated_unverified` until exercised in the current integration.

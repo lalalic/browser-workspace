@@ -1,4 +1,4 @@
-"""Pure helpers shared by WeChat Channels Browser Workspace session scripts."""
+"""Pure helpers shared by WeChat Channels browser actions."""
 from __future__ import annotations
 
 import json

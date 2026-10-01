@@ -1,7 +1,6 @@
-"""Microsoft Teams meeting mechanics for Browser Workspace session.
+"""Microsoft Teams meeting browser mechanics.
 
-Executed inside Browser Workspace session. Keep the instant-meeting navigation in one
-process so Browser Workspace tab/target identity remains authoritative.
+Keep the instant-meeting navigation in one browser action so target identity remains stable.
 """
 
 import json

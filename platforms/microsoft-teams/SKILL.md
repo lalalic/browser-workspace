@@ -1,38 +1,32 @@
 ---
 name: microsoft-teams-platform
-description: "Microsoft Teams meeting browser mechanics for Browser Workspace platform bundle."
+description: Microsoft Teams browser mechanics and verified meeting flows.
 ---
 
 # Microsoft Teams
 
-Use the parent Browser Workspace skill contract first.
-Use Browser Workspace as the only browser-control engine.
+This platform defines site behavior only. Execution lifecycle and isolation are external to platform code.
 
 ## Canonical instant-meeting path
 
-For automated meeting E2E, use exactly this Teams UI path:
+For automated meeting E2E, use exactly:
 
 `left sidebar Calendar -> Meet now -> Start meeting (when shown) -> pre-join -> Join now -> in-call`
 
-Do not substitute a Join button from an existing chat or calendar event when the
-caller asks to create an instant meeting.
+Do not substitute a Join button from an existing chat or calendar event when the caller asks to create an instant meeting.
 
-## Runner
+## Actions
 
-Invoke `runner/_meeting.py` through one Browser Workspace session.
-Supported actions:
+Canonical action source: `actions/_meeting.py`.
 
-- `start-instant-meeting`: acquire a Teams tab, open Calendar, click Meet now,
-  wait for pre-join, click Join now, and verify the in-call state.
-- `status`: report whether the current leased Teams tab is in pre-join or in-call.
-- `leave`: leave the meeting in the current leased Teams tab.
+Supported config actions:
 
-`start-instant-meeting` deliberately performs the whole navigation in one
-Browser Workspace session. Browser Workspace owns tab identity and leasing; this
-platform flow must not recover tabs by URL or use raw CDP outside Browser
-Harness.
+- `start-instant-meeting`: open Teams, follow the canonical path, and verify in-call state.
+- `status`: report whether the active Teams page is in pre-join or in-call.
+- `leave`: leave the active meeting when one is in progress.
 
-If Teams reports that the account is already in another call and the requested
-instant meeting cannot reach pre-join, fail with evidence rather than touching
-another browser tab. Callers may only clean up meeting tabs they themselves
-leased.
+If Teams reports that the account is already in another call and the requested instant meeting cannot reach pre-join, fail with evidence rather than manipulating unrelated tabs.
+
+## Verification
+
+See `manifest.yaml`. The instant-meeting path, in-call detection, and exit were live-verified on 2026-10-01.

@@ -131,7 +131,7 @@ def set_update_fields(editor):
         if editor_media_kind()!="image":
             return False,"media_type_mismatch_image"
         selector='input[type=file][accept*=".jpg"],input[type=file][accept*=".jpeg"],input[type=file][accept*=".png"]'
-        # Browser Workspace upload_file accepts one file per call; replacing one image is
+        # upload_file accepts one file per call; replacing one image is
         # enough for current Vlog use. Multiple-image update remains explicit and bounded.
         first=True
         for image in CFG["images"]:
