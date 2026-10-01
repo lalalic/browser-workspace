@@ -60,6 +60,24 @@ class WorkspaceMappingTest(unittest.TestCase):
         }
         self.assertEqual(mismatches, {})
 
+
+    def test_snapshot_formats_dom_ref(self):
+        module = load_helper()
+        line = module["_snapshot_line"]("button", "Meet now", "e7")
+        self.assertEqual(line, '- button "Meet now" [ref=e7]')
+
+    def test_click_uses_data_ref_as_normal_css_selector(self):
+        module = load_helper()
+        calls = []
+
+        def js(expression, target_id=None):
+            calls.append((expression, target_id))
+            return True
+
+        module["_bh"].js = js
+        self.assertTrue(module["click"]('[data-ref="e7"]'))
+        self.assertIn('document.querySelector("[data-ref=\\"e7\\"]")', calls[0][0])
+
     def test_ensure_uses_workspace_ensure(self):
         module = load_helper()
         calls = []

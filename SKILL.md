@@ -162,36 +162,36 @@ Normal Browser Harness page operations remain unchanged.
 
 ## Snapshot refs
 
-Browser Workspace may provide a `snapshot()` helper for compact, agent-friendly inspection of the current page. The snapshot helper does not create a separate persistent ref registry. Instead, it annotates matching live DOM elements directly with temporary `data-ref` attributes and returns a compact textual representation of those elements.
+Browser Workspace provides a `snapshot()` helper for compact, agent-friendly inspection of the current page. The snapshot helper does not create a separate persistent ref registry. Instead, it annotates matching live DOM elements directly with temporary `data-ref` attributes and returns a compact textual representation of those elements.
 
 Example snapshot output:
 
 ```text
-r1 button "Calendar"
-r2 button "Meet now"
-r3 textbox "Meeting name"
-r4 button "Start meeting"
+- button "Calendar" [ref=e1]
+- button "Meet now" [ref=e2]
+- textbox "Meeting name" [ref=e3]
+- button "Start meeting" [ref=e4]
 ```
 
 Conceptually, the live page has been annotated like:
 
 ```html
-<button data-ref="r1">Calendar</button>
-<button data-ref="r2">Meet now</button>
-<input data-ref="r3" aria-label="Meeting name">
-<button data-ref="r4">Start meeting</button>
+<button data-ref="e1">Calendar</button>
+<button data-ref="e2">Meet now</button>
+<input data-ref="e3" aria-label="Meeting name">
+<button data-ref="e4">Start meeting</button>
 ```
 
 Refs from `snapshot()` are ordinary DOM selectors, not a separate interaction API. Use existing Browser Harness helpers with a CSS selector built from the returned ref.
 
 ```python
 snapshot()
-click('[data-ref="r2"]')
-fill('[data-ref="r3"]', 'Test meeting')
-click('[data-ref="r4"]')
+click('[data-ref="e2"]')
+fill_input('[data-ref="e3"]', 'Test meeting')
+click('[data-ref="e4"]')
 ```
 
-Do not invent calls such as `click("r2")` or `click_ref("r2")`. The supported pattern is always the normal Browser Harness helper plus a selector such as `[data-ref="r2"]`.
+Do not invent calls such as `click("e2")` or `click_ref("e2")`. The supported pattern is always the normal Browser Harness helper plus a selector such as `[data-ref="e2"]`.
 
 A later `snapshot()` may rewrite or replace existing `data-ref` attributes. Treat refs as a short-lived description of the current DOM, not as stable element identity across navigation or major page changes. If a ref no longer matches, take a new snapshot and use the new ref.
 

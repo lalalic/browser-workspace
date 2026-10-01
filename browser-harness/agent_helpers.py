@@ -390,3 +390,253 @@ def ensure_real_tab():
 def goto_url(url):
     current_tab()
     return _original_goto_url(url)
+
+# Snapshot role selection is adapted from vercel-labs/agent-browser's
+# accessibility snapshot design (Apache-2.0), while Browser Workspace keeps a
+# deliberately simpler ref contract: refs are written to the live DOM as
+# data-ref attributes instead of stored in a separate ref registry.
+_SNAPSHOT_INTERACTIVE_ROLES = {
+    "button", "link", "textbox", "checkbox", "radio", "combobox", "listbox",
+    "menuitem", "menuitemcheckbox", "menuitemradio", "option", "searchbox",
+    "slider", "spinbutton", "switch", "tab", "treeitem",
+}
+_SNAPSHOT_CONTENT_ROLES = {
+    "heading", "cell", "gridcell", "columnheader", "rowheader", "listitem",
+    "article", "region", "main", "navigation",
+}
+
+
+def _snapshot_ax_value(node, key, default=None):
+    value = node.get(key)
+    if isinstance(value, dict):
+        return value.get("value", default)
+    return default
+
+
+def _snapshot_prop(node, name):
+    for prop in node.get("properties", []) or []:
+        if prop.get("name") == name:
+            value = prop.get("value")
+            if isinstance(value, dict):
+                return value.get("value")
+    return None
+
+
+def _snapshot_clean_name(value):
+    if value is None:
+        return ""
+    return " ".join(str(value).replace("\u00a0", " ").split())
+
+
+def _snapshot_session(target_id=None):
+    if not target_id:
+        return None
+    return _bh.cdp("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"]
+
+
+def _snapshot_eval(expression, session_id=None):
+    result = _bh.cdp(
+        "Runtime.evaluate",
+        session_id=session_id,
+        expression=expression,
+        returnByValue=True,
+        awaitPromise=False,
+    )
+    details = result.get("exceptionDetails")
+    if details:
+        raise RuntimeError(details.get("text") or "snapshot JavaScript failed")
+    return (result.get("result") or {}).get("value")
+
+
+def _snapshot_set_ref(backend_node_id, ref_id, session_id=None):
+    resolved = _bh.cdp(
+        "DOM.resolveNode",
+        session_id=session_id,
+        backendNodeId=int(backend_node_id),
+        objectGroup="browser-workspace-snapshot",
+    )
+    object_id = (resolved.get("object") or {}).get("objectId")
+    if not object_id:
+        return False
+    result = _bh.cdp(
+        "Runtime.callFunctionOn",
+        session_id=session_id,
+        objectId=object_id,
+        functionDeclaration="function(ref){this.setAttribute('data-ref', ref); return true;}",
+        arguments=[{"value": ref_id}],
+        returnByValue=True,
+    )
+    return bool(((result.get("result") or {}).get("value")))
+
+
+def _snapshot_line(role, name, ref_id, node=None, extra=None):
+    attrs = [f"ref={ref_id}"]
+    if node:
+        level = _snapshot_prop(node, "level")
+        checked = _snapshot_prop(node, "checked")
+        expanded = _snapshot_prop(node, "expanded")
+        selected = _snapshot_prop(node, "selected")
+        disabled = _snapshot_prop(node, "disabled")
+        required = _snapshot_prop(node, "required")
+        value = _snapshot_prop(node, "value")
+        if level is not None:
+            attrs.append(f"level={level}")
+        if checked is not None:
+            attrs.append(f"checked={str(checked).lower()}")
+        if expanded is not None:
+            attrs.append(f"expanded={str(expanded).lower()}")
+        if selected is not None:
+            attrs.append(f"selected={str(selected).lower()}")
+        if disabled:
+            attrs.append("disabled=true")
+        if required:
+            attrs.append("required=true")
+        if value not in (None, ""):
+            attrs.append(f"value={_snapshot_clean_name(value)!r}")
+    if extra:
+        attrs.extend(extra)
+    label = f' "{name}"' if name else ""
+    return f"- {role}{label} [{', '.join(attrs)}]"
+
+
+def snapshot(interactive_only=True, target_id=None):
+    """Return a compact accessibility snapshot and annotate live elements with data-ref.
+
+    The selection/format follows the useful parts of agent-browser's snapshot
+    approach, but refs are deliberately DOM-native: each returned ref is written
+    as ``data-ref=\"eN\"`` on the corresponding live element. Interact with the
+    result using normal Browser Harness CSS-selector helpers, e.g.
+    ``click('[data-ref=\"e3\"]')`` or ``fill_input('[data-ref=\"e4\"]', 'text')``.
+
+    Re-run snapshot after navigation or major DOM changes; a new snapshot clears
+    and rewrites the page's data-ref attributes.
+    """
+    session_id = _snapshot_session(target_id)
+    _bh.cdp("DOM.enable", session_id=session_id)
+    _bh.cdp("Accessibility.enable", session_id=session_id)
+    _snapshot_eval(
+        "document.querySelectorAll('[data-ref]').forEach(e=>e.removeAttribute('data-ref')); true",
+        session_id=session_id,
+    )
+
+    ax = _bh.cdp("Accessibility.getFullAXTree", session_id=session_id)
+    nodes = ax.get("nodes", []) or []
+    lines = []
+    next_ref = 1
+
+    for node in nodes:
+        role = _snapshot_clean_name(_snapshot_ax_value(node, "role", ""))
+        name = _snapshot_clean_name(_snapshot_ax_value(node, "name", ""))
+        backend_node_id = node.get("backendDOMNodeId")
+        if not backend_node_id:
+            continue
+        should_include = role in _SNAPSHOT_INTERACTIVE_ROLES
+        if not interactive_only and role in _SNAPSHOT_CONTENT_ROLES and name:
+            should_include = True
+        if not should_include:
+            continue
+        ref_id = f"e{next_ref}"
+        try:
+            if not _snapshot_set_ref(backend_node_id, ref_id, session_id=session_id):
+                continue
+        except Exception:
+            continue
+        lines.append(_snapshot_line(role or "element", name, ref_id, node=node))
+        next_ref += 1
+
+    # Modern apps often use div/span elements with pointer handlers instead of
+    # semantic controls. agent-browser explicitly promotes those too. We do the
+    # same directly in the DOM, skipping elements already tagged through AX.
+    cursor_script = r"""
+(() => {
+  const out = [];
+  const semanticTags = new Set(['a','button','input','select','textarea','details','summary']);
+  const semanticRoles = new Set(['button','link','textbox','checkbox','radio','combobox','listbox','menuitem','menuitemcheckbox','menuitemradio','option','searchbox','slider','spinbutton','switch','tab','treeitem']);
+  for (const el of document.body ? document.body.querySelectorAll('*') : []) {
+    if (el.hasAttribute('data-ref')) continue;
+    if (el.closest('[hidden],[aria-hidden="true"]')) continue;
+    const tag = el.tagName.toLowerCase();
+    if (semanticTags.has(tag)) continue;
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    if (semanticRoles.has(role)) continue;
+    const style = getComputedStyle(el);
+    const pointer = style.cursor === 'pointer';
+    const onclick = el.hasAttribute('onclick') || el.onclick !== null;
+    const tabindex = el.getAttribute('tabindex');
+    const focusable = tabindex !== null && tabindex !== '-1';
+    const ce = el.getAttribute('contenteditable');
+    const editable = ce === '' || ce === 'true';
+    if (!pointer && !onclick && !focusable && !editable) continue;
+    if (pointer && !onclick && !focusable && !editable && el.parentElement && getComputedStyle(el.parentElement).cursor === 'pointer') continue;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) continue;
+    out.push({
+      element: el,
+      role: role || (editable ? 'textbox' : 'clickable'),
+      name: (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').trim().replace(/\s+/g,' ').slice(0,160)
+    });
+  }
+  return out.map(x => ({role:x.role,name:x.name}));
+})()
+"""
+    cursor_items = _snapshot_eval(cursor_script, session_id=session_id) or []
+    # The returned values intentionally omit object handles. Assign refs in one
+    # second DOM pass by the same deterministic filter/order.
+    if cursor_items:
+        assignment = _snapshot_eval(
+            f"""
+(() => {{
+  let n = {next_ref};
+  const out = [];
+  const semanticTags = new Set(['a','button','input','select','textarea','details','summary']);
+  const semanticRoles = new Set(['button','link','textbox','checkbox','radio','combobox','listbox','menuitem','menuitemcheckbox','menuitemradio','option','searchbox','slider','spinbutton','switch','tab','treeitem']);
+  for (const el of document.body ? document.body.querySelectorAll('*') : []) {{
+    if (el.hasAttribute('data-ref')) continue;
+    if (el.closest('[hidden],[aria-hidden=\"true\"]')) continue;
+    const tag = el.tagName.toLowerCase();
+    if (semanticTags.has(tag)) continue;
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    if (semanticRoles.has(role)) continue;
+    const style = getComputedStyle(el);
+    const pointer = style.cursor === 'pointer';
+    const onclick = el.hasAttribute('onclick') || el.onclick !== null;
+    const tabindex = el.getAttribute('tabindex');
+    const focusable = tabindex !== null && tabindex !== '-1';
+    const ce = el.getAttribute('contenteditable');
+    const editable = ce === '' || ce === 'true';
+    if (!pointer && !onclick && !focusable && !editable) continue;
+    if (pointer && !onclick && !focusable && !editable && el.parentElement && getComputedStyle(el.parentElement).cursor === 'pointer') continue;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) continue;
+    const ref = 'e' + n++;
+    el.setAttribute('data-ref', ref);
+    out.push({{ref, role: role || (editable ? 'textbox' : 'clickable'), name:(el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').trim().replace(/\\s+/g,' ').slice(0,160)}});
+  }}
+  return out;
+}})()
+""",
+            session_id=session_id,
+        ) or []
+        for item in assignment:
+            lines.append(_snapshot_line(item.get("role") or "clickable", _snapshot_clean_name(item.get("name")), item.get("ref")))
+
+    info = _bh.page_info() if target_id is None else None
+    header = []
+    if info and not info.get("dialog"):
+        header.append(f"Page: {info.get('title','')}")
+        header.append(f"URL: {info.get('url','')}")
+    return "\n".join(header + ([""] if header and lines else []) + lines)
+
+
+
+def click(selector, target_id=None):
+    """Click a CSS selector; snapshot refs are used as [data-ref="eN"]."""
+    selector_json = _json.dumps(selector)
+    ok = _bh.js(
+        f"(()=>{{const e=document.querySelector({selector_json});if(!e)return false;"
+        "e.scrollIntoView({block:'center',inline:'center'});e.click();return true;})()",
+        target_id=target_id,
+    )
+    if not ok:
+        raise RuntimeError(f"click: element not found: {selector!r}")
+    return True
