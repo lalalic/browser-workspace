@@ -25,17 +25,22 @@ SESSIONS_LOCK = threading.Lock()
 BROWSER_LOCK = threading.RLock()
 
 class Session:
-    def __init__(self, sid, workspace, target_id):
-        self.session_id=sid; self.workspace=workspace; self.target_id=target_id
+    def __init__(self, sid, workspace, target_id, workspace_supported):
+        self.session_id=sid; self.workspace=workspace; self.target_id=target_id; self.workspace_supported=bool(workspace_supported)
         self.lock=threading.Lock()
         self.namespace={'__name__':'__browser_workspace_session__','bh':bh,'target_id':target_id}
         for name in dir(bh):
             if not name.startswith('_'): self.namespace[name]=getattr(bh,name)
 
-def with_workspace(name):
+def with_workspace(name, supported=None):
     class Scope:
-        def __enter__(self): self.token=bh.workspace_set_name(name); return self
-        def __exit__(self,*_): bh.workspace_reset_name(self.token)
+        def __enter__(self):
+            self.name_token=bh.workspace_set_name(name)
+            self.support_token=bh.workspace_set_supported(supported) if supported is not None else None
+            return self
+        def __exit__(self,*_):
+            if self.support_token is not None: bh.workspace_reset_supported(self.support_token)
+            bh.workspace_reset_name(self.name_token)
     return Scope()
 
 def execute(source, namespace):
@@ -61,10 +66,16 @@ def start_session(workspace=None, url=None):
     if not workspace: raise ValueError('workspace must not be empty')
     sid=secrets.token_hex(8)
     start_url=(url or 'about:blank').strip()
-    with BROWSER_LOCK, with_workspace(workspace): tid=bh.new_tab(start_url)
-    s=Session(sid,workspace,tid)
+    extension=bh.workspace_extension_status()
+    supported=bool(extension.get('supported'))
+    with BROWSER_LOCK, with_workspace(workspace, supported): tid=bh.new_tab(start_url)
+    s=Session(sid,workspace,tid,supported)
     with SESSIONS_LOCK: SESSIONS[sid]=s
-    return {'session_id':sid,'workspace':workspace,'target_id':tid,'url':start_url}
+    result={'session_id':sid,'workspace':workspace,'target_id':tid,'url':start_url,'workspace_supported':supported}
+    if not supported:
+        result['warning']='Browser Workspace extension is not installed; workspace grouping/leases are unavailable. Browser automation will continue without workspace isolation.'
+        result['extension_url']=extension.get('extensionUrl')
+    return result
 
 def get_session(sid):
     with SESSIONS_LOCK: s=SESSIONS.get(sid)
@@ -73,7 +84,7 @@ def get_session(sid):
 
 def exec_session(sid, code):
     s=get_session(sid)
-    with s.lock, BROWSER_LOCK, with_workspace(s.workspace):
+    with s.lock, BROWSER_LOCK, with_workspace(s.workspace, s.workspace_supported):
         bh.switch_tab(s.target_id,activate=False)
         r=execute(code,s.namespace)
         try:
@@ -85,7 +96,7 @@ def stop_session(sid):
     with SESSIONS_LOCK: s=SESSIONS.pop(sid,None)
     if not s: raise KeyError(f'unknown session_id: {sid}')
     release_error=None
-    with s.lock, BROWSER_LOCK, with_workspace(s.workspace):
+    with s.lock, BROWSER_LOCK, with_workspace(s.workspace, s.workspace_supported):
         try: bh.close_tab(s.target_id)
         except Exception as exc: release_error=f'{type(exc).__name__}: {exc}'
     return {'session_id':sid,'workspace':s.workspace,'target_id':s.target_id,'release_error':release_error}

@@ -13,6 +13,10 @@ def load_helper():
     helpers.switch_tab = lambda *args, **kwargs: None
     helpers.current_tab = lambda: {"targetId": "current"}
     helpers.goto_url = lambda url: url
+    helpers.list_tabs = lambda include_chrome=True: [{"targetId": "raw", "url": "https://raw.test"}]
+    helpers.new_tab = lambda url="about:blank": f"raw-new:{url}"
+    helpers.close_tab = lambda target=None: f"raw-close:{target}"
+    helpers.activate_tab = lambda target: f"raw-activate:{target}"
     helpers.cdp = lambda *args, **kwargs: {"targetInfos": []}
     helpers.js = lambda *args, **kwargs: None
     package = types.ModuleType("browser_harness")
@@ -22,7 +26,9 @@ def load_helper():
     sys.modules["browser_harness"] = package
     sys.modules["browser_harness.helpers"] = helpers
     try:
-        return runpy.run_path(str(HELPER))
+        module = runpy.run_path(str(HELPER))
+        module["workspace_set_supported"](True)
+        return module
     finally:
         if old_package is None:
             sys.modules.pop("browser_harness", None)
@@ -57,6 +63,26 @@ class WorkspaceMappingTest(unittest.TestCase):
         }
         self.assertEqual(mismatches, {})
 
+
+
+    def test_no_extension_falls_back_to_core_tab_helpers(self):
+        module = load_helper()
+        module["workspace_set_supported"](False)
+        self.assertEqual(module["new_tab"]("https://example.com"), "raw-new:https://example.com")
+        self.assertEqual(module["current_tab"](), {"targetId": "current"})
+        self.assertEqual(module["list_tabs"](), [{"targetId": "raw", "url": "https://raw.test"}])
+        self.assertEqual(module["switch_tab"]("abc"), None)
+        self.assertEqual(module["close_tab"]("abc"), "raw-close:abc")
+        self.assertEqual(module["activate_tab"]("abc"), "raw-activate:abc")
+        self.assertEqual(module["goto_url"]("https://next.test"), "https://next.test")
+
+    def test_no_extension_workspace_status_is_soft(self):
+        module = load_helper()
+        module["workspace_set_supported"](False)
+        status = module["workspace_status"]()
+        self.assertFalse(status["supported"])
+        self.assertFalse(status["initialized"])
+        self.assertIn("chromewebstore.google.com/detail/", status["extensionUrl"])
 
     def test_snapshot_formats_dom_ref(self):
         module = load_helper()

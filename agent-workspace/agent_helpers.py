@@ -35,14 +35,57 @@ def workspace_reset_name(token):
     _WORKSPACE_CONTEXT.reset(token)
 _POOL_SIZE = int(_os.environ.get("BH_WORKSPACE_POOL_SIZE", "5"))
 _TIMEOUT_SECONDS = 5.0
+_EXTENSION_WEBSTORE_URL = f"https://chromewebstore.google.com/detail/{_EXTENSION_ID}"
+_WORKSPACE_SUPPORTED_CONTEXT = _contextvars.ContextVar("browser_workspace_supported", default=None)
 
 _original_switch_tab = _bh.switch_tab
 _original_current_tab = _bh.current_tab
 _original_goto_url = _bh.goto_url
+_original_list_tabs = _bh.list_tabs
+_original_new_tab = _bh.new_tab
+_original_close_tab = _bh.close_tab
+_original_activate_tab = _bh.activate_tab
 
 _tab_to_target = {}
 _target_to_tab = {}
 
+
+
+def workspace_set_supported(value):
+    return _WORKSPACE_SUPPORTED_CONTEXT.set(bool(value))
+
+def workspace_reset_supported(token):
+    _WORKSPACE_SUPPORTED_CONTEXT.reset(token)
+
+def workspace_extension_status():
+    try:
+        _worker_target()
+        return {
+            "supported": True,
+            "extensionId": _EXTENSION_ID,
+            "extensionUrl": _EXTENSION_WEBSTORE_URL,
+        }
+    except Exception as exc:
+        return {
+            "supported": False,
+            "extensionId": _EXTENSION_ID,
+            "extensionUrl": _EXTENSION_WEBSTORE_URL,
+            "reason": str(exc),
+        }
+
+def workspace_supported():
+    scoped = _WORKSPACE_SUPPORTED_CONTEXT.get()
+    if scoped is not None:
+        return bool(scoped)
+    return bool(workspace_extension_status()["supported"])
+
+def _require_workspace_support():
+    if workspace_supported():
+        return
+    raise RuntimeError(
+        "Browser Workspace extension is not installed; workspace grouping/leases are unavailable. "
+        f"Install it from {_EXTENSION_WEBSTORE_URL}"
+    )
 
 def _worker_target():
     scope = f"chrome-extension://{_EXTENSION_ID}/"
@@ -73,6 +116,7 @@ def _worker_target():
 
 
 def _manager_call(method, args=None):
+    _require_workspace_support()
     request = _json.dumps({"method": method, "args": args or {}})
     response = _bh.js(
         f"globalThis.browserWorkspaceManagerRpc({request})",
@@ -117,7 +161,17 @@ def _ensure_workspace():
 
 
 def workspace_status():
-    return _ensure_workspace()
+    if not workspace_supported():
+        return {
+            "name": workspace_name(),
+            "supported": False,
+            "extensionUrl": _EXTENSION_WEBSTORE_URL,
+            "initialized": False,
+        }
+    status = _ensure_workspace()
+    status["supported"] = True
+    status["extensionUrl"] = _EXTENSION_WEBSTORE_URL
+    return status
 
 
 def workspace_capacity():
@@ -285,6 +339,8 @@ def _workspace_tab_for_target(target):
 
 
 def list_tabs(include_chrome=True):
+    if not workspace_supported():
+        return _original_list_tabs(include_chrome=include_chrome)
     tabs = _workspace_tabs()
     if include_chrome:
         return tabs
@@ -299,14 +355,20 @@ def list_tabs(include_chrome=True):
 
 
 def current_tab():
+    if not workspace_supported():
+        return _original_current_tab()
     return _workspace_tab_for_target(_original_current_tab())
 
 
 def activate_tab(target):
+    if not workspace_supported():
+        return _original_activate_tab(target)
     raise RuntimeError("Workspace mode refuses visible tab activation")
 
 
 def switch_tab(target, activate=False):
+    if not workspace_supported():
+        return _original_switch_tab(target, activate=activate)
     if activate:
         raise RuntimeError("Workspace mode refuses visible tab activation")
     tab = _workspace_tab_for_target(target)
@@ -314,6 +376,8 @@ def switch_tab(target, activate=False):
 
 
 def new_tab(url="about:blank"):
+    if not workspace_supported():
+        return _original_new_tab(url)
     if not (
         url == "about:blank"
         or url.startswith("http://")
@@ -355,6 +419,8 @@ def new_tab(url="about:blank"):
 
 
 def close_tab(target=None):
+    if not workspace_supported():
+        return _original_close_tab(target)
     tab = current_tab() if target is None else _workspace_tab_for_target(target)
     result = _manager_call(
         "workspace.release",
@@ -388,7 +454,8 @@ def ensure_real_tab():
 
 
 def goto_url(url):
-    current_tab()
+    if workspace_supported():
+        current_tab()
     return _original_goto_url(url)
 
 # Snapshot role selection is adapted from vercel-labs/agent-browser's

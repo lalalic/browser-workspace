@@ -60,7 +60,9 @@ browser-workspace session start \
   --url https://example.com
 ```
 
-The result is JSON containing `session_id`, `workspace`, `target_id`, and the starting `url`.
+The result is JSON containing `session_id`, `workspace`, `target_id`, the starting `url`, and `workspace_supported`.
+
+The Chrome workspace extension is optional. If it is not installed, `session start` still succeeds and browser automation continues without workspace grouping/lease isolation. The result includes a soft `warning` and `extension_url` pointing to the Chrome Web Store. Do not treat this warning as a session failure.
 
 ## Exec
 
@@ -174,7 +176,9 @@ BH_WORKSPACE_NAME=Harness
 BH_WORKSPACE_POOL_SIZE=5
 ```
 
-The pool size is the maximum concurrent capacity; tabs are created lazily. The bundled Chrome extension owns grouping, lease/release, idle reclaim, and workspace isolation.
+When the Browser Workspace Chrome extension is installed, the pool size is the maximum concurrent capacity; tabs are created lazily. The extension owns grouping, lease/release, idle reclaim, and workspace isolation.
+
+Without the extension, browser sessions still work using the built-in browser core. Workspace names, grouping, pool capacity, lease isolation, and idle reclaim are unavailable; tab/navigation/input/snapshot/platform helpers continue to work. `workspace_status()` reports `supported: false` instead of failing.
 
 Available workspace helpers include:
 
@@ -218,7 +222,13 @@ It creates a Browser Workspace-owned `.venv`, installs the vendored browser runt
 
 There is no required separate Browser Harness installation.
 
-The Chrome extension is bundled at `extension/`. On a new machine, load that folder unpacked in Chrome with Developer mode enabled. Default extension ID:
+The Chrome extension is recommended but not required. Without it Browser Workspace runs in plain-browser mode and `session start` provides the installation link. The public Web Store URL is:
+
+```text
+https://chromewebstore.google.com/detail/kgbghhigmbpefppgkocgjgnnnbhjchic
+```
+
+The extension is also bundled at `extension/` for unpacked/development installs. Default extension ID:
 
 ```text
 kgbghhigmbpefppgkocgjgnnnbhjchic

@@ -27,3 +27,10 @@ def test_runtime_is_vendored():
     client = (ROOT / 'session_client.py').read_text()
     assert "ROOT/'.venv/bin/python'" in client
     assert 'BROWSER_HARNESS_SKILL' not in client
+
+
+def test_session_start_returns_soft_workspace_warning_contract():
+    src = (ROOT / 'session_daemon.py').read_text()
+    assert "workspace_supported" in src
+    assert "Browser Workspace extension is not installed" in src
+    assert "extension_url" in src

@@ -39,7 +39,11 @@ Agents should load only the Browser Workspace skill. `browser-harness` and `brow
 
 The installer creates the skill-owned `.venv` and links `browser-workspace` to `~/.local/bin` by default.
 
-For first-time Chrome setup, load `extension/` as an unpacked extension.
+The Chrome extension is optional. When absent, sessions continue in plain-browser mode and `session start` returns a soft warning plus the Web Store URL. Workspace grouping/leases require the extension.
+
+Web Store: `https://chromewebstore.google.com/detail/kgbghhigmbpefppgkocgjgnnnbhjchic`
+
+For development, `extension/` can also be loaded unpacked.
 
 ## Snapshot model
 
