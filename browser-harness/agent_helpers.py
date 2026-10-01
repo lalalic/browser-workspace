@@ -314,13 +314,22 @@ def new_tab(url="about:blank"):
     )
     wanted_tab_id = opened.get("tabId")
     identity_title = opened.get("identityTitle") or f"__BW_TAB_{wanted_tab_id}__"
+    identity_url = opened.get("identityUrl") or ""
     deadline = _time.monotonic() + _TIMEOUT_SECONDS
     while _time.monotonic() < deadline:
-        candidates = [
+        targets = _page_targets()
+        title_candidates = [
             target
-            for target in _page_targets()
+            for target in targets
             if (target.get("title") or "") == identity_title
         ]
+        candidates = title_candidates
+        if not candidates and identity_url:
+            candidates = [
+                target
+                for target in targets
+                if (target.get("url") or "") == identity_url
+            ]
         if len(candidates) == 1:
             target_id = candidates[0]["targetId"]
             _remember_mapping(wanted_tab_id, target_id)

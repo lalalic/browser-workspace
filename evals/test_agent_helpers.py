@@ -267,6 +267,75 @@ class WorkspaceMappingTest(unittest.TestCase):
         self.assertEqual(new_tab("https://example.com"), "target-1")
         self.assertEqual(calls, ["https://example.com"])
 
+    def test_new_tab_falls_back_to_unique_identity_url_when_title_is_stale(self):
+        module = load_helper()
+        calls = []
+        identity_url = "chrome-extension://workspace/workspace.html?workspace=Tutor&role=lease&slot=88"
+        target = {
+            "targetId": "target-url-fallback",
+            "type": "page",
+            "url": identity_url,
+            "title": "Browser Workspace",
+        }
+
+        def manager_call(method, args=None):
+            calls.append((method, args))
+            if method == "workspace.acquireIdentity":
+                return {
+                    "tabId": 88,
+                    "identityTitle": "__BW_TAB_88__",
+                    "identityUrl": identity_url,
+                }
+            return {"released": True}
+
+        new_tab = module["new_tab"]
+        new_tab.__globals__["_manager_call"] = manager_call
+        new_tab.__globals__["_page_targets"] = lambda: [target.copy()]
+        new_tab.__globals__["_original_switch_tab"] = (
+            lambda target_id, activate=False: calls.append(("switch", target_id, activate))
+        )
+        new_tab.__globals__["_original_goto_url"] = lambda url: calls.append(("goto", url))
+
+        target_id = new_tab("https://chatgpt.com/c/test")
+        self.assertEqual(target_id, "target-url-fallback")
+        self.assertEqual(module["_tab_to_target"], {88: "target-url-fallback"})
+        self.assertEqual(calls[-1], ("goto", "https://chatgpt.com/c/test"))
+
+    def test_new_tab_prefers_identity_title_over_identity_url_fallback(self):
+        module = load_helper()
+        identity_url = "chrome-extension://workspace/workspace.html?workspace=Tutor&role=lease&slot=99"
+        targets = [
+            {
+                "targetId": "title-match",
+                "type": "page",
+                "url": "chrome-extension://workspace/other",
+                "title": "__BW_TAB_99__",
+            },
+            {
+                "targetId": "url-match",
+                "type": "page",
+                "url": identity_url,
+                "title": "Browser Workspace",
+            },
+        ]
+
+        def manager_call(method, args=None):
+            if method == "workspace.acquireIdentity":
+                return {
+                    "tabId": 99,
+                    "identityTitle": "__BW_TAB_99__",
+                    "identityUrl": identity_url,
+                }
+            return {"released": True}
+
+        new_tab = module["new_tab"]
+        new_tab.__globals__["_manager_call"] = manager_call
+        new_tab.__globals__["_page_targets"] = lambda: [item.copy() for item in targets]
+        new_tab.__globals__["_original_switch_tab"] = lambda *args, **kwargs: None
+        new_tab.__globals__["_original_goto_url"] = lambda url: None
+
+        self.assertEqual(new_tab("https://example.com"), "title-match")
+
 
 if __name__ == "__main__":
     unittest.main()
