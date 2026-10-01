@@ -72,3 +72,15 @@ def test_skill_uses_installed_cli_path_for_npx_skills():
     assert 'BW_CLI="$HOME/.agents/skills/browser-workspace/bin/browser-workspace"' in skill
     assert "$BW_CLI session start" in skill
     assert "$BW_CLI platform run" in skill
+
+
+def test_hidden_workspace_create_command():
+    cli = (ROOT / "bin/browser-workspace").read_text()
+    daemon = (ROOT / "session_daemon.py").read_text()
+    assert "sys.argv[1] == 'create'" in cli
+    assert "usage: browser-workspace create <name> [size=5]" in cli
+    assert "add_parser('create')" not in cli
+    assert "'op':'workspace-create'" in cli
+    assert "def create_workspace(name, pool_size=5):" in daemon
+    assert "bh.workspace_create(name.strip(), size)" in daemon
+    assert "if op=='workspace-create'" in daemon
