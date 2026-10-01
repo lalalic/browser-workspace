@@ -161,21 +161,45 @@ Normal Browser Harness page operations remain unchanged.
 
 ## Persistent Python browser sessions
 
-For multi-turn browser work, prefer the Browser Workspace session CLI. It is the portable interface and works on any Mac where this skill has been applied; an MCP federation is optional.
+Use Browser Workspace sessions for multi-turn browser work. The CLI is the primary portable interface and works on any Mac where this skill has been applied; MCP, when available, is only another transport over the same local session daemon.
 
-Before executing Python in a session, load the **browser-harness** skill to learn the available helper methods, interaction workflow, and constraints. The helpers themselves are preloaded automatically inside the session Python namespace.
+Before executing Python in a session, load the **browser-harness** skill to learn the available helper methods, interaction workflow, and constraints. Helpers are preloaded automatically in the session Python namespace.
+
+### Session lifecycle contract
+
+Every workflow must follow this lifecycle:
+
+```text
+start
+  -> exec
+  -> exec
+  -> ...
+finally
+  -> stop
+```
+
+Rules:
+
+- Call `session start` exactly once for one logical browser workflow and keep the returned `session_id`.
+- Reuse that same `session_id` for every action-observe-action turn in the workflow.
+- Do not start a new session just to continue interacting with the same leased tab.
+- Python globals, imports, functions, intermediate values, and the leased tab persist across `session exec` calls.
+- Multiple independent workflows may use different session IDs concurrently.
+- Always call `session stop` when the workflow finishes, fails, is cancelled, or throws. Treat stop as a `finally` cleanup operation.
+- `session stop` releases the leased Browser Workspace tab and discards the Python namespace. Do not reuse the session ID afterward.
+- If a caller owns the session, that caller owns cleanup. Do not stop another caller's session.
 
 The installer places the CLI at `~/.local/bin/browser-workspace` by default. If it is on `PATH`, use `browser-workspace`; otherwise invoke that absolute path.
 
-Start a session, optionally choosing a dedicated workspace:
+Start a session, optionally selecting a dedicated workspace:
 
 ```bash
 browser-workspace session start --workspace "Family Tutor"
 ```
 
-The command returns JSON containing `session_id`, `workspace`, and `target_id`.
+The command returns JSON containing `session_id`, `workspace`, and `target_id`. Save `session_id` and use it for all later calls.
 
-Execute Python in that same persistent session:
+Execute Python using the same stdin/heredoc convention as `browser-harness`:
 
 ```bash
 browser-workspace session exec <session_id> <<'PY'
@@ -183,18 +207,35 @@ print(page_info())
 PY
 ```
 
-Like `browser-harness`, `session exec` reads Python from stdin; use heredocs for normal agent usage.
+Use additional `session exec` calls for later observe/action turns; do not recreate state manually.
 
-Or use a file:
+A shell workflow should structurally resemble:
+
+```bash
+SESSION_JSON=$(browser-workspace session start --workspace Harness)
+SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
+trap 'browser-workspace session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
+
+browser-workspace session exec "$SESSION_ID" <<'PY'
+print(page_info())
+PY
+
+browser-workspace session exec "$SESSION_ID" <<'PY'
+# next action/observe turn; prior Python state is still available
+print(current_tab())
+PY
+```
+
+For a Python file:
 
 ```bash
 browser-workspace session exec <session_id> --code-file /path/to/action.py
 ```
 
-Stop the session when finished:
+Explicit cleanup:
 
 ```bash
 browser-workspace session stop <session_id>
 ```
 
-A session preserves Python globals/imports/functions and owns one leased Browser Workspace tab until stopped. Multiple sessions can coexist. CLI and MCP use the same local session daemon, so a session started through one transport can be continued through the other.
+CLI and MCP share the same local session daemon and session IDs, so a session started through one transport can be continued through the other.
