@@ -57,3 +57,18 @@ def test_session_tracks_all_created_tabs_for_cleanup():
     assert "info.get('openerId')" in src
     assert "bh.cdp('Target.closeTarget', targetId=tid)" in src
     assert "'closed_tabs':closed_count" in src
+
+
+def test_npx_install_self_bootstraps_runtime():
+    client = (ROOT / "session_client.py").read_text()
+    assert "def ensure_runtime_python():" in client
+    assert "shutil.which('uv')" in client
+    assert "'venv','--python','3.11'" in client.replace(' ', '')
+    assert "runtime_python=ensure_runtime_python()" in client
+
+
+def test_skill_uses_installed_cli_path_for_npx_skills():
+    skill = (ROOT / "SKILL.md").read_text()
+    assert 'BW_CLI="$HOME/.agents/skills/browser-workspace/bin/browser-workspace"' in skill
+    assert "$BW_CLI session start" in skill
+    assert "$BW_CLI platform run" in skill
