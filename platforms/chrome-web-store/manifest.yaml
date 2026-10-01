@@ -6,7 +6,7 @@ actions:
 verification:
   status: partially_verified
   last_verified: 2026-09-26
-  evidence: "Live verification covers new-item draft creation/reopen plus Teammate and Family Tutor existing-item draft reopen/save regressions. Submit/review/publication lifecycle remains implemented but not live-verified."
+  evidence: "Live verification covers new-item draft creation/reopen plus existing-item draft reopen/save regressions. Submit/review/publication lifecycle remains implemented but not live-verified."
 url_patterns:
   - "https://chromewebstore.google.com/devconsole/*"
   - "https://chrome.google.com/webstore/developer/dashboard*"
@@ -21,10 +21,10 @@ provenance:
   source: "Neo platform skeleton"
   migrated_code: false
 flows:
-  resolve-item: {status: verified, evidence: "Live runs resolved and reopened the intended Browser Workspace, Teammate, and Family Tutor developer items."}
+  resolve-item: {status: verified, evidence: "Live runs resolved and reopened the intended new and existing developer items."}
   create-item: {status: verified, evidence: "Browser Workspace was created as a new developer item from a store-compatible package, then reopened at exact version 0.2.3."}
-  verify-draft: {status: verified, evidence: "Draft/version was verified after reopen; Teammate and Family Tutor existing-item drafts were also reopened successfully."}
-  save-draft: {status: verified, evidence: "Draft save/reopen was exercised on Browser Workspace plus existing-item regressions for Teammate and Family Tutor."}
+  verify-draft: {status: verified, evidence: "Draft/version was verified after reopen; existing-item drafts were also reopened successfully."}
+  save-draft: {status: verified, evidence: "Draft save/reopen was exercised on both new-item and existing-item regression cases."}
   open-item: {status: verified, evidence: "Publisher-scoped item navigation was exercised across the three real extension items."}
   upload-package: {status: verified, evidence: "Initial package upload was exercised during real new-item creation."}
   update-listing: {status: implemented_unverified, evidence: "Action maps approved Market Package fields, but complete live listing-field coverage has not been verified as a release gate."}

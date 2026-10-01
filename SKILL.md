@@ -208,6 +208,8 @@ platforms/<name>/
 Platform rules:
 
 - Platform actions may use browser helpers such as `new_tab()`, `current_tab()`, `snapshot()`, `js()`, `cdp()`, uploads, downloads, and screenshots.
+- Platform repository files must contain **no personal data**. Do not commit a person's name, email, phone number, account/user identifier, private thread/project URL or ID, cookies/tokens, captured user content, or user-specific local filesystem paths under `platforms/`. Runtime values must come from config/input and must not be written back into platform source, manifests, docs, fixtures, or tests.
+- Platform tests/examples must use synthetic generic values only. Verification evidence should describe behavior generically and must not name a person's account or preserve captured personal content.
 - Platform actions must **not** create/stop Browser Workspace sessions, choose a workspace, call workspace-management APIs, invoke the Browser Workspace CLI, or import session/workspace infrastructure.
 - Platform `SKILL.md` and flow docs should describe site behavior, preconditions, side effects, and verification evidence—not Browser Workspace lifecycle mechanics.
 - Platform actions must remain usable in either a generic runner-owned session or a product-owned browser context.
@@ -260,6 +262,18 @@ platforms/youtube/
 ```
 
 Read the matching platform `SKILL.md` and `manifest.yaml` before invoking or modifying a known flow.
+
+### Platform contribution workflow
+
+Changes under `platforms/` should go through a pull request rather than being pushed directly to `main`:
+
+1. Create a dedicated branch for the platform change.
+2. Update action code, docs, manifest verification evidence, and tests together.
+3. Run `python3 -m pytest -q test evals platforms/*/tests`, `node scripts/check-platforms.mjs`, and workspace-manager tests.
+4. Push the branch and create a PR against `main`.
+5. In the PR description, call out live verification performed, remaining unverified flows, and confirm that no personal data was added.
+
+If repository/PR access is available, create the PR as part of the task. Otherwise, leave the change on a pushed branch and tell the user exactly what still needs to be opened as a PR. Do not silently push platform behavior changes straight to `main`.
 
 ## Installation
 

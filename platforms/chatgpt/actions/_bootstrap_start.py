@@ -42,9 +42,9 @@ set_value(selector,CFG["instructions"])
 button=wait(lambda: js("""(() => {
   const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"],form button[type="submit"]');
   if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return null;
-  b.setAttribute('data-neoy-bootstrap-send','1');return '[data-neoy-bootstrap-send="1"]';
+  b.setAttribute('data-bw-platform-bootstrap-send','1');return '[data-bw-platform-bootstrap-send="1"]';
 })()"""),"ChatGPT bootstrap send button",20)
-if not js("""(() => {const b=document.querySelector('[data-neoy-bootstrap-send="1"]');if(!b)return false;b.click();return true;})()"""):
+if not js("""(() => {const b=document.querySelector('[data-bw-platform-bootstrap-send="1"]');if(!b)return false;b.click();return true;})()"""):
     raise RuntimeError("bootstrap send failed")
 deadline=time.time()+90
 thread_url=None

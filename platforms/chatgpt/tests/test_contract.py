@@ -55,6 +55,6 @@ def test_thread_recovery_reuses_bound_target_before_new_target():
 def test_prompt_match_tolerates_block_tag_boundary_whitespace():
     ns = {}
     exec((ACTIONS / "_readiness.py").read_text(), ns)
-    expected = '<FAMILY_TUTOR_CONTEXT>\n{"type":"kid","data":{"message":"hello world"}}\n</FAMILY_TUTOR_CONTEXT>'
-    observed = '<FAMILY_TUTOR_CONTEXT>{"type":"kid","data":{"message":"hello world"}}</FAMILY_TUTOR_CONTEXT>'
+    expected = '<TEST_CONTEXT>\n{"type":"example","data":{"message":"hello world"}}\n</TEST_CONTEXT>'
+    observed = '<TEST_CONTEXT>{"type":"example","data":{"message":"hello world"}}</TEST_CONTEXT>'
     assert ns["prompt_text_matches"](observed, expected)

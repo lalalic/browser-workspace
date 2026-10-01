@@ -323,7 +323,7 @@ def _open_thread():
                         break
                     time.sleep(.25)
                 else:
-                    raise RuntimeError("bound Tutor target could not recover its thread")
+                    raise RuntimeError("bound ChatGPT target could not recover its thread")
         except Exception:
             target_id=None
             recovered=True

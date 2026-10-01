@@ -8,6 +8,29 @@ const platforms = entries.filter((entry) => entry.isDirectory()).map((entry) => 
 
 if (platforms.length === 0) throw new Error("No browser platforms found");
 
+const privacyPatterns = [
+  ["email address", /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i],
+  ["user home path", /(?:\/Users\/|\/home\/)[A-Za-z0-9._-]+(?:\/|\b)/],
+  ["phone number", /\+\d[\d\s().-]{7,}\d/],
+  ["embedded secret", /\b(?:token|cookie|password|secret|authorization)\b\s*[:=]\s*["'][^"'\\\n]{8,}["']/i],
+  ["product-specific personal-context marker", /\b(?:NeoY|Family Tutor|FAMILY_TUTOR_CONTEXT)\b|data-neoy-/i],
+];
+
+const textExtensions = new Set([".md", ".yaml", ".yml", ".py", ".json", ".txt", ".js", ".mjs"]);
+
+function extension(name) {
+  const index = name.lastIndexOf(".");
+  return index >= 0 ? name.slice(index) : "";
+}
+
+function assertNoPersonalData(relativePath, content) {
+  for (const [label, pattern] of privacyPatterns) {
+    if (pattern.test(content)) {
+      throw new Error(`${relativePath} contains disallowed personal data or context: ${label}`);
+    }
+  }
+}
+
 for (const platform of platforms) {
   const dir = new URL(`../platforms/${platform}/`, import.meta.url);
   const skillUrl = new URL("SKILL.md", dir);
@@ -78,6 +101,10 @@ async function walk(path) {
       await walk(child);
     } else if (entry.name.endsWith(".pyc")) {
       throw new Error(`Generated .pyc must not be committed: ${child}`);
+    } else if (textExtensions.has(extension(entry.name))) {
+      const content = await readFile(child, "utf8");
+      const relative = child.slice(fileURLToPath(platformsDir).length);
+      assertNoPersonalData(relative, content);
     }
   }
 }

@@ -88,8 +88,8 @@ def _ensure_project(name):
         .find(e=>visible(e)&&/project name|copenhagen trip/i.test((e.getAttribute('aria-label')||'')+' '+(e.getAttribute('placeholder')||''))) ||
         [...document.querySelectorAll('input[type="text"],input:not([type]),textarea')].find(visible);
       if(!e)return null;
-      e.setAttribute('data-neoy-project-name','1');
-      return '[data-neoy-project-name="1"]';
+      e.setAttribute('data-bw-platform-project-name','1');
+      return '[data-bw-platform-project-name="1"]';
     })()"""), "ChatGPT project name field")
     fill_input(selector,name,clear_first=True)
 
@@ -218,8 +218,8 @@ def _apply_instructions(value):
       if(!root||!/project settings/i.test((root.innerText||root.textContent||'')))return null;
       const field=root.querySelector('textarea');
       if(!field)return null;
-      field.setAttribute('data-neoy-project-instructions','1');
-      return '[data-neoy-project-instructions="1"]';
+      field.setAttribute('data-bw-platform-project-instructions','1');
+      return '[data-bw-platform-project-instructions="1"]';
     })()"""), "ChatGPT Project Instructions field")
     _set_field_value(selector,value)
     # Current ChatGPT Project settings auto-save Instructions.
@@ -260,7 +260,7 @@ def _composer_selector():
       const sels=['#prompt-textarea','[contenteditable="true"][data-composer-markdown]','[contenteditable="true"][data-lexical-editor="true"]','textarea'];
       for(const s of sels){const e=document.querySelector(s);if(!e)continue;const r=e.getBoundingClientRect();if(r.width&&r.height)return s;}
       const visible=[...document.querySelectorAll('[contenteditable="true"]')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.height;});
-      if(visible.length===1){visible[0].setAttribute('data-neoy-composer','1');return '[data-neoy-composer="1"]';}
+      if(visible.length===1){visible[0].setAttribute('data-bw-platform-composer','1');return '[data-bw-platform-composer="1"]';}
       return null;
     })()""")
 
@@ -279,9 +279,9 @@ def _send_initial(text):
     button=_wait(lambda: js("""(() => {
       const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"],form button[type="submit"]');
       if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return null;
-      b.setAttribute('data-neoy-send','1');return '[data-neoy-send="1"]';
+      b.setAttribute('data-bw-platform-send','1');return '[data-bw-platform-send="1"]';
     })()"""), "enabled ChatGPT Send button",20)
-    clicked=js("""(() => {const b=document.querySelector('[data-neoy-send="1"]');if(!b)return false;b.click();return true;})()""")
+    clicked=js("""(() => {const b=document.querySelector('[data-bw-platform-send="1"]');if(!b)return false;b.click();return true;})()""")
     if not clicked: raise RuntimeError("Initial Project thread Send failed")
     deadline=time.time()+90
     observed_thread=False
@@ -316,7 +316,7 @@ if "/project" not in urlsplit(page_info().get("url","")).path:
 
 initial=str(CFG.get("initial_prompt") or "").strip()
 if not initial:
-    initial="Initialize this learner's Family Tutor thread from the Project Instructions and reply only with READY."
+    initial="Initialize this project thread from the Project Instructions and reply only with READY."
 thread_url=_send_initial(initial)
 print(json.dumps({
   "status":"completed",
