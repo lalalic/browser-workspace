@@ -178,17 +178,12 @@ The command returns JSON containing `session_id`, `workspace`, and `target_id`.
 Execute Python in that same persistent session:
 
 ```bash
-browser-workspace session exec <session_id> 'print(page_info())'
-```
-
-For multiline Python, pipe stdin:
-
-```bash
 browser-workspace session exec <session_id> <<'PY'
-info = page_info()
-print(info)
+print(page_info())
 PY
 ```
+
+Like `browser-harness`, `session exec` reads Python from stdin; use heredocs for normal agent usage.
 
 Or use a file:
 

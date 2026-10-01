@@ -105,7 +105,9 @@ The CLI is the primary portable interface; MCP is an optional transport over the
 
 ```bash
 browser-workspace session start --workspace "Family Tutor"
-browser-workspace session exec <session_id> 'print(page_info())'
+browser-workspace session exec <session_id> <<'PY'
+print(page_info())
+PY
 browser-workspace session stop <session_id>
 ```
 

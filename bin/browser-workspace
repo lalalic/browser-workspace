@@ -11,15 +11,14 @@ def main():
     sp=p.add_subparsers(dest='group',required=True)
     session=sp.add_parser('session'); ssp=session.add_subparsers(dest='cmd',required=True)
     start=ssp.add_parser('start'); start.add_argument('--workspace')
-    ex=ssp.add_parser('exec'); ex.add_argument('session_id'); ex.add_argument('code',nargs='?'); ex.add_argument('--code-file')
+    ex=ssp.add_parser('exec'); ex.add_argument('session_id'); ex.add_argument('--code-file')
     stop=ssp.add_parser('stop'); stop.add_argument('session_id')
     args=p.parse_args()
     if args.group=='session' and args.cmd=='start': emit(request({'op':'start','workspace':args.workspace})); return
     if args.group=='session' and args.cmd=='exec':
         if args.code_file: code=Path(args.code_file).read_text()
-        elif args.code is not None: code=args.code
         elif not sys.stdin.isatty(): code=sys.stdin.read()
-        else: p.error('session exec requires CODE, --code-file, or stdin')
+        else: p.error('session exec reads Python from stdin (use a heredoc like browser-harness) or --code-file')
         r=request({'op':'exec','session_id':args.session_id,'code':code}); emit(r); raise SystemExit(0 if r.get('ok',False) else 1)
     if args.group=='session' and args.cmd=='stop': emit(request({'op':'stop','session_id':args.session_id})); return
 if __name__=='__main__': main()
