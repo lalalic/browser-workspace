@@ -98,3 +98,15 @@ The installer copies `browser-harness/agent_helpers.py` into the Browser Harness
 - `session.stop(session_id)` releases the tab and terminates the runtime.
 
 Sessions are independent and may coexist concurrently. The MCP server reuses one Browser Harness daemon/CDP connection and keeps one persistent Python namespace plus one leased `target_id` per session. Before each `session.exec`, the server attaches the shared daemon to that session target under a short browser lock, so sessions can interleave turns without opening additional Chrome remote-debug connections. This is designed for Mac Developer Bridge stdio federation. Products can use dedicated workspace names, e.g. `Family Tutor`.
+
+### CLI session interface
+
+The CLI is the primary portable interface; MCP is an optional transport over the same local session daemon.
+
+```bash
+browser-workspace session start --workspace "Family Tutor"
+browser-workspace session exec <session_id> 'print(page_info())'
+browser-workspace session stop <session_id>
+```
+
+`session exec` also accepts Python from stdin or `--code-file`. The installer links the command to `~/.local/bin/browser-workspace` by default. CLI and MCP share the same persistent daemon and session IDs.

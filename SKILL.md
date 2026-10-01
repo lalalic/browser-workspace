@@ -158,3 +158,48 @@ workspace_delete("Research")
 ```
 
 Normal Browser Harness page operations remain unchanged.
+
+## Persistent Python browser sessions
+
+For multi-turn browser work, prefer the Browser Workspace session CLI. It is the portable interface and works on any Mac where this skill has been applied; an MCP federation is optional.
+
+Before executing Python in a session, load the **browser-harness** skill to learn the available helper methods, interaction workflow, and constraints. The helpers themselves are preloaded automatically inside the session Python namespace.
+
+The installer places the CLI at `~/.local/bin/browser-workspace` by default. If it is on `PATH`, use `browser-workspace`; otherwise invoke that absolute path.
+
+Start a session, optionally choosing a dedicated workspace:
+
+```bash
+browser-workspace session start --workspace "Family Tutor"
+```
+
+The command returns JSON containing `session_id`, `workspace`, and `target_id`.
+
+Execute Python in that same persistent session:
+
+```bash
+browser-workspace session exec <session_id> 'print(page_info())'
+```
+
+For multiline Python, pipe stdin:
+
+```bash
+browser-workspace session exec <session_id> <<'PY'
+info = page_info()
+print(info)
+PY
+```
+
+Or use a file:
+
+```bash
+browser-workspace session exec <session_id> --code-file /path/to/action.py
+```
+
+Stop the session when finished:
+
+```bash
+browser-workspace session stop <session_id>
+```
+
+A session preserves Python globals/imports/functions and owns one leased Browser Workspace tab until stopped. Multiple sessions can coexist. CLI and MCP use the same local session daemon, so a session started through one transport can be continued through the other.
