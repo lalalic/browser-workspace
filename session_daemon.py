@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 import ast, atexit, contextlib, io, json, os, secrets, socket, sys, threading, traceback
 from pathlib import Path
 
@@ -23,6 +22,24 @@ SOCKET_PATH = Path(os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET', RUNTIME_DI
 SESSIONS = {}
 SESSIONS_LOCK = threading.Lock()
 BROWSER_LOCK = threading.RLock()
+
+
+def compilable_module_body(body):
+    """Return a module body that remains valid after trailing-result extraction.
+
+    Submitted sessions commonly contain ordinary imports before a future import.
+    Python accepts that source form, but recompiling an AST after removing the
+    trailing result expression requires future imports to be moved first.
+    """
+    leading = []
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+        leading.append(body.pop(0))
+    future = [node for node in body if isinstance(node, ast.ImportFrom) and node.module == '__future__']
+    if not future:
+        return leading + body
+    rest = [node for node in body if node not in future]
+    return leading + future + rest
+
 
 class SessionBrowserProxy:
     def __init__(self, session): self._session=session
@@ -86,6 +103,7 @@ def execute(source, namespace):
     try:
         tree=ast.parse(source,mode='exec'); body=list(tree.body)
         tail=body.pop() if body and isinstance(body[-1],ast.Expr) else None
+        body=compilable_module_body(body)
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             if body: exec(compile(ast.Module(body=body,type_ignores=[]),'<browser-workspace-session>','exec'),namespace,namespace)
             if tail is not None:
