@@ -100,6 +100,20 @@ export class WorkspaceManager {
     await this.saveConfig(config);
   }
 
+  async removeDeletedGroup(group) {
+    const name = String(group?.title || "").trim();
+    if (!name) return null;
+
+    const { entry } = await this.configuredWorkspace(name);
+    if (!entry) return null;
+
+    const remaining = await this.workspaceGroup(name);
+    if (remaining) return null;
+
+    await this.removeConfig(name);
+    return { name, deleted: true };
+  }
+
   async workspaceGroup(name) {
     const groups = await this.chrome.tabGroups.query({});
     const matches = groups.filter((group) => group.title === name);

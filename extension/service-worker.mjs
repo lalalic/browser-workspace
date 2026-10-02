@@ -2,6 +2,7 @@ import { WorkspaceManager } from "./workspace-manager.mjs";
 
 const manager = new WorkspaceManager(chrome);
 const RECLAIM_ALARM = "browser-workspace.reclaim-stale";
+const closingWindowIds = new Set();
 
 chrome.alarms.create(RECLAIM_ALARM, { periodInMinutes: 5 });
 
@@ -97,6 +98,24 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
   manager.noteActivatedTab(activeInfo).catch((error) => {
     console.warn("Browser Workspace failed to record active tab context", error);
   });
+});
+
+chrome.tabs.onRemoved.addListener((_tabId, removeInfo) => {
+  if (!removeInfo?.isWindowClosing) return;
+  closingWindowIds.add(removeInfo.windowId);
+  setTimeout(() => closingWindowIds.delete(removeInfo.windowId), 1000);
+});
+
+chrome.tabGroups.onRemoved.addListener((group) => {
+  // Chrome also emits onRemoved while moving a group between windows, and
+  // while a whole window is closing. Defer one turn so a moved group can
+  // reappear, and preserve persisted workspaces across normal window closes.
+  setTimeout(() => {
+    if (closingWindowIds.has(group.windowId)) return;
+    manager.removeDeletedGroup(group).catch((error) => {
+      console.warn("Browser Workspace failed to remove deleted workspace", error);
+    });
+  }, 100);
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {

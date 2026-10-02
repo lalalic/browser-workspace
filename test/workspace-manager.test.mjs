@@ -234,6 +234,36 @@ test("delete rejects leased tabs unless forced and removes persisted workspace",
   );
 });
 
+test("Chrome group deletion removes the persisted workspace", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const workspace = await manager.create("Relay", 3);
+  await chrome.tabs.remove(workspace.tabIds);
+  chrome.__dropEmptyGroups();
+
+  assert.deepEqual(
+    await manager.removeDeletedGroup({ id: workspace.groupId, title: "Relay" }),
+    { name: "Relay", deleted: true },
+  );
+  assert.equal((await manager.status("Relay")).initialized, false);
+  assert.equal((await manager.list()).workspaces.length, 0);
+});
+
+test("Chrome group move does not remove persisted workspace", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const workspace = await manager.create("Relay", 3);
+  chrome.__moveGroup(workspace.groupId, 777);
+
+  assert.equal(
+    await manager.removeDeletedGroup({ id: workspace.groupId, title: "Relay" }),
+    null,
+  );
+  assert.equal((await manager.status("Relay")).initialized, true);
+});
+
 test("workspace identity survives groupId changes via unique group title", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);
