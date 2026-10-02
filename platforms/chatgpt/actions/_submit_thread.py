@@ -9,6 +9,7 @@ project_id=str(CFG.get("project_id") or "").strip()
 thread_id=str(CFG.get("thread_id") or "").strip()
 prompt=str(CFG.get("prompt") or "")
 files=list(CFG.get("file") or [])
+app_name=str(CFG.get("app") or "").strip()
 if not project_id or not thread_id: raise RuntimeError("project_id and thread_id are required")
 if not prompt and not files: raise RuntimeError("prompt or file is required")
 thread_url=f"https://chatgpt.com/g/{quote(project_id,safe='')}/c/{quote(thread_id,safe='')}"
@@ -40,6 +41,34 @@ def click_visible_send():
       if(!b||b.disabled||b.getAttribute('aria-disabled')==='true') return false;
       b.click(); return true;
     })()"""))
+
+def visible_composer_element_js():
+    return """(() => { const selectors=['#prompt-textarea','[contenteditable=\"true\"][data-composer-markdown]','[contenteditable=\"true\"][data-lexical-editor=\"true\"]','textarea']; const elements=[...new Set(selectors.flatMap(s=>[...document.querySelectorAll(s)]))]; return elements.find(node=>{const r=node.getBoundingClientRect();return !node.disabled&&r.width>0&&r.height>0})||null; })()"""
+
+def attach_app_and_restore_prompt(name, prompt, timeout=12):
+    if not name: return False
+    ok=js("""(() => { const selectors=['#prompt-textarea','[contenteditable=\"true\"][data-composer-markdown]','[contenteditable=\"true\"][data-lexical-editor=\"true\"]','textarea']; const els=[...new Set(selectors.flatMap(s=>[...document.querySelectorAll(s)]))]; const e=els.find(node=>{const r=node.getBoundingClientRect();return !node.disabled&&r.width>0&&r.height>0}); if(!e||e.getAttribute('contenteditable')!=='true') return false; e.focus(); const sel=window.getSelection(); const range=document.createRange(); range.selectNodeContents(e); sel.removeAllRanges(); sel.addRange(range); document.execCommand('delete',false,null); sel.removeAllRanges(); return true; })()""")
+    if not ok: raise RuntimeError("ChatGPT app mention requires a visible contenteditable composer")
+    session=cdp("Target.attachToTarget",targetId=target_id,flatten=True)["sessionId"]
+    cdp("Input.insertText",session_id=session,text="@")
+    wanted=name.lower()
+    deadline=time.time()+timeout
+    while time.time()<deadline:
+        clicked=js(f"""(() => {{ const wanted={json.dumps(wanted)}; const candidates=[...document.querySelectorAll('button,[role=\"option\"],[role=\"menuitem\"]')]; const e=candidates.find(node=>{{const text=(node.innerText||node.textContent||'').replace(/\\s+/g,'').trim().toLowerCase(); return text===wanted.replace(/\\s+/g,'') || text===(wanted+wanted).replace(/\\s+/g,'');}}); if(!e)return false;e.click();return true; }})()""")
+        if clicked: break
+        time.sleep(.1)
+    else: raise RuntimeError(f"ChatGPT app '{name}' was not offered by the composer")
+    deadline=time.time()+timeout
+    while time.time()<deadline:
+        attached=js(f"""(() => {{ const selectors=['#prompt-textarea','[contenteditable=\"true\"][data-composer-markdown]','[contenteditable=\"true\"][data-lexical-editor=\"true\"]']; const els=[...new Set(selectors.flatMap(s=>[...document.querySelectorAll(s)]))]; const e=els.find(node=>{{const r=node.getBoundingClientRect();return r.width>0&&r.height>0}}); return !!e && !![...e.querySelectorAll('[app-mention-name]')].find(n=>(n.getAttribute('app-mention-name')||'').toLowerCase()==={json.dumps(wanted)}); }})()""")
+        if attached: break
+        time.sleep(.1)
+    else: raise RuntimeError(f"ChatGPT app '{name}' mention did not attach")
+    for offset in range(0,len(prompt),256):
+        chunk=prompt[offset:offset+256]
+        inserted=js(f"""(() => {{ const selectors=['#prompt-textarea','[contenteditable=\"true\"][data-composer-markdown]','[contenteditable=\"true\"][data-lexical-editor=\"true\"]']; const els=[...new Set(selectors.flatMap(s=>[...document.querySelectorAll(s)]))]; const e=els.find(node=>{{const r=node.getBoundingClientRect();return r.width>0&&r.height>0}}); if(!e)return false;e.focus();const sel=window.getSelection();const range=document.createRange();range.selectNodeContents(e);range.collapse(false);sel.removeAllRanges();sel.addRange(range);const ok=document.execCommand('insertText',false,{json.dumps(chunk)});e.dispatchEvent(new InputEvent('input',{{bubbles:true,inputType:'insertText',data:{json.dumps(chunk)}}}));return ok; }})()""")
+        if not inserted: raise RuntimeError("ChatGPT composer rejected prompt after app mention")
+    return True
 
 def attachment_state():
     return js(r"""(() => { const names=[...document.querySelectorAll('button[aria-label^="Remove "]')].map(b => (b.getAttribute('aria-label')||'').replace(/^Remove file\s+\d+:\s*/,'').replace(/^Remove\s+/,'')).filter(Boolean); const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0}; const pending=[...document.querySelectorAll('[role="progressbar"],[aria-busy="true"],[data-state="loading"]')].some(visible); return {names,pending}; })()""") or {"names":[],"pending":False}
@@ -77,6 +106,9 @@ wait_until_stable(
     timeout=20,
     phase="prefilled thread readiness",
 )
+app_attached=attach_app_and_restore_prompt(app_name,prompt) if app_name else False
+if app_attached:
+    wait_until_stable(composer_state,lambda state: prompt_text_matches(state["text"],prompt),timeout=15,phase="app prompt readiness")
 attachments=upload_files(files)
 before_users=len(user_turns())
 wait_until_stable(
@@ -94,4 +126,4 @@ while time.time()<deadline:
     time.sleep(.1)
 if not receipt: raise RuntimeError("ChatGPT submission verification did not observe an accepted submission")
 
-print(json.dumps({"status":"submitted","project_id":project_id,"thread_id":thread_id,"verified_by":receipt["verified_by"],"user_message_id":receipt["turn"].get("id") or None},ensure_ascii=False),flush=True)
+print(json.dumps({"status":"submitted","project_id":project_id,"thread_id":thread_id,"verified_by":receipt["verified_by"],"user_message_id":receipt["turn"].get("id") or None,"app":app_name or None},ensure_ascii=False),flush=True)

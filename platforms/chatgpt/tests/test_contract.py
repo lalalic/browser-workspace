@@ -89,3 +89,4 @@ def test_submit_thread_is_submission_only():
     assert '?prompt=' in text
     assert 'submission_receipt' in text
     assert 'response_complete' not in text
+    assert "app_name" in text and "attach_app_and_restore_prompt" in text
