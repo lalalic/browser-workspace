@@ -12,7 +12,8 @@ def test_cli_exposes_session_lifecycle_and_platform_runner():
     assert "add_parser('platform')" in src
     assert "add_parser('run')" in src
     assert "--url" in src
-    for command in ("status", "tabs", "screenshot", "open"):
+    assert "add_parser('status')" in src
+    for command in ("tabs", "screenshot", "open", "workspace"):
         assert f"add_parser('{command}')" not in src
 
 
@@ -74,20 +75,17 @@ def test_skill_uses_installed_cli_path_for_npx_skills():
     assert "$BW_CLI platform run" in skill
 
 
-def test_hidden_workspace_lifecycle_commands():
+def test_workspace_lifecycle_is_product_admin_only():
     cli = (ROOT / "bin/browser-workspace").read_text()
     daemon = (ROOT / "session_daemon.py").read_text()
-    assert "sys.argv[1] == 'workspace'" in cli
-    assert "add_parser('workspace')" not in cli
-    assert "'op':'workspace-create'" in cli
-    assert "'op':'workspace-delete'" in cli
-    assert "def create_workspace(name, pool_size=5):" in daemon
-    assert "bh.workspace_create(name.strip(), size)" in daemon
-    assert "def delete_workspace(name, force=False):" in daemon
-    assert "bh.workspace_delete(name.strip(), bool(force))" in daemon
+    admin = (ROOT / "node/admin.mjs").read_text()
+    assert "sys.argv[1] == 'workspace'" not in cli
+    assert "'op':'workspace-create'" not in cli
+    assert "'op':'workspace-delete'" not in cli
+    assert "workspace-create" in admin
+    assert "workspace-delete" in admin
     assert "if op=='workspace-create'" in daemon
     assert "if op=='workspace-delete'" in daemon
-
 
 def test_npm_package_exposes_browser_workspace_bin_and_persistent_runtime():
     package = (ROOT / "package.json").read_text()
