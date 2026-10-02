@@ -47,6 +47,7 @@ def main():
     stop=ssp.add_parser('stop'); stop.add_argument('session_id')
     platform=sp.add_parser('platform'); psp=platform.add_subparsers(dest='pcmd',required=True)
     profile=psp.add_parser('profile'); profile.add_argument('platform')
+    source=psp.add_parser('source'); source.add_argument('platform'); source.add_argument('action'); source.add_argument('--config')
     run=psp.add_parser('run'); run.add_argument('platform'); run.add_argument('action'); run.add_argument('--config'); run.add_argument('--url')
     args=p.parse_args()
     if args.group=='session' and args.cmd=='start': emit(request({'op':'start','workspace':args.workspace,'url':args.url})); return
@@ -56,6 +57,10 @@ def main():
         else: p.error('session exec reads Python from stdin (use a heredoc) or --code-file')
         r=request({'op':'exec','session_id':args.session_id,'code':code}); emit(r); raise SystemExit(0 if r.get('ok',False) else 1)
     if args.group=='session' and args.cmd=='stop': emit(request({'op':'stop','session_id':args.session_id})); return
+    if args.group=='platform' and args.pcmd=='source':
+        from platform_runner import action_path, prepare_action
+        path=action_path(args.platform,args.action); config=Path(args.config) if args.config else None
+        sys.stdout.write(prepare_action(path,config)); return
     if args.group=='platform' and args.pcmd=='profile':
         from platform_runner import platform_profile
         emit(platform_profile(args.platform)); return

@@ -2,6 +2,7 @@ platform: chatgpt
 status: migrated_unverified
 last_verified: null
 actions:
+  temporary-submit: "actions/_temporary_submit.py"
   thread-turn: "actions/_thread_turn.py"
   project-setup: "actions/_project_setup.py"
   bootstrap-start: "actions/_bootstrap_start.py"
@@ -10,6 +11,7 @@ verification:
   last_verified: null
   evidence: "The source ChatGPT worker flow was previously live-verified, but the migrated Browser Workspace platform action has not yet been live-verified through the current generic platform runner."
 flows:
+  - disposable-worker-submit
   - existing-thread-turn
   - project-setup
 capabilities:
