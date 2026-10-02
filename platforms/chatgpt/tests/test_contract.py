@@ -7,6 +7,7 @@ ACTIONS = ROOT / "actions"
 def test_platform_files_exist():
     assert (ROOT / "manifest.yaml").is_file()
     assert (ACTIONS / "_thread_turn.py").is_file()
+    assert (ACTIONS / "_submit_thread.py").is_file()
     assert (ACTIONS / "_project_setup.py").is_file()
     assert (ACTIONS / "_bootstrap_start.py").is_file()
 
@@ -14,6 +15,7 @@ def test_platform_files_exist():
 def test_manifest_declares_actions_and_verification():
     text = (ROOT / "manifest.yaml").read_text()
     assert 'thread-turn: "actions/_thread_turn.py"' in text
+    assert 'submit-thread: "actions/_submit_thread.py"' in text
     assert "verification:" in text
     assert "status: migrated_unverified" in text
 
@@ -79,3 +81,11 @@ def test_wait_until_stable_retries_transient_read_errors():
     )
     assert result == {"ready": True}
     assert calls["n"] == 3
+
+
+def test_submit_thread_is_submission_only():
+    text=(ACTIONS/"_submit_thread.py").read_text()
+    assert 'project_id' in text and 'thread_id' in text
+    assert '?prompt=' in text
+    assert 'submission_receipt' in text
+    assert 'response_complete' not in text

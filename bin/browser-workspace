@@ -53,7 +53,7 @@ def main():
     platform=sp.add_parser('platform'); psp=platform.add_subparsers(dest='pcmd',required=True)
     profile=psp.add_parser('profile'); profile.add_argument('platform')
     source=psp.add_parser('source'); source.add_argument('platform'); source.add_argument('action'); source.add_argument('--config')
-    run=psp.add_parser('run'); run.add_argument('platform'); run.add_argument('action'); run.add_argument('--config'); run.add_argument('--url')
+    run=psp.add_parser('run'); run.add_argument('platform'); run.add_argument('action'); run.add_argument('--config'); run.add_argument('--url'); run.add_argument('--session-id')
     args=p.parse_args()
     if args.group=='session' and args.cmd=='start': emit(request({'op':'start','workspace':args.workspace,'url':args.url})); return
     if args.group=='session' and args.cmd=='exec':
@@ -70,5 +70,5 @@ def main():
         from platform_runner import platform_profile
         emit(platform_profile(args.platform)); return
     if args.group=='platform' and args.pcmd=='run':
-        r=run_platform_action(args.platform,args.action,config_path=args.config,url=args.url); emit(r); raise SystemExit(0 if (r.get('result') or {}).get('ok',False) else 1)
+        r=run_platform_action(args.platform,args.action,config_path=args.config,url=args.url,session_id=args.session_id); emit(r); raise SystemExit(0 if (r.get('result') or {}).get('ok',False) else 1)
 if __name__=='__main__': main()

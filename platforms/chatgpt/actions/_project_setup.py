@@ -325,5 +325,6 @@ print(json.dumps({
   "project_reused":project["reused"],
   "memory":memory_state["memory"],
   "thread_url":thread_url.split("?",1)[0],
+  "thread_id":urlsplit(thread_url).path.rstrip("/").rsplit("/",1)[-1],
   "target_id":target_id,
 },ensure_ascii=False),flush=True)

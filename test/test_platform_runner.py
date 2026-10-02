@@ -88,3 +88,17 @@ def test_helper_module_is_not_a_public_platform_action():
         assert "available:" in str(exc)
     else:
         raise AssertionError("helper module became a public platform action")
+
+
+def test_platform_runner_reuses_caller_owned_session(monkeypatch,tmp_path):
+    cfg=tmp_path/'config.json'; cfg.write_text('{"action":"status"}')
+    calls=[]
+    def fake_request(payload):
+        calls.append(payload)
+        if payload['op']=='exec': return {'ok':True,'stdout':'done\n','stderr':''}
+        raise AssertionError(payload)
+    monkeypatch.setattr(platform_runner,'request',fake_request)
+    result=platform_runner.run_platform_action('microsoft-teams','meeting',config_path=str(cfg),session_id='owned-session')
+    assert [c['op'] for c in calls]==['exec']
+    assert calls[0]['session_id']=='owned-session'
+    assert result['result']['cleanup']=={'caller_owned_session':True}

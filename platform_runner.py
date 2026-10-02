@@ -145,6 +145,7 @@ def run_platform_action(
     *,
     config_path: str | None = None,
     url: str | None = None,
+    session_id: str | None = None,
 ) -> dict:
     path = action_path(platform, action)
     config_file = Path(config_path) if config_path else None
@@ -155,7 +156,8 @@ def run_platform_action(
         validate_platform_config(platform, action, config)
     code = prepare_action(path, config_file)
 
-    started = request({"op": "start", "workspace": None, "url": url})
+    owned_session = not bool(session_id)
+    started = request({"op": "start", "workspace": None, "url": url}) if owned_session else {"session_id": session_id, "workspace_supported": None}
     sid = started["session_id"]
     result = None
     cleanup = None
@@ -173,10 +175,13 @@ def run_platform_action(
             output["extension_url"] = started.get("extension_url")
         return output
     finally:
-        try:
-            raw_cleanup = request({"op": "stop", "session_id": sid})
-            cleanup = {k: v for k, v in raw_cleanup.items() if k not in {"session_id", "workspace", "target_id"}}
-        except Exception as exc:
-            cleanup = {"release_error": f"{type(exc).__name__}: {exc}"}
+        if owned_session:
+            try:
+                raw_cleanup = request({"op": "stop", "session_id": sid})
+                cleanup = {k: v for k, v in raw_cleanup.items() if k not in {"session_id", "workspace", "target_id"}}
+            except Exception as exc:
+                cleanup = {"release_error": f"{type(exc).__name__}: {exc}"}
+        else:
+            cleanup = {"caller_owned_session": True}
         if result is not None:
             result["cleanup"] = cleanup

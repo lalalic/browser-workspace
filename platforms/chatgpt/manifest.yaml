@@ -2,6 +2,7 @@ platform: chatgpt
 status: migrated_unverified
 last_verified: null
 actions:
+  submit-thread: "actions/_submit_thread.py"
   temporary-submit: "actions/_temporary_submit.py"
   thread-turn: "actions/_thread_turn.py"
   project-setup: "actions/_project_setup.py"
