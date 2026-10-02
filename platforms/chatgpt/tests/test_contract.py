@@ -106,8 +106,8 @@ def test_mcp_app_action_uses_semantic_selectors_and_safe_operations():
     assert 'https://chatgpt.com/settings/plugins-settings' in text
     assert "APP_NAME" in text
     assert "text.startsWith(name+" in text
-    assert "texts.includes('Disconnect')" in text
-    assert "texts.includes('Permissions')" in text
+    assert "body.includes('Disconnect')" in text
+    assert "body.includes('Permissions')" in text
     assert "texts.includes('Refresh tools')" in text
     assert 'operation must be status, open, or refresh-tools' in text
     assert 'Delete app' not in text
