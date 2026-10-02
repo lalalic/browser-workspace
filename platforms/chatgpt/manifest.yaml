@@ -7,6 +7,7 @@ actions:
   thread-turn: "actions/_thread_turn.py"
   project-setup: "actions/_project_setup.py"
   bootstrap-start: "actions/_bootstrap_start.py"
+  mcp-app: "actions/_mcp_app.py"
 verification:
   status: migrated_unverified
   last_verified: null
@@ -15,6 +16,7 @@ flows:
   - disposable-worker-submit
   - existing-thread-turn
   - project-setup
+  - mcp-app-management
 capabilities:
   - persistent-thread
   - attachments
@@ -23,3 +25,5 @@ capabilities:
   - project-bootstrap
   - project-instructions
   - project-memory
+  - mcp-app-inspection
+  - mcp-tool-refresh

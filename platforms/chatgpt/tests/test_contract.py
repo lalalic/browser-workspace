@@ -10,6 +10,7 @@ def test_platform_files_exist():
     assert (ACTIONS / "_submit_thread.py").is_file()
     assert (ACTIONS / "_project_setup.py").is_file()
     assert (ACTIONS / "_bootstrap_start.py").is_file()
+    assert (ACTIONS / "_mcp_app.py").is_file()
 
 
 def test_manifest_declares_actions_and_verification():
@@ -90,3 +91,32 @@ def test_submit_thread_is_submission_only():
     assert 'submission_receipt' in text
     assert 'response_complete' not in text
     assert "app_name" in text and "attach_app_and_restore_prompt" in text
+
+
+def test_manifest_declares_mcp_app_action():
+    text = (ROOT / "manifest.yaml").read_text()
+    assert 'mcp-app: "actions/_mcp_app.py"' in text
+    assert "mcp-app-management" in text
+    assert "mcp-tool-refresh" in text
+
+
+def test_mcp_app_action_uses_semantic_selectors_and_safe_operations():
+    text = (ACTIONS / "_mcp_app.py").read_text()
+    assert 'Open profile menu' not in text  # direct settings route avoids profile-menu fragility
+    assert 'https://chatgpt.com/settings/plugins-settings' in text
+    assert "APP_NAME" in text
+    assert "text.startsWith(name+" in text
+    assert "texts.includes('Disconnect')" in text
+    assert "texts.includes('Permissions')" in text
+    assert "texts.includes('Refresh tools')" in text
+    assert 'operation must be status, open, or refresh-tools' in text
+    assert 'Delete app' not in text
+    assert 'Uninstall' in text  # observed only; never clicked
+
+
+def test_mcp_app_readme_captures_snapshot_first_setup_flow():
+    text = (ROOT / "README.md").read_text()
+    assert "Configure a custom MCP app" in text
+    assert "snapshot(interactive_only=False)" in text
+    assert "Permissions" in text and "Disconnect" in text and "Refresh tools" in text
+    assert "never commit credentials" in text
