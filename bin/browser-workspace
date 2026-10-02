@@ -8,44 +8,30 @@ if VENV_PY.exists() and Path(sys.executable).resolve()!=VENV_PY.resolve() and os
     env=dict(os.environ); env['BROWSER_WORKSPACE_VENV_REEXEC']='1'
     os.execve(str(VENV_PY),[str(VENV_PY),str(Path(__file__).resolve()),*sys.argv[1:]],env)
 sys.path.insert(0,str(ROOT))
-from session_client import request
+from session_client import SOCKET_PATH, ensure_daemon
 from platform_runner import run_platform_action
 
 def emit(x): print(json.dumps(x,ensure_ascii=False))
 
-def _workspace_command(argv):
-    if not argv:
-        raise SystemExit('usage: browser-workspace workspace {create,delete} ...')
-    cmd=argv[0]
-    if cmd=='create':
-        parser=argparse.ArgumentParser(prog='browser-workspace workspace create', add_help=False)
-        parser.add_argument('name')
-        parser.add_argument('--size', type=int, default=5)
-        args=parser.parse_args(argv[1:])
-        if args.size < 1:
-            parser.error('--size must be at least 1')
-        r=request({'op':'workspace-create','name':args.name,'pool_size':args.size})
-    elif cmd=='delete':
-        parser=argparse.ArgumentParser(prog='browser-workspace workspace delete', add_help=False)
-        parser.add_argument('name')
-        parser.add_argument('--force', action='store_true')
-        args=parser.parse_args(argv[1:])
-        r=request({'op':'workspace-delete','name':args.name,'force':args.force})
-    else:
-        raise SystemExit(f'unknown workspace command: {cmd}')
-    emit(r)
-    if r.get('error'):
-        raise SystemExit(1)
+def status():
+    daemon=ensure_daemon()
+    helper=(ROOT/'node'/'admin.mjs').resolve()
+    return {
+        'root': str(ROOT.resolve()),
+        'cli': str(Path(__file__).resolve()),
+        'admin_helper': str(helper),
+        'daemon': {
+            'running': bool(daemon and daemon.get('ok')),
+            'pid': daemon.get('pid') if daemon else None,
+            'session_count': daemon.get('session_count') if daemon else None,
+            'socket': str(SOCKET_PATH),
+        },
+    }
 
 def main():
-    # Hidden product-facing lifecycle group for product/runtime integrations.
-    # It is intentionally handled before argparse so normal agent help does not
-    # advertise workspace management commands.
-    if len(sys.argv) >= 2 and sys.argv[1] == 'workspace':
-        _workspace_command(sys.argv[2:])
-        return
     p=argparse.ArgumentParser(prog='browser-workspace')
     sp=p.add_subparsers(dest='group',required=True)
+    sp.add_parser('status')
     session=sp.add_parser('session'); ssp=session.add_subparsers(dest='cmd',required=True)
     start=ssp.add_parser('start'); start.add_argument('--workspace', help=argparse.SUPPRESS); start.add_argument('--url')
     ex=ssp.add_parser('exec'); ex.add_argument('session_id'); ex.add_argument('--code-file')
@@ -55,13 +41,19 @@ def main():
     source=psp.add_parser('source'); source.add_argument('platform'); source.add_argument('action'); source.add_argument('--config')
     run=psp.add_parser('run'); run.add_argument('platform'); run.add_argument('action'); run.add_argument('--config'); run.add_argument('--url'); run.add_argument('--session-id')
     args=p.parse_args()
-    if args.group=='session' and args.cmd=='start': emit(request({'op':'start','workspace':args.workspace,'url':args.url})); return
+    if args.group=='status': emit(status()); return
+    if args.group=='session' and args.cmd=='start':
+        from session_client import request
+        emit(request({'op':'start','workspace':args.workspace,'url':args.url})); return
     if args.group=='session' and args.cmd=='exec':
+        from session_client import request
         if args.code_file: code=Path(args.code_file).read_text()
         elif not sys.stdin.isatty(): code=sys.stdin.read()
         else: p.error('session exec reads Python from stdin (use a heredoc) or --code-file')
         r=request({'op':'exec','session_id':args.session_id,'code':code}); emit(r); raise SystemExit(0 if r.get('ok',False) else 1)
-    if args.group=='session' and args.cmd=='stop': emit(request({'op':'stop','session_id':args.session_id})); return
+    if args.group=='session' and args.cmd=='stop':
+        from session_client import request
+        emit(request({'op':'stop','session_id':args.session_id})); return
     if args.group=='platform' and args.pcmd=='source':
         from platform_runner import action_path, prepare_action
         path=action_path(args.platform,args.action); config=Path(args.config) if args.config else None

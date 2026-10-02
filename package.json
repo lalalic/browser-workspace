@@ -7,6 +7,7 @@
   },
   "files": [
     "bin/",
+    "node/",
     "src/",
     "agent-workspace/agent_helpers.py",
     "interaction-skills/",

@@ -13,6 +13,7 @@ When installed with `npx skills`, use the CLI from the skill itself; no separate
 
 ```bash
 BW_CLI="$HOME/.agents/skills/browser-workspace/bin/browser-workspace"
+$BW_CLI status
 ```
 
 On first use, Browser Workspace bootstraps its own `.venv` automatically.
@@ -61,7 +62,7 @@ Default workspace is `Harness`:
 $BW_CLI session start
 ```
 
-Normal agents do not choose a workspace. `session start` defaults to `Harness`; the `--workspace` implementation option is hidden from normal CLI help. Product integrations such as Family Tutor or Agents Relay may set an explicit workspace in their own code/config when isolation is a product requirement.
+Normal agents do not choose or manage workspaces. `session start` defaults to `Harness`; the `--workspace` implementation option is hidden from normal CLI help. Workspace lifecycle is not exposed through the agent CLI. Product runtimes that need persistent isolation discover the product-only Node admin helper with `browser-workspace status`, then call `ensureWorkspace` / `deleteWorkspace` through that helper.
 
 Start directly at a URL when known:
 

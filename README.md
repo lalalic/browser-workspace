@@ -71,73 +71,57 @@ The internal browser-control core is forked from `browser-use/browser-harness`. 
 
 ## Product-owned workspaces
 
-Normal browser automation uses the default `Harness` workspace. Products that need isolated browser capacity—such as Agents Relay or Family Tutor—may explicitly configure and use their own workspace.
+Normal browser automation uses the default `Harness` workspace. Ordinary agents manage browser sessions only; they do not create, resize, or delete workspaces. Workspace lifecycle belongs to product runtimes such as Agents Relay or NeoY.
 
-These integration commands are intentionally **hidden from normal agent help**. They are for product/runtime code, not for ordinary browsing decisions.
-
-### Create or configure a workspace
+Products discover the installed Browser Workspace instance with:
 
 ```bash
-browser-workspace workspace create <name> [--size N]
-browser-workspace workspace delete <name> [--force]
+browser-workspace status
 ```
 
-Examples:
+The command returns machine-readable JSON including the resolved installation `root`, absolute `admin_helper` path, and daemon status. Calling `status` also ensures the existing Browser Workspace session daemon is ready; it does not create a separate service.
 
-```bash
-browser-workspace workspace create "Agents Relay"
-browser-workspace workspace create "Agents Relay" --size 6
-browser-workspace workspace delete "Agents Relay"
-```
-
-`create` is idempotent:
-
-- if the workspace does not exist, it is created;
-- if it already exists with the same size, it is kept;
-- if it already exists with a different size, its capacity is updated.
-
-The size is the maximum concurrent workspace lease capacity. The physical tab pool grows lazily up to that limit; configuring size `6` does not eagerly create six tabs.
-
-The command returns JSON suitable for Node.js or other product runtimes:
-
-```json
-{
-  "name": "Agents Relay",
-  "poolSize": 6,
-  "maxCapacity": 6,
-  "initialized": true,
-  "workspace_supported": true
-}
-```
-
-A Node.js service can run this during startup, for example:
+A Node.js product can then load the product-only helper without depending on the `browser-workspace` npm package or hardcoding an install path:
 
 ```js
-execFileSync(browserWorkspaceCli, ["workspace", "create", "Agents Relay", "--size", "6"]);
+import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+
+const status = JSON.parse(
+  execFileSync("browser-workspace", ["status"], { encoding: "utf8" })
+);
+const { ensureWorkspace, deleteWorkspace } =
+  await import(pathToFileURL(status.admin_helper).href);
+
+await ensureWorkspace("Relay", 6);
+// later, if the product owns and no longer needs it:
+await deleteWorkspace("Relay", { force: true });
 ```
+
+`ensureWorkspace(name, size)` is idempotent: it creates a missing workspace, keeps one with the same capacity, and reconfigures an existing workspace when the requested size changes. The physical tab pool still grows lazily up to that capacity. `deleteWorkspace(name, { force })` removes the workspace through the existing daemon/extension RPC path.
+
+There is intentionally no `browser-workspace workspace create/delete` CLI. Workspace lifecycle is a product API, not an agent command.
 
 ### Start a session in a product-owned workspace
 
-```bash
-browser-workspace session start --workspace <name> [--url URL]
-```
-
-Example:
+`--workspace` remains an internal integration option for product code:
 
 ```bash
-browser-workspace session start --workspace "Agents Relay" --url https://example.com
+browser-workspace session start --workspace "Relay" --url https://example.com
 ```
 
-`--workspace` is also intentionally hidden from normal CLI help. Product code owns the workspace choice; platform actions remain unaware of workspace/session policy.
+It is hidden from normal CLI help. Product code owns the workspace choice; platform actions remain unaware of workspace/session policy.
 
 Recommended product lifecycle:
 
 ```text
 product startup
-  -> browser-workspace workspace create "Agents Relay" --size 6
+  -> browser-workspace status
+  -> import status.admin_helper
+  -> ensureWorkspace("Relay", 6)
 
 browser task
-  -> browser-workspace session start --workspace "Agents Relay"
+  -> browser-workspace session start --workspace "Relay"
   -> browser-workspace session exec <session_id>
   -> browser-workspace session stop <session_id>
 ```
