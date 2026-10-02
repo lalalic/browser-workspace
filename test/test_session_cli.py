@@ -74,16 +74,19 @@ def test_skill_uses_installed_cli_path_for_npx_skills():
     assert "$BW_CLI platform run" in skill
 
 
-def test_hidden_workspace_create_command():
+def test_hidden_workspace_lifecycle_commands():
     cli = (ROOT / "bin/browser-workspace").read_text()
     daemon = (ROOT / "session_daemon.py").read_text()
-    assert "sys.argv[1] == 'create'" in cli
-    assert "usage: browser-workspace create <name> [size=5]" in cli
-    assert "add_parser('create')" not in cli
+    assert "sys.argv[1] == 'workspace'" in cli
+    assert "add_parser('workspace')" not in cli
     assert "'op':'workspace-create'" in cli
+    assert "'op':'workspace-delete'" in cli
     assert "def create_workspace(name, pool_size=5):" in daemon
     assert "bh.workspace_create(name.strip(), size)" in daemon
+    assert "def delete_workspace(name, force=False):" in daemon
+    assert "bh.workspace_delete(name.strip(), bool(force))" in daemon
     assert "if op=='workspace-create'" in daemon
+    assert "if op=='workspace-delete'" in daemon
 
 
 def test_npm_package_exposes_browser_workspace_bin_and_persistent_runtime():
