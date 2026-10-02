@@ -3,7 +3,7 @@ import os
 import re
 import time
 from urllib.parse import urlsplit
-from _readiness import wait_until_stable, submission_receipt
+from _readiness import wait_until_stable, submission_receipt, prompt_text_matches
 
 
 CFG = json.load(open("__CFG_PATH__", encoding="utf-8"))
