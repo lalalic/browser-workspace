@@ -214,6 +214,12 @@ def create_workspace(name, pool_size=5):
         'workspace_supported': True,
     }
 
+def delete_workspace(name, force=False):
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError('workspace name must be a non-empty string')
+    with BROWSER_LOCK:
+        return bh.workspace_delete(name.strip(), bool(force))
+
 def handle(req):
     op=req.get('op')
     if op=='ping': return {'ok':True,'pid':os.getpid(),'session_count':len(SESSIONS)}
@@ -221,6 +227,7 @@ def handle(req):
     if op=='exec': return exec_session(req['session_id'],req.get('code',''))
     if op=='stop': return stop_session(req['session_id'])
     if op=='workspace-create': return create_workspace(req['name'], req.get('pool_size', 5))
+    if op=='workspace-delete': return delete_workspace(req['name'], req.get('force', False))
     raise ValueError(f'unknown op: {op}')
 
 def serve_conn(conn):

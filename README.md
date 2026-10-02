@@ -78,14 +78,16 @@ These integration commands are intentionally **hidden from normal agent help**. 
 ### Create or configure a workspace
 
 ```bash
-browser-workspace create <name> [size=5]
+browser-workspace workspace create <name> [--size N]
+browser-workspace workspace delete <name> [--force]
 ```
 
 Examples:
 
 ```bash
-browser-workspace create "Agents Relay"
-browser-workspace create "Agents Relay" 6
+browser-workspace workspace create "Agents Relay"
+browser-workspace workspace create "Agents Relay" --size 6
+browser-workspace workspace delete "Agents Relay"
 ```
 
 `create` is idempotent:
@@ -111,7 +113,7 @@ The command returns JSON suitable for Node.js or other product runtimes:
 A Node.js service can run this during startup, for example:
 
 ```js
-execFileSync(browserWorkspaceCli, ["create", "Agents Relay", "6"]);
+execFileSync(browserWorkspaceCli, ["workspace", "create", "Agents Relay", "--size", "6"]);
 ```
 
 ### Start a session in a product-owned workspace
@@ -132,7 +134,7 @@ Recommended product lifecycle:
 
 ```text
 product startup
-  -> browser-workspace create "Agents Relay" 6
+  -> browser-workspace workspace create "Agents Relay" --size 6
 
 browser task
   -> browser-workspace session start --workspace "Agents Relay"

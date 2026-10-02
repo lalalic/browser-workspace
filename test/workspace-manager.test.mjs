@@ -200,6 +200,40 @@ test("multiple workspaces have independent exact pool sizes", async () => {
   assert.equal(resized.tabIds.length, 1);
 });
 
+test("create is idempotent and resizes an existing workspace", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const initial = await manager.create("Relay", 3);
+  const same = await manager.create("Relay", 3);
+  const resized = await manager.create("Relay", 6);
+
+  assert.equal(initial.groupId, same.groupId);
+  assert.equal(resized.groupId, initial.groupId);
+  assert.equal(resized.poolSize, 6);
+  assert.equal(resized.maxCapacity, 6);
+});
+
+test("delete rejects leased tabs unless forced and removes persisted workspace", async () => {
+  const chrome = fakeChrome();
+  const manager = new WorkspaceManager(chrome);
+
+  const leased = await manager.acquire("Relay", "https://example.com/");
+  await assert.rejects(
+    () => manager.delete("Relay"),
+    /has 1 leased tabs/,
+  );
+
+  const deleted = await manager.delete("Relay", true);
+  assert.deepEqual(deleted, { name: "Relay", deleted: true });
+  assert.equal((await manager.status("Relay")).initialized, false);
+  assert.equal((await manager.list()).workspaces.length, 0);
+  await assert.rejects(
+    () => chrome.tabs.get(leased.tabId),
+    /Unknown tab/,
+  );
+});
+
 test("workspace identity survives groupId changes via unique group title", async () => {
   const chrome = fakeChrome();
   const manager = new WorkspaceManager(chrome);
