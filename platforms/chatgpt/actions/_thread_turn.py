@@ -18,12 +18,12 @@ def _composer():
       ];
       for (const selector of selectors) {
         const e=document.querySelector(selector);
-        if (!e || e.id === 'pending-home-input' || e.disabled) continue;
+        if (!e || ['pending-home-input','pending-conversation-input'].includes(e.id) || e.disabled) continue;
         const r=e.getBoundingClientRect();
         if (r.width>0 && r.height>0) return selector;
       }
       const visible=[...document.querySelectorAll('[contenteditable="true"]')].filter(e => {
-        if (e.id === 'pending-home-input' || e.disabled) return false;
+        if (['pending-home-input','pending-conversation-input'].includes(e.id) || e.disabled) return false;
         const r=e.getBoundingClientRect();
         return r.width>0 && r.height>0;
       });
