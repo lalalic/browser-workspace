@@ -58,3 +58,24 @@ def test_prompt_match_tolerates_block_tag_boundary_whitespace():
     expected = '<FAMILY_TUTOR_CONTEXT>\n{"type":"kid","data":{"message":"hello world"}}\n</FAMILY_TUTOR_CONTEXT>'
     observed = '<FAMILY_TUTOR_CONTEXT>{"type":"kid","data":{"message":"hello world"}}</FAMILY_TUTOR_CONTEXT>'
     assert ns["prompt_text_matches"](observed, expected)
+
+
+def test_wait_until_stable_retries_transient_read_errors():
+    ns = {}
+    exec((ACTIONS / "_readiness.py").read_text(), ns)
+    calls = {"n": 0}
+    def read_state():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("not hydrated")
+        return {"ready": True}
+    result = ns["wait_until_stable"](
+        read_state,
+        lambda state: state.get("ready") is True,
+        timeout=0.2,
+        interval=0.001,
+        stable_samples=1,
+        phase="test",
+    )
+    assert result == {"ready": True}
+    assert calls["n"] == 3

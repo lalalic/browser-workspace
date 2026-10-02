@@ -9,7 +9,12 @@ def wait_until_stable(read_state, ready, *, timeout, interval=0.25, stable_sampl
     stable = 0
     last_state = {}
     while time.monotonic() < deadline:
-        last_state = read_state()
+        try:
+            last_state = read_state()
+        except Exception:
+            stable = 0
+            time.sleep(interval)
+            continue
         if ready(last_state):
             stable += 1
             if stable >= stable_samples:
