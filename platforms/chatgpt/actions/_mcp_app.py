@@ -42,15 +42,16 @@ def open_app():
     }})()""")
     if not ok:
         raise RuntimeError(f"installed ChatGPT plugin not found: {APP_NAME}")
-    wait_until(lambda: js(f"document.querySelector('h1')?.innerText?.trim()==={json.dumps(APP_NAME)}"), "plugin detail page")
+    wait_until(lambda: js("document.body?.innerText?.includes('Refresh tools') || document.body?.innerText?.includes('Disconnect')"), "plugin detail controls")
 
 
 def detail_state():
     return js("""(() => {
+      const body=(document.body?.innerText||'');
       const texts=Array.from(document.querySelectorAll('button,a')).map(el=>(el.innerText||el.getAttribute('aria-label')||'').trim()).filter(Boolean);
       return {
-        connected:texts.includes('Disconnect'),
-        permissions:texts.includes('Permissions'),
+        connected:body.includes('Disconnect'),
+        permissions:body.includes('Permissions'),
         refresh_tools:texts.includes('Refresh tools'),
         editable:texts.includes('Edit'),
         uninstallable:texts.includes('Uninstall'),
@@ -74,5 +75,6 @@ if OP == "refresh-tools":
         raise RuntimeError("Refresh tools control is unavailable")
     time.sleep(0.5)
 
+wait_until(lambda: js("document.body?.innerText?.includes('Refresh tools') || document.body?.innerText?.includes('Disconnect')"), "plugin detail hydration")
 state = detail_state()
 print(json.dumps({"app_name": APP_NAME, "operation": OP, **state}, ensure_ascii=False), flush=True)
