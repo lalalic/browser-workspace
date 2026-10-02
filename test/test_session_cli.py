@@ -56,6 +56,7 @@ def test_session_tracks_all_created_tabs_for_cleanup():
     assert "self.namespace['cdp']=self._cdp" in src
     assert "def absorb_owned_children(session):" in src
     assert "info.get('openerId')" in src
+    assert "bh.close_tab(tid)" in src
     assert "bh.cdp('Target.closeTarget', targetId=tid)" in src
     assert "'closed_tabs':closed_count" in src
 
