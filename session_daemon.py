@@ -173,7 +173,19 @@ def close_owned_tabs(session):
         targets=leaves or owned_live
         for tid in targets:
             try:
-                bh.cdp('Target.closeTarget', targetId=tid)
+                if session.workspace_supported:
+                    try:
+                        # Workspace-owned session tabs are leases. Release them back
+                        # to the persistent pool instead of destroying the Chrome tab
+                        # group when the final leased tab is stopped. Popup/child
+                        # targets that are outside the workspace are still closed.
+                        bh.close_tab(tid)
+                    except RuntimeError as exc:
+                        if 'outside workspace' not in str(exc):
+                            raise
+                        bh.cdp('Target.closeTarget', targetId=tid)
+                else:
+                    bh.cdp('Target.closeTarget', targetId=tid)
             except Exception as exc:
                 errors.append(f'{tid}: {type(exc).__name__}: {exc}')
             finally:
