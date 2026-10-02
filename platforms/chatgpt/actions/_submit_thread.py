@@ -15,19 +15,35 @@ thread_url=f"https://chatgpt.com/g/{quote(project_id,safe='')}/c/{quote(thread_i
 goto_url(thread_url+"?prompt="+quote(prompt,safe=''))
 wait_for_load()
 
-def composer():
-    selector=js("""(() => { for(const s of ['#prompt-textarea','[contenteditable="true"][data-composer-markdown]','[contenteditable="true"][data-lexical-editor="true"]','textarea']){ const e=document.querySelector(s); if(!e||e.disabled) continue; const r=e.getBoundingClientRect(); if(r.width>0&&r.height>0) return s; } return null; })()""")
-    if not selector: raise RuntimeError("ChatGPT composer was not observed")
-    return selector
+def composer_state():
+    return js("""(() => {
+      const selectors=['#prompt-textarea','[contenteditable="true"][data-composer-markdown]','[contenteditable="true"][data-lexical-editor="true"]','textarea'];
+      const elements=[...new Set(selectors.flatMap(s=>[...document.querySelectorAll(s)]))];
+      const e=elements.find(node=>{const r=node.getBoundingClientRect();return !node.disabled&&r.width>0&&r.height>0});
+      if(!e) return {present:false,text:'',sendEnabled:false};
+      const form=e.closest('form');
+      const b=form?.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"]');
+      return {present:true,text:(e.innerText||e.value||e.textContent||'').trim(),sendEnabled:!!b&&!b.disabled&&b.getAttribute('aria-disabled')!=='true'};
+    })()""") or {"present":False,"text":"","sendEnabled":False}
 
-def composer_text(selector):
-    return js(f"""(() => {{ const e=document.querySelector({json.dumps(selector)}); return e ? ((e.innerText||e.value||e.textContent||'').trim()) : ''; }})()""") or ""
+def visible_composer_text():
+    return composer_state().get("text","")
+
+def click_visible_send():
+    return bool(js("""(() => {
+      const selectors=['#prompt-textarea','[contenteditable="true"][data-composer-markdown]','[contenteditable="true"][data-lexical-editor="true"]','textarea'];
+      const elements=[...new Set(selectors.flatMap(s=>[...document.querySelectorAll(s)]))];
+      const e=elements.find(node=>{const r=node.getBoundingClientRect();return !node.disabled&&r.width>0&&r.height>0});
+      if(!e) return false;
+      const form=e.closest('form');
+      const b=form?.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"]');
+      if(!b||b.disabled||b.getAttribute('aria-disabled')==='true') return false;
+      b.click(); return true;
+    })()"""))
 
 def attachment_state():
     return js(r"""(() => { const names=[...document.querySelectorAll('button[aria-label^="Remove "]')].map(b => (b.getAttribute('aria-label')||'').replace(/^Remove file\s+\d+:\s*/,'').replace(/^Remove\s+/,'')).filter(Boolean); const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0}; const pending=[...document.querySelectorAll('[role="progressbar"],[aria-busy="true"],[data-state="loading"]')].some(visible); return {names,pending}; })()""") or {"names":[],"pending":False}
 
-def send_state():
-    return js("""(() => { const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"]'); return {enabled:!!b&&!b.disabled&&b.getAttribute('aria-disabled')!=='true'}; })()""") or {"enabled":False}
 
 def user_turns():
     return js("""(() => { const legacy=[...document.querySelectorAll('[data-message-author-role="user"]')].map(e=>({text:(e.innerText||'').trim(),id:e.getAttribute('data-message-id')||''})).filter(x=>x.text); if(legacy.length) return legacy; return [...document.querySelectorAll('h4')].filter(e=>(e.innerText||'').trim()==='You said:').map((e,index)=>({text:(e.parentElement?.innerText||'').replace(/^You said:\\s*/,'').trim(),id:`dom-user-${index}`})).filter(x=>x.text); })()""") or []
@@ -49,24 +65,33 @@ def upload_files(paths):
     wait_until_stable(attachment_state,lambda state:set(expected).issubset(state["names"]) and not state["pending"],timeout=120,phase="attachment readiness")
     return expected
 
-selector=wait_until_stable(
-    lambda: js("""(() => { for(const s of ['#prompt-textarea','[contenteditable="true"][data-composer-markdown]','[contenteditable="true"][data-lexical-editor="true"]','textarea']){ const e=document.querySelector(s); if(!e||e.disabled) continue; const r=e.getBoundingClientRect(); if(r.width>0&&r.height>0) return s; } return null; })()"""),
-    lambda value: bool(value),
+wait_until_stable(
+    composer_state,
+    lambda state: state["present"],
     timeout=20,
     phase="composer readiness",
 )
-wait_until_stable(lambda:{"text":composer_text(selector),"send":send_state()},lambda s:prompt_text_matches(s["text"],prompt),timeout=20,phase="prefilled thread readiness")
+wait_until_stable(
+    composer_state,
+    lambda state: prompt_text_matches(state["text"],prompt),
+    timeout=20,
+    phase="prefilled thread readiness",
+)
 attachments=upload_files(files)
 before_users=len(user_turns())
-wait_until_stable(lambda:{"text":composer_text(composer()),"attachments":attachment_state(),"send":send_state()},lambda s:prompt_text_matches(s["text"],prompt) and set(attachments).issubset(s["attachments"]["names"]) and not s["attachments"]["pending"] and s["send"]["enabled"],timeout=45 if attachments else 20,phase="send readiness")
-selector=composer()
-clicked=js("""(() => { const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"]'); if(!b||b.disabled||b.getAttribute('aria-disabled')==='true') return false; b.click(); return true; })()""")
-if not clicked: raise RuntimeError("ChatGPT send button changed before click")
+wait_until_stable(
+    lambda:{"composer":composer_state(),"attachments":attachment_state()},
+    lambda state: prompt_text_matches(state["composer"]["text"],prompt) and set(attachments).issubset(state["attachments"]["names"]) and not state["attachments"]["pending"] and state["composer"]["sendEnabled"],
+    timeout=45 if attachments else 20,
+    phase="send readiness",
+)
+if not click_visible_send(): raise RuntimeError("ChatGPT send button changed before click")
 deadline=time.time()+15
 receipt=None
 while time.time()<deadline:
-    receipt=submission_receipt(user_turns(),before_users,prompt,composer_text(selector))
+    receipt=submission_receipt(user_turns(),before_users,prompt,visible_composer_text())
     if receipt: break
     time.sleep(.1)
 if not receipt: raise RuntimeError("ChatGPT submission verification did not observe an accepted submission")
+
 print(json.dumps({"status":"submitted","project_id":project_id,"thread_id":thread_id,"verified_by":receipt["verified_by"],"user_message_id":receipt["turn"].get("id") or None},ensure_ascii=False),flush=True)
