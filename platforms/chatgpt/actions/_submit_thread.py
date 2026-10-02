@@ -49,8 +49,13 @@ def upload_files(paths):
     wait_until_stable(attachment_state,lambda state:set(expected).issubset(state["names"]) and not state["pending"],timeout=120,phase="attachment readiness")
     return expected
 
-selector=composer()
-wait_until_stable(lambda:{"text":composer_text(composer()),"send":send_state()},lambda s:prompt_text_matches(s["text"],prompt) and (not files or True),timeout=20,phase="prefilled thread readiness")
+selector=wait_until_stable(
+    lambda: js("""(() => { for(const s of ['#prompt-textarea','[contenteditable="true"][data-composer-markdown]','[contenteditable="true"][data-lexical-editor="true"]','textarea']){ const e=document.querySelector(s); if(!e||e.disabled) continue; const r=e.getBoundingClientRect(); if(r.width>0&&r.height>0) return s; } return null; })()"""),
+    lambda value: bool(value),
+    timeout=20,
+    phase="composer readiness",
+)
+wait_until_stable(lambda:{"text":composer_text(selector),"send":send_state()},lambda s:prompt_text_matches(s["text"],prompt),timeout=20,phase="prefilled thread readiness")
 attachments=upload_files(files)
 before_users=len(user_turns())
 wait_until_stable(lambda:{"text":composer_text(composer()),"attachments":attachment_state(),"send":send_state()},lambda s:prompt_text_matches(s["text"],prompt) and set(attachments).issubset(s["attachments"]["names"]) and not s["attachments"]["pending"] and s["send"]["enabled"],timeout=45 if attachments else 20,phase="send readiness")
