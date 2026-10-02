@@ -35,7 +35,7 @@ for (const platform of platforms) {
   }
 
   const actionsBlock = manifest.match(/actions:\s*\n([\s\S]*?)(?=^[A-Za-z_][\w-]*:\s*$|^[A-Za-z_][\w-]*:\s*[^\s]|\Z)/m)?.[1] || "";
-  const actionPaths = [...actionsBlock.matchAll(/^\s{2}[\w-]+:\s*["']([^"']+)["']\s*$/gm)].map((m) => m[1]);
+  const actionPaths = [...actionsBlock.matchAll(/^\s{2}[\w-]+:\s*["']?([^"'\s]+)["']?\s*$/gm)].map((m) => m[1]);
   if (actionPaths.length === 0) throw new Error(`${platform}/manifest.yaml has no declared actions`);
 
   for (const relative of actionPaths) {

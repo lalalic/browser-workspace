@@ -2,20 +2,117 @@ platform: wechat-channels
 status: migrated_unverified
 last_verified: null
 actions:
-  post: "actions/_post.py"
-  manage: "actions/_manage.py"
+  post: actions/_post.py
+  manage: actions/_manage.py
 verification:
   status: migrated_unverified
   last_verified: null
-  evidence: "Existing post/shadow-DOM and manager mechanics migrated from the working post adapter. Current Browser Workspace live verification pending."
+  evidence: Existing post/shadow-DOM and manager mechanics migrated from the working
+    post adapter. Current Browser Workspace live verification pending.
 url_patterns:
-  - "https://channels.weixin.qq.com/*"
+- https://channels.weixin.qq.com/*
 authentication:
   required: true
-  notes: "Use the caller's authenticated browser context; never store credentials."
+  notes: Use the caller's authenticated browser context; never store credentials.
 provenance:
-  source: "skills/post/scripts/platforms/wechat-channels"
+  source: skills/post/scripts/platforms/wechat-channels
   migrated_code: true
 flows:
-  post: {status: migrated_unverified, evidence: "Migrated action; current Browser Workspace live verification pending."}
-  manage: {status: migrated_unverified, evidence: "Migrated manager action; current Browser Workspace live verification pending."}
+  post:
+    status: migrated_unverified
+    evidence: Migrated action; current Browser Workspace live verification pending.
+  manage:
+    status: migrated_unverified
+    evidence: Migrated manager action; current Browser Workspace live verification
+      pending.
+display_name: WeChat Channels
+aliases:
+- wechat
+- channels
+implementation_status: code_only_live_ui_unverified
+media:
+  modes:
+  - video
+  video:
+    required: true
+    formats:
+    - mp4
+    codec_hint: H.264
+    max_size_gb: 20
+    max_duration_hours: 8
+fields:
+  desc:
+    cli: --desc
+    required: true
+    type: string
+    max_chars: 1000
+    implemented: true
+  title:
+    cli: --title
+    required: false
+    type: string
+    min_chars: 6
+    max_chars: 16
+    implemented: true
+    meaning: short title
+  tags:
+    cli: --tags
+    required: false
+    type: string_list
+    implemented: true
+    render: 'append as #tag'
+  publish:
+    cli: --publish
+    required: false
+    type: boolean
+    default: false
+    implemented: true
+  draft:
+    cli: --draft
+    required: false
+    type: boolean
+    default: true
+    implemented: true
+    note: default behavior already saves draft when --publish is absent
+  status:
+    cli: status
+    required: false
+    type: operation
+    implemented: true
+    verified: false
+    target_fields:
+    - post_id
+    - title
+    - desc
+    values:
+    - published
+    - reviewing
+    - rejected
+    - draft
+    - unknown
+    - not_found
+capabilities:
+  draft: true
+  publish: true
+  visibility: false
+  custom_thumbnail: false
+  post_status: true
+  update_post: false
+  read_comments: false
+  write_comment: false
+  reply_comments: false
+content_mapping:
+  headline: title
+  main_text: desc
+  discovery_terms: tags
+notes:
+- The adapter reuses one existing channels.weixin.qq.com tab and creates one only
+  when none exists.
+- After submit/draft, the adapter inspects the creator manager and returns structured
+  status JSON.
+- The manager probe is semantic but this implementation run could not verify the live
+  creator UI; unknown/not_found must be treated as authoritative uncertainty.
+- An uncertain submit is not retried automatically; run status and inspect manager
+  state before any deliberate retry.
+- Update/edit, comment reading, comments, and replies are intentionally unimplemented
+  until their exact creator UI is observed.

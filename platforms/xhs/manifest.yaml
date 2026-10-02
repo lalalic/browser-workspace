@@ -2,20 +2,97 @@ platform: xhs
 status: migrated_unverified
 last_verified: null
 actions:
-  post: "actions/_post.py"
-  manage: "actions/_manage.py"
+  post: actions/_post.py
+  manage: actions/_manage.py
 verification:
   status: migrated_unverified
   last_verified: null
-  evidence: "Existing post and creator-manager mechanics migrated from the working post adapter. Current Browser Workspace live verification pending."
+  evidence: Existing post and creator-manager mechanics migrated from the working
+    post adapter. Current Browser Workspace live verification pending.
 url_patterns:
-  - "https://creator.xiaohongshu.com/*"
+- https://creator.xiaohongshu.com/*
 authentication:
   required: true
-  notes: "Use the caller's authenticated browser context; never store credentials."
+  notes: Use the caller's authenticated browser context; never store credentials.
 provenance:
-  source: "skills/post/scripts/platforms/xhs"
+  source: skills/post/scripts/platforms/xhs
   migrated_code: true
 flows:
-  post: {status: migrated_unverified, evidence: "Migrated action; current Browser Workspace live verification pending."}
-  manage: {status: migrated_unverified, evidence: "Migrated manager action; current Browser Workspace live verification pending."}
+  post:
+    status: migrated_unverified
+    evidence: Migrated action; current Browser Workspace live verification pending.
+  manage:
+    status: migrated_unverified
+    evidence: Migrated manager action; current Browser Workspace live verification
+      pending.
+display_name: Xiaohongshu
+aliases:
+- xiaohongshu
+media:
+  modes:
+  - video
+  - images
+  video:
+    required_when_mode: video
+    formats:
+    - mp4
+  images:
+    required_when_mode: images
+    formats:
+    - jpg
+    - png
+    - webp
+    max_count: 18
+  mutually_exclusive:
+  - video
+  - images
+fields:
+  title:
+    cli: --title
+    required: true
+    type: string
+    max_chars: 20
+    implemented: true
+  body:
+    cli: --body
+    required: true
+    type: string
+    max_chars: 1000
+    implemented: true
+  tags:
+    cli: --tags
+    required: false
+    type: string_list
+    max_count: 5
+    implemented: true
+    render: 'append as #tag'
+  publish:
+    cli: --publish
+    required: false
+    type: boolean
+    default: false
+    implemented: true
+capabilities:
+  draft: true
+  publish: true
+  visibility: false
+  custom_thumbnail: false
+  series_or_collection: false
+  post_status: true
+  read_comments: true
+  write_comment: true
+  reply_comments: true
+content_mapping:
+  headline: title
+  main_text: body
+  discovery_terms: tags
+notes:
+- Without --publish, the adapter saves a draft.
+- After --publish, the XHS adapter automatically verifies the created note in creator
+  note manager and reports published/reviewing/rejected state.
+- comments/comment/reply resolve the post from the signed-in My Posts profile list
+  and use that card's live xsec detail route.
+- The opened post detail view is the canonical place to read comments, write a top-level
+  comment, and reply to comments.
+- The current adapter does not expose the Neo Vlog collection/series field even though
+  a prior manual browser-harness session created and attached a collection.

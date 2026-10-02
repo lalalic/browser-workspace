@@ -1,13 +1,89 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
+
+import yaml
 
 from session_client import request
 
 ROOT = Path(__file__).resolve().parent
 PLATFORMS = ROOT / "platforms"
+
+
+def platform_manifest(platform: str) -> dict:
+    platform = platform.strip()
+    manifest = PLATFORMS / platform / "manifest.yaml"
+    if not manifest.is_file():
+        raise FileNotFoundError(f"unknown platform: {platform}")
+    data = yaml.safe_load(manifest.read_text())
+    if not isinstance(data, dict):
+        raise ValueError(f"invalid platform manifest: {platform}")
+    return data
+
+
+def platform_profile(platform: str) -> dict:
+    data = platform_manifest(platform)
+    keys = (
+        "platform", "display_name", "aliases", "implementation_status",
+        "media", "fields", "capabilities", "content_mapping", "notes",
+    )
+    return {key: data[key] for key in keys if key in data}
+
+
+def _validate_string(name: str, value, spec: dict) -> None:
+    if value is None:
+        return
+    text = str(value)
+    minimum = spec.get("min_chars")
+    maximum = spec.get("max_chars") or spec.get("max_chars_including_tags")
+    if minimum is not None and text and len(text) < int(minimum):
+        raise ValueError(f"{name} too short: {len(text)} chars (min {minimum})")
+    if maximum is not None and len(text) > int(maximum):
+        raise ValueError(f"{name} too long: {len(text)} chars (max {maximum})")
+
+
+def validate_platform_config(platform: str, action: str, config: dict) -> None:
+    if action != "post":
+        return
+    profile = platform_profile(platform)
+    fields = profile.get("fields") or {}
+    for name, spec in fields.items():
+        if not isinstance(spec, dict) or spec.get("type") == "operation":
+            continue
+        value = config.get(name)
+        if spec.get("required") and (value is None or value == "" or value == []):
+            raise ValueError(f"{platform}: missing required field {name}")
+        if value is None:
+            continue
+        kind = spec.get("type")
+        if kind == "string":
+            _validate_string(name, value, spec)
+        elif kind == "string_list":
+            values = value if isinstance(value, list) else [x.strip() for x in str(value).split(",") if x.strip()]
+            maximum = spec.get("max_count")
+            if maximum is not None and len(values) > int(maximum):
+                raise ValueError(f"{name} has {len(values)} items (max {maximum})")
+            each = spec.get("max_chars_each")
+            if each is not None:
+                for item in values:
+                    if len(str(item)) > int(each):
+                        raise ValueError(f"{name} item too long: {item!r} (max {each})")
+            total = spec.get("max_total_chars")
+            if total is not None and sum(len(str(x)) for x in values) > int(total):
+                raise ValueError(f"{name} total length exceeds {total}")
+        elif kind == "enum":
+            values = spec.get("values") or []
+            if value not in values:
+                raise ValueError(f"{name} must be one of: {', '.join(map(str, values))}")
+
+    images_spec = (profile.get("media") or {}).get("images") or {}
+    images = config.get("images") or []
+    maximum = images_spec.get("max_count")
+    if maximum is not None and len(images) > int(maximum):
+        raise ValueError(f"images has {len(images)} items (max {maximum})")
 
 
 def declared_actions(platform: str) -> dict[str, Path]:
@@ -71,7 +147,13 @@ def run_platform_action(
     url: str | None = None,
 ) -> dict:
     path = action_path(platform, action)
-    code = prepare_action(path, Path(config_path) if config_path else None)
+    config_file = Path(config_path) if config_path else None
+    if config_file is not None:
+        config = json.loads(config_file.read_text())
+        if not isinstance(config, dict):
+            raise ValueError("platform config must be a JSON object")
+        validate_platform_config(platform, action, config)
+    code = prepare_action(path, config_file)
 
     started = request({"op": "start", "workspace": None, "url": url})
     sid = started["session_id"]

@@ -235,6 +235,8 @@ The runner output hides the raw session ID. It returns the platform/action resul
 
 Every `platforms/<name>/manifest.yaml` must declare:
 
+Platform-owned publishing facts belong in the same manifest, not in caller-specific tables. When applicable, declare `media`, `fields`, `capabilities`, `content_mapping`, and platform notes there. Callers inspect them with `browser-workspace platform profile <name>` and must not maintain a second authoritative limits/capabilities registry.
+
 ```text
 platform:
 status:
