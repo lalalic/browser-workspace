@@ -100,3 +100,18 @@ def test_npm_publish_workflow_uses_oidc():
     workflow = (ROOT / ".github/workflows/npm-publish.yml").read_text()
     assert "id-token: write" in workflow
     assert "npm publish --access public" in workflow
+
+
+def test_session_admin_exposes_list_and_stop_all_without_daemon_restart():
+    cli = (ROOT / "bin/browser-workspace").read_text()
+    daemon = (ROOT / "session_daemon.py").read_text()
+    assert "ssp.add_parser('list')" in cli
+    assert "stop.add_argument('--all'" in cli
+    assert "{'op':'list'}" in cli
+    assert "{'op':'stop-all'}" in cli
+    assert "def list_sessions():" in daemon
+    assert "def stop_all_sessions():" in daemon
+    assert "if op=='list': return list_sessions()" in daemon
+    assert "if op=='stop-all': return stop_all_sessions()" in daemon
+    assert "stop_session(sid)" in daemon
+    assert "kill" not in cli.lower()

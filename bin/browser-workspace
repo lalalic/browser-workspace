@@ -34,14 +34,18 @@ def main():
     sp.add_parser('status')
     session=sp.add_parser('session'); ssp=session.add_subparsers(dest='cmd',required=True)
     start=ssp.add_parser('start'); start.add_argument('--workspace', help=argparse.SUPPRESS); start.add_argument('--url')
+    ssp.add_parser('list')
     ex=ssp.add_parser('exec'); ex.add_argument('session_id'); ex.add_argument('--code-file')
-    stop=ssp.add_parser('stop'); stop.add_argument('session_id')
+    stop=ssp.add_parser('stop'); stop.add_argument('session_id', nargs='?'); stop.add_argument('--all', action='store_true', dest='stop_all')
     platform=sp.add_parser('platform'); psp=platform.add_subparsers(dest='pcmd',required=True)
     profile=psp.add_parser('profile'); profile.add_argument('platform')
     source=psp.add_parser('source'); source.add_argument('platform'); source.add_argument('action'); source.add_argument('--config')
     run=psp.add_parser('run'); run.add_argument('platform'); run.add_argument('action'); run.add_argument('--config'); run.add_argument('--url'); run.add_argument('--session-id')
     args=p.parse_args()
     if args.group=='status': emit(status()); return
+    if args.group=='session' and args.cmd=='list':
+        from session_client import request
+        emit(request({'op':'list'})); return
     if args.group=='session' and args.cmd=='start':
         from session_client import request
         emit(request({'op':'start','workspace':args.workspace,'url':args.url})); return
@@ -53,6 +57,10 @@ def main():
         r=request({'op':'exec','session_id':args.session_id,'code':code}); emit(r); raise SystemExit(0 if r.get('ok',False) else 1)
     if args.group=='session' and args.cmd=='stop':
         from session_client import request
+        if args.stop_all:
+            if args.session_id: p.error('session stop accepts either SESSION_ID or --all, not both')
+            emit(request({'op':'stop-all'})); return
+        if not args.session_id: p.error('session stop requires SESSION_ID or --all')
         emit(request({'op':'stop','session_id':args.session_id})); return
     if args.group=='platform' and args.pcmd=='source':
         from platform_runner import action_path, prepare_action
