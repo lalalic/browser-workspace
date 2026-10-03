@@ -166,3 +166,11 @@ def test_temporary_new_thread_finishes_without_system_exit():
     assert "SystemExit" not in thread
     assert "if temporary:" in thread
     assert "else:" in thread
+
+
+def test_new_turn_project_id_is_optional():
+    turn=(ACTIONS/"_new_turn.py").read_text()
+    assert 'project_id=str(CFG.get("project_id") or "").strip() or None' in turn
+    assert 'if not thread_id: raise RuntimeError("thread_id is required")' in turn
+    assert 'https://chatgpt.com/c/{quote(thread_id' in turn
+    assert 'https://chatgpt.com/g/{quote(project_id' in turn
