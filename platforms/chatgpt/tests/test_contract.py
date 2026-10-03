@@ -151,3 +151,11 @@ def test_new_thread_supports_projectless_and_temporary_modes():
     assert 'Temporary Chat mode was not activated' in thread
     assert '"temporary":True' in thread
     assert '"thread_id":None' in thread
+
+
+def test_lifecycle_actions_bind_session_helpers_into_imported_module():
+    for name in ("_new_turn.py", "_new_thread.py"):
+        text=(ACTIONS/name).read_text()
+        assert "import _lifecycle_common as lifecycle_common" in text
+        assert "lifecycle_common.js = js" in text
+        assert "lifecycle_common.fill_input = fill_input" in text

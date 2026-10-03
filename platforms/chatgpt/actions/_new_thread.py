@@ -1,7 +1,12 @@
 import json
 import time
 from urllib.parse import quote, urlsplit
-from _lifecycle_common import wait_for_idle, submit
+import _lifecycle_common as lifecycle_common
+
+lifecycle_common.js = js
+lifecycle_common.fill_input = fill_input
+wait_for_idle = lifecycle_common.wait_for_idle
+submit = lifecycle_common.submit
 
 CFG=json.load(open("__CFG_PATH__",encoding="utf-8"))
 project_id=str(CFG.get("project_id") or "").strip() or None
