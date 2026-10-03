@@ -5,6 +5,8 @@ actions:
   submit-thread: "actions/_submit_thread.py"
   temporary-submit: "actions/_temporary_submit.py"
   thread-turn: "actions/_thread_turn.py"
+  new-turn: "actions/_new_turn.py"
+  new-thread: "actions/_new_thread.py"
   project-setup: "actions/_project_setup.py"
   bootstrap-start: "actions/_bootstrap_start.py"
   mcp-app: "actions/_mcp_app.py"
@@ -15,6 +17,8 @@ verification:
 flows:
   - disposable-worker-submit
   - existing-thread-turn
+  - lifecycle-new-turn
+  - lifecycle-new-thread
   - project-setup
   - mcp-app-management
 capabilities:
@@ -27,3 +31,4 @@ capabilities:
   - project-memory
   - mcp-app-inspection
   - mcp-tool-refresh
+  - lifecycle-control-transfer
