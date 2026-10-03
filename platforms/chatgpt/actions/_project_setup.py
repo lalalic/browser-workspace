@@ -48,16 +48,39 @@ def _project_links():
 def _ensure_project(name):
     wanted=_norm(name).lower()
 
-    # Current ChatGPT sidebar exposes stable project ids directly on project rows.
-    existing=js(f"""(() => {{
-      const wanted={json.dumps(wanted)};
-      const rows=[...document.querySelectorAll('[data-app-action-sidebar-project-row]')];
-      const row=rows.find(e=>(e.getAttribute('data-app-action-sidebar-project-label')||'').replace(/\\s+/g,' ').trim().toLowerCase()===wanted);
-      return row ? {{
-        projectId:row.getAttribute('data-app-action-sidebar-project-id')||'',
-        label:row.getAttribute('data-app-action-sidebar-project-label')||''
-      }} : null;
-    }})()""")
+    # ChatGPT hydrates the sidebar asynchronously after the main page reports loaded.
+    # Open it when needed, then give the requested existing Project time to appear
+    # before treating the always-earlier "Add new project" control as proof of absence.
+    def project_surface():
+        return js("""(() => {
+          const rows=[...document.querySelectorAll('[data-app-action-sidebar-project-row]')];
+          if(rows.length) return 'rows';
+          const add=[...document.querySelectorAll('button,[role="button"]')].find(e=>(e.getAttribute('aria-label')||'').toLowerCase().includes('add new project'));
+          if(add) return 'add';
+          const show=[...document.querySelectorAll('button,[role="button"]')].find(e=>(e.getAttribute('aria-label')||'').toLowerCase()==='show sidebar');
+          if(show){ show.click(); return 'opening'; }
+          return '';
+        })()""")
+    _wait(project_surface, "ChatGPT Projects sidebar", 20)
+
+    def existing_project():
+        return js(f"""(() => {{
+          const wanted={json.dumps(wanted)};
+          const rows=[...document.querySelectorAll('[data-app-action-sidebar-project-row]')];
+          const row=rows.find(e=>(e.getAttribute('data-app-action-sidebar-project-label')||'').replace(/\\s+/g,' ').trim().toLowerCase()===wanted);
+          return row ? {{
+            projectId:row.getAttribute('data-app-action-sidebar-project-id')||'',
+            label:row.getAttribute('data-app-action-sidebar-project-label')||''
+          }} : null;
+        }})()""")
+
+    existing=None
+    deadline=time.time()+10
+    while time.time()<deadline:
+        existing=existing_project()
+        if existing and existing.get("projectId"):
+            break
+        time.sleep(.2)
     if existing and existing.get("projectId"):
         project_url=f"https://chatgpt.com/g/{existing['projectId']}/project"
         goto_url(project_url)
