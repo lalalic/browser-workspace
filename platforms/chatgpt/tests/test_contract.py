@@ -159,3 +159,10 @@ def test_lifecycle_actions_bind_session_helpers_into_imported_module():
         assert "import _lifecycle_common as lifecycle_common" in text
         assert "lifecycle_common.js = js" in text
         assert "lifecycle_common.fill_input = fill_input" in text
+
+
+def test_temporary_new_thread_finishes_without_system_exit():
+    thread=(ACTIONS/"_new_thread.py").read_text()
+    assert "SystemExit" not in thread
+    assert "if temporary:" in thread
+    assert "else:" in thread
