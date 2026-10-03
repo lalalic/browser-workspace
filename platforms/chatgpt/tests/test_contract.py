@@ -7,6 +7,9 @@ ACTIONS = ROOT / "actions"
 def test_platform_files_exist():
     assert (ROOT / "manifest.yaml").is_file()
     assert (ACTIONS / "_thread_turn.py").is_file()
+    assert (ACTIONS / "_new_turn.py").is_file()
+    assert (ACTIONS / "_new_thread.py").is_file()
+    assert (ACTIONS / "_lifecycle_common.py").is_file()
     assert (ACTIONS / "_submit_thread.py").is_file()
     assert (ACTIONS / "_project_setup.py").is_file()
     assert (ACTIONS / "_bootstrap_start.py").is_file()
@@ -16,6 +19,8 @@ def test_platform_files_exist():
 def test_manifest_declares_actions_and_verification():
     text = (ROOT / "manifest.yaml").read_text()
     assert 'thread-turn: "actions/_thread_turn.py"' in text
+    assert 'new-turn: "actions/_new_turn.py"' in text
+    assert 'new-thread: "actions/_new_thread.py"' in text
     assert 'submit-thread: "actions/_submit_thread.py"' in text
     assert "verification:" in text
     assert "status: migrated_unverified" in text
@@ -120,3 +125,18 @@ def test_mcp_app_readme_captures_snapshot_first_setup_flow():
     assert "snapshot(interactive_only=False)" in text
     assert "Permissions" in text and "Disconnect" in text and "Refresh tools" in text
     assert "never commit credentials" in text
+
+
+def test_lifecycle_actions_use_stable_ids_and_do_not_wait_for_new_answer():
+    turn=(ACTIONS/"_new_turn.py").read_text()
+    thread=(ACTIONS/"_new_thread.py").read_text()
+    common=(ACTIONS/"_lifecycle_common.py").read_text()
+    assert "project_id" in turn and "thread_id" in turn
+    assert "wait_for_idle" in turn and "submit(message)" in turn
+    assert "project_id" in thread and "source_thread_id" in thread
+    assert "local-chatgpt" in thread and "thread_id" in thread
+    assert "assistant" not in turn.lower().split("print(json.dumps",1)[-1]
+    assert "assistant" not in thread.lower().split("print(json.dumps",1)[-1]
+    assert "session start" not in turn and "session stop" not in turn
+    assert "session start" not in thread and "session stop" not in thread
+    assert "submission_receipt" in common

@@ -48,3 +48,13 @@ print(snapshot(interactive_only=False))
 Use the fresh accessibility/DOM output to rediscover the visible control by role, accessible label, or stable text. When a menu is lazy-loaded, trigger the visible semantic control, wait for hydration, then snapshot again. This is how the profile menu -> Settings -> Plugins path was recovered during the live MCP setup.
 
 Destructive controls (`Disconnect`, `Uninstall`, `Delete app`) are intentionally not exposed as `mcp-app` operations.
+
+
+## XChat lifecycle control transfer
+
+Browser Workspace owns the ChatGPT UI mechanics for orchestrator lifecycle handoff.
+
+- `new-turn`: given stable `project_id`, `thread_id`, and `message`, wait until the current assistant turn is no longer generating, submit the continuation as the next user turn in the same thread, verify acceptance, and return without waiting for the new assistant answer.
+- `new-thread`: given stable `project_id` and `message` (plus optional `source_thread_id` provenance), open the same Project, submit the continuation to create a fresh thread, and return the durable new `thread_id` once ChatGPT replaces any temporary local id.
+
+These actions are control-transfer primitives. The generic Browser Workspace runner owns session start/stop and cleanup. Product code should pass stable Project/Thread IDs rather than persist ChatGPT URLs or DOM identities.
