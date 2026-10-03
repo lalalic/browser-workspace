@@ -55,32 +55,31 @@ if temporary:
       "verified_by":receipt["verified_by"],
       "user_message_id":receipt["turn"].get("id") or None,
     },ensure_ascii=False),flush=True)
-    raise SystemExit(0)
+else:
+    deadline=time.time()+60
+    thread_id=None
+    thread_url=None
+    while time.time()<deadline:
+        current=page_info().get("url","").split("?",1)[0]
+        path=urlsplit(current).path.rstrip("/")
+        if "/c/" in path and "local-chatgpt" not in current:
+            candidate=path.rsplit("/",1)[-1]
+            if candidate:
+                thread_id=candidate
+                thread_url=current
+                break
+        time.sleep(.2)
+    if not thread_id:
+        raise RuntimeError("ChatGPT did not assign a durable thread id")
 
-deadline=time.time()+60
-thread_id=None
-thread_url=None
-while time.time()<deadline:
-    current=page_info().get("url","").split("?",1)[0]
-    path=urlsplit(current).path.rstrip("/")
-    if "/c/" in path and "local-chatgpt" not in current:
-        candidate=path.rsplit("/",1)[-1]
-        if candidate:
-            thread_id=candidate
-            thread_url=current
-            break
-    time.sleep(.2)
-if not thread_id:
-    raise RuntimeError("ChatGPT did not assign a durable thread id")
-
-print(json.dumps({
-  "status":"submitted",
-  "mode":"new-thread",
-  "temporary":False,
-  "project_id":project_id,
-  "source_thread_id":source_thread_id,
-  "thread_id":thread_id,
-  "thread_url":thread_url,
-  "verified_by":receipt["verified_by"],
-  "user_message_id":receipt["turn"].get("id") or None,
-},ensure_ascii=False),flush=True)
+    print(json.dumps({
+      "status":"submitted",
+      "mode":"new-thread",
+      "temporary":False,
+      "project_id":project_id,
+      "source_thread_id":source_thread_id,
+      "thread_id":thread_id,
+      "thread_url":thread_url,
+      "verified_by":receipt["verified_by"],
+      "user_message_id":receipt["turn"].get("id") or None,
+    },ensure_ascii=False),flush=True)
