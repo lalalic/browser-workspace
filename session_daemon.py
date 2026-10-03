@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import ast, atexit, contextlib, io, json, os, secrets, socket, sys, threading, traceback
+import ast, atexit, contextlib, io, json, os, secrets, socket, sys, threading, time, traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -51,6 +51,7 @@ class SessionBrowserProxy:
 class Session:
     def __init__(self, sid, workspace, target_id, workspace_supported):
         self.session_id=sid; self.workspace=workspace; self.target_id=target_id; self.workspace_supported=bool(workspace_supported)
+        self.created_at=time.time(); self.last_used_at=self.created_at
         self.owned_target_ids={target_id}
         self.lock=threading.Lock()
         self.browser=SessionBrowserProxy(self)
@@ -199,6 +200,7 @@ def get_session(sid):
 
 def exec_session(sid, code):
     s=get_session(sid)
+    s.last_used_at=time.time()
     with s.lock, BROWSER_LOCK, with_workspace(s.workspace, s.workspace_supported):
         bh.switch_tab(s.target_id,activate=False)
         r=execute(code,s.namespace)
@@ -207,6 +209,35 @@ def exec_session(sid, code):
             cur=bh.current_tab(); s.target_id=cur.get('targetId') or s.target_id; s.namespace['target_id']=s.target_id
         except Exception: pass
     return {'session_id':sid,'workspace':s.workspace,'target_id':s.target_id,**r}
+
+def list_sessions():
+    with SESSIONS_LOCK:
+        sessions=list(SESSIONS.values())
+    return {
+        'session_count': len(sessions),
+        'sessions': [
+            {
+                'session_id': s.session_id,
+                'workspace': s.workspace,
+                'target_id': s.target_id,
+                'created_at': s.created_at,
+                'last_used_at': s.last_used_at,
+            }
+            for s in sessions
+        ],
+    }
+
+def stop_all_sessions():
+    with SESSIONS_LOCK:
+        ids=list(SESSIONS)
+    stopped=[]
+    errors=[]
+    for sid in ids:
+        try:
+            stopped.append(stop_session(sid))
+        except Exception as exc:
+            errors.append({'session_id':sid,'error':f'{type(exc).__name__}: {exc}'})
+    return {'stopped_count':len(stopped),'error_count':len(errors),'stopped':stopped,'errors':errors}
 
 def stop_session(sid):
     with SESSIONS_LOCK: s=SESSIONS.pop(sid,None)
@@ -253,9 +284,11 @@ def delete_workspace(name, force=False):
 def handle(req):
     op=req.get('op')
     if op=='ping': return {'ok':True,'pid':os.getpid(),'session_count':len(SESSIONS)}
+    if op=='list': return list_sessions()
     if op=='start': return start_session(req.get('workspace'), req.get('url'))
     if op=='exec': return exec_session(req['session_id'],req.get('code',''))
     if op=='stop': return stop_session(req['session_id'])
+    if op=='stop-all': return stop_all_sessions()
     if op=='workspace-create': return create_workspace(req['name'], req.get('pool_size', 5))
     if op=='workspace-delete': return delete_workspace(req['name'], req.get('force', False))
     raise ValueError(f'unknown op: {op}')
