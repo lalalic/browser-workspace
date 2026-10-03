@@ -140,3 +140,14 @@ def test_lifecycle_actions_use_stable_ids_and_do_not_wait_for_new_answer():
     assert "session start" not in turn and "session stop" not in turn
     assert "session start" not in thread and "session stop" not in thread
     assert "submission_receipt" in common
+
+
+def test_new_thread_supports_projectless_and_temporary_modes():
+    thread=(ACTIONS/"_new_thread.py").read_text()
+    assert 'temporary=bool(CFG.get("temporary", False))' in thread
+    assert 'temporary=true cannot be combined with project_id' in thread
+    assert 'https://chatgpt.com/?temporary-chat=true' in thread
+    assert 'start_url="https://chatgpt.com/"' in thread
+    assert 'Temporary Chat mode was not activated' in thread
+    assert '"temporary":True' in thread
+    assert '"thread_id":None' in thread
