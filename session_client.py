@@ -24,7 +24,7 @@ def runtime_source():
     tmp=target.with_name(target.name+'.tmp')
     shutil.rmtree(tmp,ignore_errors=True)
     tmp.mkdir(parents=True)
-    for name in ['pyproject.toml','session_daemon.py','platform_runner.py','src','agent-workspace','interaction-skills','platforms','licenses']:
+    for name in ['pyproject.toml','session_daemon.py','session_client.py','platform_runner.py','managed_chrome.py','src','agent-workspace','interaction-skills','platforms','extension','licenses']:
         source=ROOT/name
         if not source.exists(): continue
         destination=tmp/name

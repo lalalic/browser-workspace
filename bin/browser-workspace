@@ -20,6 +20,7 @@ def status():
         'root': str(ROOT.resolve()),
         'cli': str(Path(__file__).resolve()),
         'admin_helper': str(helper),
+        'managed_chrome': daemon.get('managed_chrome') if daemon else None,
         'daemon': {
             'running': bool(daemon and daemon.get('ok')),
             'pid': daemon.get('pid') if daemon else None,
