@@ -45,7 +45,7 @@ Agents should load only the Browser Workspace skill. `browser-harness` and `brow
 
 The installer creates the skill-owned `.venv` and links `browser-workspace` to `~/.local/bin` by default.
 
-By default Browser Workspace owns one persistent, visible Chrome instance. It uses a Browser Workspace-managed user-data directory, prefers CDP port 9222, and selects the next available candidate when needed. Users do not manage Chrome profiles or remote-debugging settings. Chrome Stable no longer permits silent `--load-extension` for local unpacked extensions, so the extension is treated as an optional workspace-grouping enhancement rather than a prerequisite for browser sessions.
+By default Browser Workspace owns exactly one machine-wide persistent, visible Chrome instance. Every session and runtime reuses that same Browser Workspace Chrome; config/runtime overrides never create another Chrome. It uses a Browser Workspace-managed user-data directory, prefers CDP port 9222, and selects the next available candidate only when starting the singleton for the first time. Users do not manage Chrome profiles or remote-debugging settings. Chrome Stable no longer permits silent `--load-extension` for local unpacked extensions, so the extension is treated as an optional workspace-grouping enhancement rather than a prerequisite for browser sessions.
 
 `BU_CDP_URL` / `BU_CDP_WS` remain advanced overrides for callers that intentionally provide their own browser endpoint. `BROWSER_WORKSPACE_CDP_PORT` changes the preferred managed port.
 

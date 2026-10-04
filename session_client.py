@@ -4,8 +4,8 @@ import fcntl, json, os, shutil, socket, subprocess, sys, time
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parent
-RUNTIME_DIR=Path(os.environ.get('BROWSER_WORKSPACE_RUNTIME_DIR',Path.home()/'.config/browser-workspace/runtime'))
-SOCKET_PATH=Path(os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET',RUNTIME_DIR/'session.sock'))
+RUNTIME_DIR=Path.home()/'.config/browser-workspace/runtime'
+SOCKET_PATH=(Path(os.environ['BROWSER_WORKSPACE_SESSION_SOCKET']) if os.environ.get('BROWSER_WORKSPACE_TEST_MODE')=='1' and os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET') else RUNTIME_DIR/'session.sock')
 
 def package_version():
     try:

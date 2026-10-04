@@ -19,8 +19,9 @@ ensure_daemon()
 from browser_harness import helpers as bh
 
 DEFAULT_WORKSPACE = os.environ.get('BH_WORKSPACE_NAME','Harness')
-RUNTIME_DIR = Path(os.environ.get('BROWSER_WORKSPACE_RUNTIME_DIR', Path.home()/'.config/browser-workspace/runtime'))
-SOCKET_PATH = Path(os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET', RUNTIME_DIR/'session.sock'))
+RUNTIME_DIR = Path.home()/'.config/browser-workspace/runtime'
+SOCKET_PATH = (Path(os.environ['BROWSER_WORKSPACE_SESSION_SOCKET']) if os.environ.get('BROWSER_WORKSPACE_TEST_MODE')=='1' and os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET') else RUNTIME_DIR/'session.sock')
+OWNER_LOCK_PATH = RUNTIME_DIR/'session-daemon.owner.lock'
 SESSIONS = {}
 SESSIONS_LOCK = threading.Lock()
 BROWSER_LOCK = threading.RLock()
@@ -308,8 +309,17 @@ def main():
     RUNTIME_DIR.mkdir(parents=True,exist_ok=True)
     try: os.chmod(RUNTIME_DIR,0o700)
     except Exception: pass
+    import fcntl
+    owner=open(OWNER_LOCK_PATH,'a+b')
+    try:
+        fcntl.flock(owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    except BlockingIOError:
+        owner.close(); return
     SOCKET_PATH.unlink(missing_ok=True)
     srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); srv.bind(str(SOCKET_PATH)); os.chmod(SOCKET_PATH,0o600); srv.listen(32)
-    while True:
-        conn,_=srv.accept(); threading.Thread(target=serve_conn,args=(conn,),daemon=True).start()
+    try:
+        while True:
+            conn,_=srv.accept(); threading.Thread(target=serve_conn,args=(conn,),daemon=True).start()
+    finally:
+        srv.close(); owner.close()
 if __name__=='__main__': main()
