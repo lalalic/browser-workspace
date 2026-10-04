@@ -26,6 +26,8 @@ def open_or_reuse_xhs(url):
 images = CFG.get("images", [CFG.get("image", "")])
 video = CFG.get("video", "")
 tags = CFG.get("tags", [])
+collection = (CFG.get("collection") or "").strip()
+collection_description = (CFG.get("collection_description") or "").strip()
 
 # Calculate steps dynamically
 base_steps = 6  # navigate, tab, upload, title, body, action
@@ -82,20 +84,21 @@ if mode == "video":
             raise SystemExit(1)
 
     next_step("Waiting for video upload...")
-    for attempt in range(120):
-        time.sleep(5)
-        # Check if upload is complete by looking for video preview or progress
-        done = js('document.querySelector("[class*=video-player],[class*=videoPreview],video,.upload-success,[class*=uploadDone]") ? "ready" : "wait"')
-        if done == "ready":
-            print("  -> Upload done!")
+    for attempt in range(180):
+        time.sleep(1)
+        # A preview/video element appears immediately, even while XHS still says
+        # "上传中 0%". Treat the editor's completed state as authoritative.
+        upload_state = js('(function(){var t=document.body.innerText||""; if(/上传中\\s*\\d*%?/.test(t)||t.indexOf("取消上传")>=0)return "uploading"; if(t.indexOf("重新上传")>=0||t.indexOf("检测为高清视频")>=0)return "ready"; return "waiting"})()')
+        if upload_state == "ready":
+            print("  -> Upload processed and editor-ready!")
             break
-        if attempt % 6 == 5:
+        if attempt % 15 == 14:
             pct = js('var el=document.querySelector("[class*=progress],.percent,[class*=uploadProgress]"); el ? el.textContent : "..."')
-            print(f"  -> Uploading... {pct} ({(attempt+1)*5}s)")
+            print(f"  -> Upload state {upload_state}; {pct} ({attempt+1}s)")
     else:
-        print("WARNING: Upload may still be processing.")
+        print("ERROR: video upload never reached the editor-ready state")
         capture_screenshot()
-    time.sleep(2)
+        raise SystemExit(1)
 
 else:
     # Image mode — click the 2nd tab (上传图文)
@@ -153,6 +156,67 @@ time.sleep(0.5)
 if tags:
     next_step(f"Tags appended: {', '.join(tags)}")
 
+def choose_collection(name, description):
+    if not name:
+        return None
+    opened = js('var es=Array.from(document.querySelectorAll("*")).filter(function(e){var t=(e.innerText||e.textContent||"").trim(); return e.offsetParent && e.children.length===0 && t==="选择合集"}); if(es.length){es[0].click();"yes"}else{"no"}')
+    if opened != "yes":
+        raise RuntimeError("collection chooser not found")
+    time.sleep(.5)
+    selected = js('var es=Array.from(document.querySelectorAll("*")).filter(function(e){return e.offsetParent && e.children.length===0 && (e.innerText||e.textContent||"").trim()===' + json.dumps(name) + '}); if(es.length){es[0].click();"yes"}else{"no"}')
+    if selected == "yes":
+        time.sleep(.5)
+        return "selected"
+    create = js('var es=Array.from(document.querySelectorAll("button,*")).filter(function(e){return e.offsetParent && e.children.length===0 && (e.innerText||e.textContent||"").trim()==="创建合集"}); if(es.length){es[0].click();"yes"}else{"no"}')
+    if create != "yes":
+        raise RuntimeError("collection not found and create control missing")
+    time.sleep(.5)
+    fill_input('input[placeholder="好的合集名称能吸引更多用户"]', name, clear_first=True, timeout=20)
+    if description:
+        fill_input('input[placeholder="简单介绍你的合集"],textarea[placeholder="简单介绍你的合集"]', description, clear_first=True, timeout=20)
+    created = js('var b=Array.from(document.querySelectorAll("button")).find(function(e){return e.offsetParent && (e.innerText||e.textContent||"").trim()==="创建并加入"}); if(b&&!b.disabled){b.click();"yes"}else{"no"}')
+    if created != "yes":
+        raise RuntimeError("create-and-join collection control unavailable")
+    for _ in range(20):
+        time.sleep(.5)
+        visible = js('(document.body.innerText||"").indexOf(' + json.dumps(name) + ')>=0 && (document.body.innerText||"").indexOf("创建并加入")<0 ? "yes" : "no"')
+        if visible == "yes":
+            return "created"
+    raise RuntimeError("collection creation was not verified")
+
+if collection:
+    next_step("Joining collection: " + collection)
+    print("  -> Collection " + choose_collection(collection, collection_description))
+
+def creator_manager_receipt(title):
+    goto_url("https://creator.xiaohongshu.com/new/note-manager")
+    try:
+        wait_for_load()
+    except Exception:
+        pass
+    rows = []
+    for _ in range(30):
+        time.sleep(.5)
+        raw = js('Array.from(document.querySelectorAll(".note-card")).map(function(c){var t=c.querySelector(".note-card__title"); return JSON.stringify({title:t?(t.innerText||t.textContent||"").trim():"", text:(c.innerText||"").trim(), impression:c.dataset.impression||""})}).join("\\n")') or ""
+        rows = []
+        for line in raw.splitlines():
+            try:
+                row = json.loads(line)
+                imp = json.loads(row.get("impression") or "{}")
+                row["note_id"] = (((imp.get("noteTarget") or {}).get("value") or {}).get("noteId"))
+                if row.get("title") == title:
+                    rows.append(row)
+            except Exception:
+                pass
+        if rows:
+            break
+    if not rows:
+        return None
+    newest = rows[0]
+    text = newest.get("text") or ""
+    status = "reviewing" if "审核中" in text else "rejected" if "未通过" in text else "published"
+    return {"note_id": newest.get("note_id"), "title": title, "status": status, "duplicate_count": len(rows), "card_text": text}
+
 if CFG["action"] == "publish":
     next_step("Publishing...")
     # XHS can render the publish button before video processing is complete. A
@@ -180,30 +244,24 @@ if CFG["action"] == "publish":
             print("ERROR: publish button not found")
             capture_screenshot()
             raise SystemExit(1)
-    verified = False
+    redirect_verified = False
     for _ in range(20):
         time.sleep(1)
         state = js('location.href.indexOf("publish/success")>=0 || /发布成功|成功发布/.test(document.body.innerText||"") ? "success" : "wait"')
         if state == "success":
-            verified = True
+            redirect_verified = True
             break
-    if not verified:
-        # Redirects are not stable across XHS releases. The creator manager is
-        # the authoritative duplicate-safe verification surface.
-        goto_url("https://creator.xiaohongshu.com/new/note-manager")
-        try:
-            wait_for_load()
-        except Exception:
-            pass
-        for _ in range(20):
-            time.sleep(1)
-            found = js('(document.body.innerText||"").indexOf(' + json.dumps(CFG["title"]) + ')>=0 ? "yes" : "no"')
-            if found == "yes":
-                verified = True
-                break
-    if not verified:
-        print("ERROR: publish click completed but the note was not found in creator manager")
+    receipt = creator_manager_receipt(CFG["title"])
+    if not receipt or not receipt.get("note_id"):
+        print("ERROR: publish was not verified in creator manager")
         capture_screenshot()
+        raise SystemExit(2)
+    receipt["redirect_verified"] = redirect_verified
+    receipt["collection"] = collection or None
+    print("XHS_RECEIPT " + json.dumps(receipt, ensure_ascii=False, separators=(",", ":")))
+    verified = receipt["status"] in {"published", "reviewing"}
+    if not verified:
+        print("ERROR: creator manager reports " + receipt["status"])
         raise SystemExit(2)
 else:
     next_step("Saving as draft...")
