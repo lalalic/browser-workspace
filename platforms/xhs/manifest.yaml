@@ -72,12 +72,22 @@ fields:
     type: boolean
     default: false
     implemented: true
+  collection:
+    required: false
+    type: string
+    max_chars: 20
+    implemented: true
+  collection_description:
+    required: false
+    type: string
+    max_chars: 50
+    implemented: true
 capabilities:
   draft: true
   publish: true
   visibility: false
   custom_thumbnail: false
-  series_or_collection: false
+  series_or_collection: true
   post_status: true
   read_comments: true
   write_comment: true
@@ -94,5 +104,4 @@ notes:
   and use that card's live xsec detail route.
 - The opened post detail view is the canonical place to read comments, write a top-level
   comment, and reply to comments.
-- The current adapter does not expose the Neo Vlog collection/series field even though
-  a prior manual browser-harness session created and attached a collection.
+- Optional `collection` selects an existing exact-name collection or creates and joins it when absent.
