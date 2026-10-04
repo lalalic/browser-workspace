@@ -155,7 +155,17 @@ if tags:
 
 if CFG["action"] == "publish":
     next_step("Publishing...")
-    publish_result = js('var btn=[...document.querySelectorAll("button,[role=button]")].find(function(b){return b.offsetParent && (b.innerText||b.textContent||"").trim()==="发布"}) || document.querySelector(".publishBtn,.publish-btn,button.css-k01wfk,[class*=submit]");if(btn){btn.scrollIntoView({block:"center"});btn.click();"clicked"}else{"missing"}')
+    # XHS can render the publish button before video processing is complete. A
+    # programmatic click on a disabled button is a no-op, so wait for the real
+    # control to become enabled before clicking it.
+    publish_result = "missing"
+    for attempt in range(180):
+        publish_result = js('var btn=[...document.querySelectorAll("button,[role=button]")].find(function(b){return b.offsetParent && (b.innerText||b.textContent||"").trim()==="发布"}) || document.querySelector(".publishBtn,.publish-btn,button.css-k01wfk,[class*=submit]");if(!btn){"missing"}else if(btn.disabled || btn.getAttribute("aria-disabled")==="true" || btn.classList.contains("disabled")){"disabled"}else{btn.scrollIntoView({block:"center"});btn.click();"clicked"}')
+        if publish_result == "clicked":
+            break
+        if attempt % 15 == 14:
+            print(f"  -> Publish control {publish_result}; waiting for processing... ({attempt+1}s)")
+        time.sleep(1)
     if publish_result != "clicked":
         # XHS may expose the publish control only through the accessibility tree.
         nodes = cdp("Accessibility.getFullAXTree")["nodes"]
@@ -178,7 +188,23 @@ if CFG["action"] == "publish":
             verified = True
             break
     if not verified:
-        print("WARNING: publish click completed but success state is not yet verified")
+        # Redirects are not stable across XHS releases. The creator manager is
+        # the authoritative duplicate-safe verification surface.
+        goto_url("https://creator.xiaohongshu.com/new/note-manager")
+        try:
+            wait_for_load()
+        except Exception:
+            pass
+        for _ in range(20):
+            time.sleep(1)
+            found = js('(document.body.innerText||"").indexOf(' + json.dumps(CFG["title"]) + ')>=0 ? "yes" : "no"')
+            if found == "yes":
+                verified = True
+                break
+    if not verified:
+        print("ERROR: publish click completed but the note was not found in creator manager")
+        capture_screenshot()
+        raise SystemExit(2)
 else:
     next_step("Saving as draft...")
     # Find 暂存 button by unicode
