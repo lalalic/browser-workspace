@@ -17,7 +17,7 @@ def open_or_reuse_xhs(url):
         target=tabs[0] if tabs else None
     if target:
         switch_tab(target)
-        if page_info()["url"] != url:
+        if (current_tab().get("url") or "") != url:
             goto_url(url)
     else:
         new_tab(url)
@@ -86,7 +86,7 @@ def open_update_editor(row):
         return None, clicked
     for _ in range(30):
         time.sleep(.5)
-        url=page_info()["url"]
+        url=current_tab().get("url") or ""
         if "/publish/update" in url:
             tab=current_tab()
             return {"update_url":url,"target_id":tab.get("targetId") or tab.get("target_id")}, None
@@ -212,7 +212,7 @@ def open_post_detail(note_id):
     ready=js('document.querySelector(".note-container") ? "yes" : "no"')
     if ready!="yes":
         return None, "post_detail_not_opened"
-    return {"profile_url":profile,"detail_url":page_info()["url"]}, None
+    return {"profile_url":profile,"detail_url":current_tab().get("url") or ""}, None
 
 
 def expand_replies():

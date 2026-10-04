@@ -17,7 +17,7 @@ def open_or_reuse_xhs(url):
         target=tabs[0] if tabs else None
     if target:
         switch_tab(target)
-        if page_info()["url"] != url:
+        if (current_tab().get("url") or "") != url:
             goto_url(url)
     else:
         new_tab(url)
@@ -47,7 +47,7 @@ open_or_reuse_xhs("https://creator.xiaohongshu.com/publish/publish")
 wait_for_load()
 time.sleep(3)
 
-url = page_info()["url"]
+url = current_tab().get("url") or ""
 if "login" in url:
     print("ERROR: Not logged in. Log in at creator.xiaohongshu.com first.")
     capture_screenshot()
