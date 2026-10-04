@@ -88,6 +88,7 @@ def run_admin(tmp_path, expression, reply):
     thread = threading.Thread(target=_serve_once, args=(sock, seen, reply), daemon=True)
     thread.start()
     env = dict(os.environ)
+    env["BROWSER_WORKSPACE_TEST_MODE"] = "1"
     env["BROWSER_WORKSPACE_SESSION_SOCKET"] = str(sock)
     script = f'import {{ ensureWorkspace, deleteWorkspace }} from {json.dumps(ADMIN.as_uri())};\n{expression}'
     result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=ROOT, env=env, text=True, capture_output=True)

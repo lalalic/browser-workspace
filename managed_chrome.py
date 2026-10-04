@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import subprocess
@@ -11,10 +13,13 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-CONFIG_ROOT = Path(os.environ.get("BROWSER_WORKSPACE_CONFIG_DIR", Path.home() / ".config/browser-workspace"))
-PROFILE_DIR = Path(os.environ.get("BROWSER_WORKSPACE_CHROME_DATA_DIR", CONFIG_ROOT / "chrome"))
-RUNTIME_DIR = Path(os.environ.get("BROWSER_WORKSPACE_RUNTIME_DIR", CONFIG_ROOT / "runtime"))
-STATE_FILE = RUNTIME_DIR / "managed-chrome.json"
+# Chrome identity is machine-global for Browser Workspace. Runtime/config overrides
+# may move sockets/caches, but must never create another browser instance.
+SINGLETON_ROOT = Path.home() / ".config/browser-workspace"
+PROFILE_DIR = SINGLETON_ROOT / "chrome"
+STATE_FILE = SINGLETON_ROOT / "managed-chrome.json"
+LOCK_FILE = SINGLETON_ROOT / "managed-chrome.lock"
+LOG_FILE = SINGLETON_ROOT / "managed-chrome.log"
 DEFAULT_PORT = int(os.environ.get("BROWSER_WORKSPACE_CDP_PORT", "9222"))
 PORT_CANDIDATES = int(os.environ.get("BROWSER_WORKSPACE_CDP_PORT_CANDIDATES", "20"))
 
@@ -62,10 +67,36 @@ def _load_state() -> dict:
 
 
 def _write_state(payload: dict) -> None:
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    SINGLETON_ROOT.mkdir(parents=True, exist_ok=True)
     tmp = STATE_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
     os.replace(tmp, STATE_FILE)
+
+
+@contextlib.contextmanager
+def _singleton_lock():
+    SINGLETON_ROOT.mkdir(parents=True, exist_ok=True)
+    handle = open(LOCK_FILE, "a+")
+    try:
+        if platform.system() == "Windows":
+            import msvcrt
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if platform.system() == "Windows":
+                import msvcrt
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
 
 
 def _chrome_path() -> str:
@@ -97,12 +128,53 @@ def _chrome_path() -> str:
     raise RuntimeError("Browser Workspace could not find Chrome; set BROWSER_WORKSPACE_CHROME_PATH")
 
 
-def _choose_port() -> int:
+def _discover_existing_managed_chrome() -> dict | None:
+    """Recover the singleton even if its state file was deleted or became stale."""
+    if platform.system() == "Windows":
+        return None
+    try:
+        output = subprocess.check_output(["ps", "-axo", "pid=,command="], text=True)
+    except Exception:
+        return None
+    profile_arg = f"--user-data-dir={PROFILE_DIR}"
+    for line in output.splitlines():
+        if profile_arg not in line:
+            continue
+        match = re.match(r"\s*(\d+)\s+(.+)", line)
+        if not match:
+            continue
+        pid = int(match.group(1))
+        command = match.group(2)
+        if "--type=" in command:
+            continue
+        port_match = re.search(r"--remote-debugging-port=(\d+)", command)
+        if not port_match:
+            continue
+        port = int(port_match.group(1))
+        if _pid_alive(pid) and _endpoint_live(port):
+            return {
+                "pid": pid,
+                "port": port,
+                "profile_dir": str(PROFILE_DIR),
+                "chrome_path": command.split(" --user-data-dir=", 1)[0],
+            }
+    return None
+
+
+def _live_singleton() -> dict | None:
     state = _load_state()
-    state_port = state.get("port")
-    state_pid = state.get("pid")
-    if isinstance(state_port, int) and _pid_alive(state_pid) and _endpoint_live(state_port):
-        return state_port
+    port = state.get("port")
+    pid = state.get("pid")
+    if isinstance(port, int) and _pid_alive(pid) and _endpoint_live(port):
+        return state
+    recovered = _discover_existing_managed_chrome()
+    if recovered:
+        _write_state(recovered)
+        return recovered
+    return None
+
+
+def _choose_port() -> int:
     for port in range(DEFAULT_PORT, DEFAULT_PORT + max(1, PORT_CANDIDATES)):
         if _port_available(port):
             return port
@@ -112,70 +184,61 @@ def _choose_port() -> int:
     )
 
 
+def _as_result(state: dict, reused: bool) -> dict:
+    endpoint = _endpoint(int(state["port"]))
+    os.environ["BU_CDP_URL"] = endpoint
+    return {**state, "mode": "managed", "endpoint": endpoint, "reused": reused}
+
+
 def ensure_managed_chrome() -> dict:
-    """Ensure Browser Workspace's persistent non-headless Chrome is ready.
+    """Return the one machine-wide Browser Workspace Chrome, starting it only if absent."""
+    with _singleton_lock():
+        # Strong invariant: an existing Browser Workspace Chrome always wins.
+        if existing := _live_singleton():
+            return _as_result(existing, True)
 
-    Explicit BU_CDP_URL / BU_CDP_WS remain advanced overrides. Otherwise Browser
-    Workspace owns one durable user-data-dir, chooses a local CDP port, starts
-    Chrome visibly. Chrome Stable blocks silent unpacked-extension loading, so
-    the bundled extension remains an optional enhancement when already installed.
-    """
-    if os.environ.get("BU_CDP_WS"):
-        return {"mode": "override", "endpoint": "BU_CDP_WS"}
-    if url := os.environ.get("BU_CDP_URL"):
-        return {"mode": "override", "endpoint": url}
+        # Advanced external endpoint is only considered when no managed singleton exists.
+        if os.environ.get("BU_CDP_WS"):
+            return {"mode": "override", "endpoint": "BU_CDP_WS"}
+        if url := os.environ.get("BU_CDP_URL"):
+            return {"mode": "override", "endpoint": url}
 
-    state = _load_state()
-    state_port = state.get("port")
-    state_pid = state.get("pid")
-    if isinstance(state_port, int) and _pid_alive(state_pid) and _endpoint_live(state_port):
-        endpoint = _endpoint(state_port)
-        os.environ["BU_CDP_URL"] = endpoint
-        return {**state, "mode": "managed", "endpoint": endpoint, "reused": True}
+        PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+        port = _choose_port()
+        chrome = _chrome_path()
+        log = open(LOG_FILE, "ab", buffering=0)
+        command = [
+            chrome,
+            f"--user-data-dir={PROFILE_DIR}",
+            f"--remote-debugging-port={port}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "about:blank",
+        ]
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+            close_fds=True,
+        )
+        log.close()
 
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-    extension = ROOT / "extension"
-    port = _choose_port()
-    chrome = _chrome_path()
-    log_path = RUNTIME_DIR / "managed-chrome.log"
-    log = open(log_path, "ab", buffering=0)
-    command = [
-        chrome,
-        f"--user-data-dir={PROFILE_DIR}",
-        f"--remote-debugging-port={port}",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "about:blank",
-    ]
-    process = subprocess.Popen(
-        command,
-        stdin=subprocess.DEVNULL,
-        stdout=log,
-        stderr=log,
-        start_new_session=True,
-        close_fds=True,
-    )
-    log.close()
-
-    deadline = time.time() + float(os.environ.get("BROWSER_WORKSPACE_CHROME_START_TIMEOUT", "20"))
-    while time.time() < deadline:
-        if process.poll() is not None:
-            raise RuntimeError(
-                f"Browser Workspace managed Chrome exited with code {process.returncode}; see {log_path}"
-            )
-        if _endpoint_live(port):
-            endpoint = _endpoint(port)
-            payload = {
-                "pid": process.pid,
-                "port": port,
-                "profile_dir": str(PROFILE_DIR),
-                "extension_dir": str(extension),
-                "extension_auto_load": False,
-                "chrome_path": chrome,
-            }
-            _write_state(payload)
-            os.environ["BU_CDP_URL"] = endpoint
-            return {**payload, "mode": "managed", "endpoint": endpoint, "reused": False}
-        time.sleep(0.1)
-    raise RuntimeError(f"Browser Workspace managed Chrome did not expose CDP on port {port}; see {log_path}")
+        deadline = time.time() + float(os.environ.get("BROWSER_WORKSPACE_CHROME_START_TIMEOUT", "20"))
+        while time.time() < deadline:
+            if process.poll() is not None:
+                raise RuntimeError(
+                    f"Browser Workspace managed Chrome exited with code {process.returncode}; see {LOG_FILE}"
+                )
+            if _endpoint_live(port):
+                payload = {
+                    "pid": process.pid,
+                    "port": port,
+                    "profile_dir": str(PROFILE_DIR),
+                    "chrome_path": chrome,
+                }
+                _write_state(payload)
+                return _as_result(payload, False)
+            time.sleep(0.1)
+        raise RuntimeError(f"Browser Workspace managed Chrome did not expose CDP on port {port}; see {LOG_FILE}")

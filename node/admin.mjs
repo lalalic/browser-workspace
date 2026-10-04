@@ -3,9 +3,8 @@ import os from "node:os";
 import path from "node:path";
 
 function socketPath() {
-  if (process.env.BROWSER_WORKSPACE_SESSION_SOCKET) return process.env.BROWSER_WORKSPACE_SESSION_SOCKET;
-  const runtimeDir = process.env.BROWSER_WORKSPACE_RUNTIME_DIR || path.join(os.homedir(), ".config", "browser-workspace", "runtime");
-  return path.join(runtimeDir, "session.sock");
+  if (process.env.BROWSER_WORKSPACE_TEST_MODE === "1" && process.env.BROWSER_WORKSPACE_SESSION_SOCKET) return process.env.BROWSER_WORKSPACE_SESSION_SOCKET;
+  return path.join(os.homedir(), ".config", "browser-workspace", "runtime", "session.sock");
 }
 
 function request(payload) {
