@@ -17,6 +17,7 @@ ADMIN = ROOT / "node/admin.mjs"
 
 
 def load_cli(monkeypatch, ensure_daemon_impl):
+    monkeypatch.setenv("BROWSER_WORKSPACE_VENV_REEXEC", "1")
     session_client = types.ModuleType("session_client")
     session_client.SOCKET_PATH = Path("/tmp/browser-workspace-test.sock")
     session_client.ensure_daemon = ensure_daemon_impl
