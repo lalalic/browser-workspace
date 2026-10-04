@@ -2,8 +2,8 @@ platform: xhs
 status: migrated_unverified
 last_verified: null
 actions:
-  post: actions/_post.py
-  manage: actions/_manage.py
+  post: "actions/_post.py"
+  manage: "actions/_manage.py"
 verification:
   status: migrated_unverified
   last_verified: null
