@@ -72,7 +72,7 @@ $BW_CLI session start --url https://example.com
 
 The result is JSON containing `session_id`, `workspace`, `target_id`, the starting `url`, and `workspace_supported`.
 
-The Chrome workspace extension is optional. If it is not installed, `session start` still succeeds and browser automation continues without workspace grouping/lease isolation. The result includes a soft `warning` and `extension_url` pointing to the Chrome Web Store. Do not treat this warning as a session failure.
+Browser Workspace self-manages one persistent, visible Chrome instance by default. It owns the user-data directory and local CDP endpoint, prefers port 9222, and selects another candidate if that port is unavailable. Agents do not choose a Chrome profile or enable remote debugging. The Chrome workspace extension remains optional: Chrome Stable blocks silent local unpacked-extension loading, so sessions continue in plain-browser mode when the extension is absent; grouping/lease isolation becomes available when the extension is installed.
 
 ## Exec
 

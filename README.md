@@ -45,11 +45,11 @@ Agents should load only the Browser Workspace skill. `browser-harness` and `brow
 
 The installer creates the skill-owned `.venv` and links `browser-workspace` to `~/.local/bin` by default.
 
-The Chrome extension is optional. When absent, sessions continue in plain-browser mode and `session start` returns a soft warning plus the Web Store URL. Workspace grouping/leases require the extension.
+By default Browser Workspace owns one persistent, visible Chrome instance. It uses a Browser Workspace-managed user-data directory, prefers CDP port 9222, and selects the next available candidate when needed. Users do not manage Chrome profiles or remote-debugging settings. Chrome Stable no longer permits silent `--load-extension` for local unpacked extensions, so the extension is treated as an optional workspace-grouping enhancement rather than a prerequisite for browser sessions.
 
-Web Store: `https://chromewebstore.google.com/detail/kgbghhigmbpefppgkocgjgnnnbhjchic`
+`BU_CDP_URL` / `BU_CDP_WS` remain advanced overrides for callers that intentionally provide their own browser endpoint. `BROWSER_WORKSPACE_CDP_PORT` changes the preferred managed port.
 
-For development, `extension/` can also be loaded unpacked.
+The Web Store build remains available for ordinary interactive Chrome installs, but the managed runtime does not depend on it: `https://chromewebstore.google.com/detail/kgbghhigmbpefppgkocgjgnnnbhjchic`.
 
 ## Snapshot model
 

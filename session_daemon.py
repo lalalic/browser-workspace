@@ -7,11 +7,13 @@ sys.path.insert(0, str(ROOT/'src'))
 os.environ.setdefault('BH_HOME', str(Path.home()/'.config/browser-workspace/browser-core'))
 # Preserve the canonical single Browser Harness daemon socket during migration.
 # This is runtime-state compatibility only; Browser Workspace owns the code/venv.
-os.environ.setdefault('BH_RUNTIME_DIR', str(Path.home()/'.config/browser-harness/runtime'))
-os.environ.setdefault('BH_RUNTIME_DIR_SHARED', '1')
+os.environ.setdefault('BH_RUNTIME_DIR', str(Path.home()/'.config/browser-workspace/browser-core-runtime'))
+os.environ.setdefault('BU_NAME', 'browser-workspace')
 os.environ.setdefault('BH_AGENT_WORKSPACE', str(ROOT/'agent-workspace'))
 os.environ.setdefault('BH_WORKSPACE_NAME', 'Harness')
 
+from managed_chrome import ensure_managed_chrome
+MANAGED_CHROME = ensure_managed_chrome()
 from browser_harness.admin import ensure_daemon
 ensure_daemon()
 from browser_harness import helpers as bh
@@ -283,7 +285,7 @@ def delete_workspace(name, force=False):
 
 def handle(req):
     op=req.get('op')
-    if op=='ping': return {'ok':True,'pid':os.getpid(),'session_count':len(SESSIONS)}
+    if op=='ping': return {'ok':True,'pid':os.getpid(),'session_count':len(SESSIONS),'managed_chrome':MANAGED_CHROME}
     if op=='list': return list_sessions()
     if op=='start': return start_session(req.get('workspace'), req.get('url'))
     if op=='exec': return exec_session(req['session_id'],req.get('code',''))
