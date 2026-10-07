@@ -110,7 +110,7 @@ A Python file may also be used with `--code-file`.
 $BW_CLI session stop <session_id>
 ```
 
-Stopping closes every tab owned or opened by that session—including tabs created with `new_tab()`, `bh.new_tab()`, direct `Target.createTarget`, and detected child/popup tabs—then destroys the session's Python namespace. It does not close unrelated browser tabs. Do not reuse the ID afterward.
+Stopping closes every tab owned or opened by that session—including tabs created with `new_tab()`, `bh.new_tab()`, and detected child/popup tabs—then destroys the session's Python namespace. Raw `cdp("Target.createTarget", ...)` is rejected; use `new_tab()` so Browser Workspace can own and group the tab. It does not close unrelated browser tabs. Do not reuse the ID afterward.
 
 A safe shell structure is:
 
@@ -216,7 +216,7 @@ platforms/<name>/
 
 Platform rules:
 
-- Platform actions may use browser helpers such as `new_tab()`, `current_tab()`, `snapshot()`, `js()`, `cdp()`, uploads, downloads, and screenshots.
+- Platform actions may use browser helpers such as `new_tab()`, `current_tab()`, `snapshot()`, `js()`, `cdp()`, uploads, downloads, and screenshots. `cdp()` must not create targets; `Target.createTarget` is blocked and tab creation must use `new_tab()`.
 - Platform actions must **not** create/stop Browser Workspace sessions, choose a workspace, call workspace-management APIs, invoke the Browser Workspace CLI, or import session/workspace infrastructure.
 - Platform `README.md` and flow docs should describe site behavior, preconditions, side effects, and verification evidence—not Browser Workspace lifecycle mechanics.
 - Platform actions must remain usable in either a generic runner-owned session or a product-owned browser context.
