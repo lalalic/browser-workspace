@@ -49,6 +49,15 @@ def test_session_start_returns_soft_workspace_warning_contract():
     assert "extension_url" in src
 
 
+def test_session_rejects_raw_cdp_target_creation():
+    src = (ROOT / "session_daemon.py").read_text()
+    assert "if method == 'Target.createTarget':" in src
+    assert "Target.createTarget is disabled in Browser Workspace sessions" in src
+    assert "use new_tab(url)" in src
+    assert "self.namespace['cdp']=self._cdp" in src
+    assert "def cdp(self, method, **kwargs): return self._session._cdp(method, **kwargs)" in src
+
+
 def test_session_tracks_all_created_tabs_for_cleanup():
     src = (ROOT / "session_daemon.py").read_text()
     assert "self.owned_target_ids={target_id}" in src

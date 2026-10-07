@@ -84,10 +84,13 @@ class Session:
         return result
 
     def _cdp(self, method, **kwargs):
+        if method == 'Target.createTarget':
+            raise RuntimeError(
+                'Target.createTarget is disabled in Browser Workspace sessions; '
+                'use new_tab(url) so the tab is owned by the active session/workspace'
+            )
         result=bh.cdp(method, **kwargs)
-        if method == 'Target.createTarget' and isinstance(result, dict):
-            self._remember_target(result.get('targetId'))
-        elif method == 'Target.closeTarget':
+        if method == 'Target.closeTarget':
             self.owned_target_ids.discard(kwargs.get('targetId'))
         return result
 

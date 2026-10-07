@@ -20,7 +20,7 @@ browser-workspace session stop SESSION_ID
 
 `--workspace` is hidden from normal CLI help. Normal sessions use `Harness`; product integrations may set an explicit workspace internally when they require isolation.
 
-`session stop` closes all tabs created/owned by that session while leaving unrelated browser tabs untouched.
+`session stop` closes all tabs created/owned by that session while leaving unrelated browser tabs untouched. Raw session CDP cannot create targets: `Target.createTarget` is rejected and callers must use `new_tab()` so workspace/session ownership is preserved.
 
 ## Included layers
 
