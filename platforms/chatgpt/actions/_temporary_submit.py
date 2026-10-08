@@ -574,5 +574,18 @@ while time.time() < deadline:
 else:
     raise RuntimeError("Temporary Chat activation was not observed")
 
-result = _submit_current_page(prompt, temporary=True, mode_label="Temporary Chat")
+try:
+    result = _submit_current_page(prompt, temporary=True, mode_label="Temporary Chat")
+except RuntimeError as exc:
+    # A URL-prefilled Temporary Chat can retain the pre-hydration home input
+    # without ever mounting the active composer. No send occurred, so retry
+    # once on a clean Temporary Chat page without URL prompt prefill.
+    if "composer readiness was not observed ready" not in str(exc):
+        raise
+    goto_url(temporary_chat_entry_url())
+    wait_for_load()
+    _click_temporary_chat_toggle()
+    if not _temporary_chat_enabled():
+        raise RuntimeError("Temporary Chat mode lost during composer recovery") from exc
+    result = _submit_current_page(prompt, temporary=True, mode_label="Temporary Chat")
 print(json.dumps(result, ensure_ascii=False), flush=True)

@@ -174,3 +174,10 @@ def test_new_turn_project_id_is_optional():
     assert 'if not thread_id: raise RuntimeError("thread_id is required")' in turn
     assert 'https://chatgpt.com/c/{quote(thread_id' in turn
     assert 'https://chatgpt.com/g/{quote(project_id' in turn
+
+
+def test_temporary_submit_recovers_only_before_send_from_prefill_hydration():
+    code=(ACTIONS/"_temporary_submit.py").read_text()
+    assert 'goto_url(temporary_chat_entry_url())' in code
+    assert '"composer readiness was not observed ready" not in str(exc)' in code
+    assert 'if not _temporary_chat_enabled():' in code
