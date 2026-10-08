@@ -1,0 +1,99 @@
+platform: tiktok
+status: migrated_unverified
+last_verified: null
+actions:
+  post: actions/_post.py
+verification:
+  status: migrated_unverified
+  last_verified: null
+  evidence: Existing upload mechanics migrated from the working post adapter. Current
+    Browser Workspace live verification pending.
+url_patterns:
+- https://www.tiktok.com/creator*
+authentication:
+  required: true
+  notes: Use the caller's authenticated browser context; never store credentials.
+provenance:
+  source: skills/post/scripts/platforms/tiktok
+  migrated_code: true
+flows:
+  post:
+    status: migrated_unverified
+    evidence: Migrated action; current Browser Workspace live verification pending.
+display_name: TikTok
+aliases: []
+media:
+  modes:
+  - video
+  video:
+    required: true
+    formats:
+    - mp4
+    max_size_gb: 10
+    max_duration_minutes: 10
+fields:
+  caption:
+    cli: --caption
+    required: true
+    type: string
+    max_chars_including_tags: 4000
+    implemented: true
+  tags:
+    cli: --tags
+    required: false
+    type: string_list
+    max_count: 10
+    implemented: true
+    render: 'append as #tag'
+  cover:
+    cli: --cover
+    required: false
+    type: file
+    implemented: false
+    status: cli_only
+    note: The migrated CLI validates the file but the browser body does not currently
+      apply it.
+  visibility:
+    cli: --visibility
+    required: false
+    type: enum
+    values:
+    - public
+    - friends
+    - private
+    default: public
+    implemented: true
+  allow_comments:
+    cli: --no-comments
+    required: false
+    type: boolean
+    default: true
+    implemented: true
+  allow_duets:
+    cli: --no-duets
+    required: false
+    type: boolean
+    default: true
+    implemented: true
+  allow_stitch:
+    cli: --no-stitch
+    required: false
+    type: boolean
+    default: true
+    implemented: true
+capabilities:
+  draft: false
+  publish: true
+  visibility: true
+  custom_thumbnail: false
+  social_interaction_controls: true
+  post_status: false
+  read_comments: false
+  write_comment: false
+  reply_comments: false
+content_mapping:
+  headline: null
+  main_text: caption
+  discovery_terms: tags
+notes:
+- The current adapter performs the final Post action; it has no draft mode.

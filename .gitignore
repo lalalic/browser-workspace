@@ -6,3 +6,9 @@ __pycache__/
 agent-workspace/.env
 
 *.egg-info/
+
+build/
+uv.lock
+
+src/browser_workspace_app/**/.env
+src/browser_workspace_app/**/.env.*

@@ -136,3 +136,17 @@ Each platform manifest records explicit verification status and evidence. `verif
 ## npx skills installation
 
 After `npx skills add ...`, invoke `~/.agents/skills/browser-workspace/bin/browser-workspace` directly. The first session start bootstraps the skill-owned Python virtual environment automatically; running `scripts/install.sh` is optional.
+
+### Python distribution (PyPI)
+
+Browser Workspace is also packaged as a Python CLI. Once its PyPI trusted publisher is configured and a `pypi-v*` release tag is published, invoke it with:
+
+```bash
+uvx browser-workspace status
+uvx browser-workspace session list
+uvx browser-workspace platform profile wechat-channels
+```
+
+The package entry point is `browser_workspace_app.cli:main`, and Python dependencies are managed by `pyproject.toml`. This uses the same existing Chrome profile and Session Daemon socket as the previous npm CLI; it does **not** start a second browser or daemon when the existing one is healthy.
+
+Before building, run `python tools/sync-pypi-package.py` to copy canonical Python and packaged platform assets to the wheel source. Run `uv build`, then validate with `uvx --from dist/browser_workspace-<version>-py3-none-any.whl browser-workspace status`. The PyPI publishing workflow uses GitHub OIDC trusted publishing; configure `lalalic/browser-workspace` with the `pypi` environment as the publisher on PyPI before the first tag release.

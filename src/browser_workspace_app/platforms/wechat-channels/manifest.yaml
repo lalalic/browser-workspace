@@ -1,0 +1,124 @@
+platform: wechat-channels
+status: partially_verified
+last_verified: '2026-10-04'
+actions:
+  post: actions/_post.py
+  manage: actions/_manage.py
+verification:
+  status: partially_verified
+  last_verified: '2026-10-04'
+  evidence: Live publish succeeded with creator confirmation 已发表 and manager list
+    count increasing to 4. Exact title/description manager-row matching remains unverified
+    because list rows do not expose those fields in visible text.
+url_patterns:
+- https://channels.weixin.qq.com/*
+authentication:
+  required: true
+  notes: Use the caller's authenticated browser context; never store credentials.
+provenance:
+  source: skills/post/scripts/platforms/wechat-channels
+  migrated_code: true
+flows:
+  post:
+    status: verified
+    evidence: Live publish succeeded on 2026-10-04; creator UI showed 已发表 and manager
+      list gained a new 10:33 row.
+  manage:
+    status: partially_verified
+    evidence: Live manager list at /platform/post/list loaded and exposed video count/timestamps;
+      exact title/description row matching is not yet verified.
+display_name: WeChat Channels
+aliases:
+- wechat
+- channels
+implementation_status: live_publish_verified_manager_matching_partial
+media:
+  modes:
+  - video
+  video:
+    required: true
+    formats:
+    - mp4
+    codec_hint: H.264
+    max_size_gb: 20
+    max_duration_hours: 8
+fields:
+  desc:
+    cli: --desc
+    required: true
+    type: string
+    max_chars: 1000
+    implemented: true
+  title:
+    cli: --title
+    required: true
+    type: string
+    min_chars: 6
+    max_chars: 16
+    implemented: true
+    meaning: short title
+    note: Live creator UI on 2026-10-04 kept Publish disabled until a valid short
+      title was provided.
+  tags:
+    cli: --tags
+    required: false
+    type: string_list
+    implemented: true
+    render: 'append as #tag'
+  publish:
+    cli: --publish
+    required: false
+    type: boolean
+    default: false
+    implemented: true
+  draft:
+    cli: --draft
+    required: false
+    type: boolean
+    default: true
+    implemented: true
+    note: default behavior already saves draft when --publish is absent
+  status:
+    cli: status
+    required: false
+    type: operation
+    implemented: true
+    verified: false
+    target_fields:
+    - post_id
+    - title
+    - desc
+    values:
+    - published
+    - reviewing
+    - rejected
+    - draft
+    - unknown
+    - not_found
+capabilities:
+  draft: true
+  publish: true
+  visibility: false
+  custom_thumbnail: false
+  post_status: true
+  update_post: false
+  read_comments: false
+  write_comment: false
+  reply_comments: false
+content_mapping:
+  headline: title
+  main_text: desc
+  discovery_terms: tags
+notes:
+- The adapter reuses one existing channels.weixin.qq.com tab and creates one only
+  when none exists.
+- After submit/draft, the adapter inspects the creator manager and returns structured
+  status JSON.
+- The manager probe is semantic but this implementation run could not verify the live
+  creator UI; unknown/not_found must be treated as authoritative uncertainty.
+- An uncertain submit is not retried automatically; run status and inspect manager
+  state before any deliberate retry.
+- Update/edit, comment reading, comments, and replies are intentionally unimplemented
+  until their exact creator UI is observed.
+- Live creator UI requires a valid short title before Publish becomes enabled; treat
+  title as required for post actions.
