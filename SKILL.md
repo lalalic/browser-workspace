@@ -12,8 +12,8 @@ Browser Workspace is the **only browser skill agents should load**. It includes 
 Install the Skill instructions through your preferred skill manager, but run the published Python CLI through **PyPI/uvx**. The Skill directory is documentation, not the executable source of truth:
 
 ```bash
-BW_CLI="uvx browser-workspace"
-$BW_CLI status
+bw() { uvx browser-workspace "$@"; }
+bw status
 ```
 
 On first use, `uvx` installs Browser Workspace and Python dependencies from PyPI into its managed cache. No local source checkout, `.venv`, `.env`, or `npx` CLI is required. Use `uvx browser-workspace ...` consistently, including in NeoY/Agents Relay workers.
@@ -61,7 +61,7 @@ Rules:
 Default workspace is `Harness`:
 
 ```bash
-$BW_CLI session start
+bw session start
 ```
 
 Normal agents do not choose or manage workspaces. `session start` defaults to `Harness`; the `--workspace` implementation option is hidden from normal CLI help. Workspace lifecycle is not exposed through the agent CLI. Product runtimes that need persistent isolation discover the product-only Node admin helper with `browser-workspace status`, then call `ensureWorkspace` / `deleteWorkspace` through that helper.
@@ -69,7 +69,7 @@ Normal agents do not choose or manage workspaces. `session start` defaults to `H
 Start directly at a URL when known:
 
 ```bash
-$BW_CLI session start --url https://example.com
+bw session start --url https://example.com
 ```
 
 The result is JSON containing `session_id`, `workspace`, `target_id`, the starting `url`, and `workspace_supported`.
@@ -81,7 +81,7 @@ Browser Workspace self-manages exactly one machine-wide persistent, visible Chro
 `session exec` reads Python from stdin. Helpers are already imported; do not import another browser package.
 
 ```bash
-$BW_CLI session exec <session_id> <<'PY'
+bw session exec <session_id> <<'PY'
 print(page_info())
 print(snapshot())
 PY
@@ -90,7 +90,7 @@ PY
 Python state persists across later calls in the same session:
 
 ```bash
-$BW_CLI session exec <session_id> <<'PY'
+bw session exec <session_id> <<'PY'
 meeting_name = "Demo"
 print(current_tab())
 PY
@@ -99,7 +99,7 @@ PY
 Then later:
 
 ```bash
-$BW_CLI session exec <session_id> <<'PY'
+bw session exec <session_id> <<'PY'
 print(meeting_name)
 PY
 ```
@@ -109,7 +109,7 @@ A Python file may also be used with `--code-file`.
 ## Stop
 
 ```bash
-$BW_CLI session stop <session_id>
+bw session stop <session_id>
 ```
 
 Stopping closes every tab owned or opened by that session—including tabs created with `new_tab()`, `bh.new_tab()`, and detected child/popup tabs—then destroys the session's Python namespace. Raw `cdp("Target.createTarget", ...)` is rejected; use `new_tab()` so Browser Workspace can own and group the tab. It does not close unrelated browser tabs. Do not reuse the ID afterward.
@@ -117,11 +117,11 @@ Stopping closes every tab owned or opened by that session—including tabs creat
 A safe shell structure is:
 
 ```bash
-SESSION_JSON=$($BW_CLI session start)
+SESSION_JSON=$(bw session start)
 SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
-trap '$BW_CLI session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
+trap 'bw session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
 
-$BW_CLI session exec "$SESSION_ID" <<'PY'
+bw session exec "$SESSION_ID" <<'PY'
 print(snapshot())
 PY
 ```
@@ -231,23 +231,23 @@ Platform rules:
 Normal orchestrator workflow:
 
 ```bash
-SESSION_JSON=$($BW_CLI session start --url https://example.com)
+SESSION_JSON=$(bw session start --url https://example.com)
 SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
 
-$BW_CLI platform run microsoft-teams meeting \
+bw platform run microsoft-teams meeting \
   --session-id "$SESSION_ID" \
   --config /path/to/config.json
 
 # If it fails: inspect/self-heal using the same SESSION_ID, write the repair
 # back to the platform implementation, then resume safely.
 
-$BW_CLI session stop "$SESSION_ID"
+bw session stop "$SESSION_ID"
 ```
 
 One-shot mode is explicit and is not self-healing:
 
 ```bash
-$BW_CLI platform run microsoft-teams meeting \
+bw platform run microsoft-teams meeting \
   --auto-session \
   --config /path/to/config.json
 ```
