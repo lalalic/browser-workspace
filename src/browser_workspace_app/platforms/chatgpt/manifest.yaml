@@ -1,0 +1,34 @@
+platform: chatgpt
+status: migrated_unverified
+last_verified: null
+actions:
+  submit-thread: "actions/_submit_thread.py"
+  temporary-submit: "actions/_temporary_submit.py"
+  thread-turn: "actions/_thread_turn.py"
+  new-turn: "actions/_new_turn.py"
+  new-thread: "actions/_new_thread.py"
+  project-setup: "actions/_project_setup.py"
+  bootstrap-start: "actions/_bootstrap_start.py"
+  mcp-app: "actions/_mcp_app.py"
+verification:
+  status: migrated_unverified
+  last_verified: null
+  evidence: "The source ChatGPT worker flow was previously live-verified, but the migrated Browser Workspace platform action has not yet been live-verified through the current generic platform runner."
+flows:
+  - disposable-worker-submit
+  - existing-thread-turn
+  - lifecycle-new-turn
+  - lifecycle-new-thread
+  - project-setup
+  - mcp-app-management
+capabilities:
+  - persistent-thread
+  - attachments
+  - submit-verification
+  - assistant-completion
+  - project-bootstrap
+  - project-instructions
+  - project-memory
+  - mcp-app-inspection
+  - mcp-tool-refresh
+  - lifecycle-control-transfer

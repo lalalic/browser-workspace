@@ -1,0 +1,94 @@
+platform: youtube
+status: migrated_unverified
+last_verified: null
+actions:
+  post: actions/_post.py
+verification:
+  status: migrated_unverified
+  last_verified: null
+  evidence: Existing Studio upload mechanics migrated from the working post adapter.
+    Current Browser Workspace live verification pending.
+url_patterns:
+- https://www.youtube.com/upload
+- https://studio.youtube.com/*
+authentication:
+  required: true
+  notes: Use the caller's authenticated browser context; never store credentials.
+provenance:
+  source: skills/post/scripts/platforms/youtube
+  migrated_code: true
+flows:
+  post:
+    status: migrated_unverified
+    evidence: Migrated action; current Browser Workspace live verification pending.
+display_name: YouTube
+aliases:
+- yt
+media:
+  modes:
+  - video
+  video:
+    required: true
+fields:
+  title:
+    cli: --title
+    required: true
+    type: string
+    max_chars: 100
+    implemented: true
+  desc:
+    cli: --desc
+    required: false
+    type: string
+    max_chars: 5000
+    implemented: true
+  tags:
+    cli: --tags
+    required: false
+    type: string_list
+    max_total_chars: 500
+    max_chars_each: 30
+    implemented: true
+  thumbnail:
+    cli: --thumbnail
+    required: false
+    type: file
+    formats:
+    - jpg
+    - png
+    max_size_mb: 2
+    implemented: true
+  visibility:
+    cli_group:
+    - --private
+    - --unlisted
+    - --public
+    required: false
+    type: enum
+    values:
+    - PRIVATE
+    - UNLISTED
+    - PUBLIC
+    default: PRIVATE
+    implemented: true
+  made_for_kids:
+    cli: --made-for-kids
+    required: false
+    type: boolean
+    default: false
+    implemented: true
+capabilities:
+  draft: false
+  publish: true
+  visibility: true
+  custom_thumbnail: true
+  audience_made_for_kids: true
+  post_status: false
+  read_comments: false
+  write_comment: false
+  reply_comments: false
+content_mapping:
+  headline: title
+  main_text: desc
+  discovery_terms: tags
+  visual_packaging: thumbnail
