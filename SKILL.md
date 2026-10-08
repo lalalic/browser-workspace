@@ -9,14 +9,14 @@ Browser Workspace is the **only browser skill agents should load**. It includes 
 
 ## Agent contract
 
-When installed with `npx skills`, use the CLI from the skill itself; no separate install step is required:
+Install the Skill instructions through your preferred skill manager, but run the published Python CLI through **PyPI/uvx**. The Skill directory is documentation, not the executable source of truth:
 
 ```bash
-BW_CLI="$HOME/.agents/skills/browser-workspace/bin/browser-workspace"
+BW_CLI="uvx browser-workspace"
 $BW_CLI status
 ```
 
-On first use, Browser Workspace bootstraps its own `.venv` automatically.
+On first use, `uvx` installs Browser Workspace and Python dependencies from PyPI into its managed cache. No local source checkout, `.venv`, `.env`, or `npx` CLI is required. Use `uvx browser-workspace ...` consistently, including in NeoY/Agents Relay workers.
 
 Use one session-owned execution path for orchestrated browser work:
 
@@ -296,13 +296,14 @@ Read the matching platform `README.md` and `manifest.yaml` before invoking or mo
 
 ## Installation
 
-Run the bundled installer from the skill directory:
+Use the published PyPI command (requires `uv`/`uvx`):
 
 ```bash
-./scripts/install.sh
+uvx browser-workspace status
+uvx browser-workspace session list
 ```
 
-It creates a Browser Workspace-owned `.venv`, installs the vendored browser runtime and dependencies, writes Browser Workspace environment configuration to `agent-workspace/.env`, and links `browser-workspace` into `~/.local/bin` by default.
+`uvx` resolves the published Python wheel and installs the dependencies declared in `pyproject.toml`. Do not run the legacy bundled installer or point agents at a checked-out `bin/browser-workspace` script. The installed CLI reuses the same Browser Workspace Chrome profile and Session Daemon socket.
 
 There is no required separate Browser Harness installation.
 
