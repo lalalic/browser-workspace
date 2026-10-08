@@ -439,7 +439,14 @@ def _fill_prompt_if_needed(prompt, mode_label, timeout=30):
     deadline = time.time() + timeout
     last_error = None
     while time.time() < deadline:
-        selector = _wait_for_composer(timeout=min(5, max(1, deadline - time.time())))
+        try:
+            selector = _wait_for_composer(timeout=min(5, max(1, deadline - time.time())))
+        except RuntimeError as exc:
+            # Hydration and navigation can temporarily remove the composer.
+            # Continue the outer readiness window rather than aborting on the first poll.
+            last_error = exc
+            time.sleep(.25)
+            continue
         if prompt_text_matches(_composer_text(selector), prompt):
             return selector
 
