@@ -6,7 +6,7 @@ import re
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
-MANAGER_URL = "https://channels.weixin.qq.com/platform/post"
+MANAGER_URL = "https://channels.weixin.qq.com/platform/post/list"
 
 STATUS_LABELS: tuple[tuple[str, str], ...] = (
     ("审核中", "reviewing"),

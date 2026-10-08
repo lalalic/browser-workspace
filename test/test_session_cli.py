@@ -5,14 +5,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_cli_exposes_session_lifecycle_and_platform_runner():
     src = (ROOT / "bin/browser-workspace").read_text()
-    assert "add_parser('session')" in src
-    assert "add_parser('start')" in src
-    assert "add_parser('exec')" in src
-    assert "add_parser('stop')" in src
-    assert "add_parser('platform')" in src
-    assert "add_parser('run')" in src
+    assert "session=sp.add_parser(" in src and "'session'," in src
+    assert "start=ssp.add_parser(" in src and "'start'," in src
+    assert "ex=ssp.add_parser(" in src and "'exec'," in src
+    assert "stop=ssp.add_parser(" in src and "'stop'," in src
+    assert "platform=sp.add_parser(" in src and "'platform'," in src
+    assert "run=psp.add_parser(" in src and "'run'," in src
     assert "--url" in src
-    assert "add_parser('status')" in src
+    assert "'status'," in src
     for command in ("tabs", "screenshot", "open", "workspace"):
         assert f"add_parser('{command}')" not in src
 
@@ -114,7 +114,7 @@ def test_npm_publish_workflow_uses_oidc():
 def test_session_admin_exposes_list_and_stop_all_without_daemon_restart():
     cli = (ROOT / "bin/browser-workspace").read_text()
     daemon = (ROOT / "session_daemon.py").read_text()
-    assert "ssp.add_parser('list')" in cli
+    assert "ssp.add_parser(" in cli and "'list'," in cli
     assert "stop.add_argument('--all'" in cli
     assert "{'op':'list'}" in cli
     assert "{'op':'stop-all'}" in cli
@@ -124,3 +124,19 @@ def test_session_admin_exposes_list_and_stop_all_without_daemon_restart():
     assert "if op=='stop-all': return stop_all_sessions()" in daemon
     assert "stop_session(sid)" in daemon
     assert "kill" not in cli.lower()
+
+
+def test_platform_actions_do_not_use_coordinate_clicks():
+    for path in (ROOT / "platforms").glob("*/actions/*.py"):
+        source = path.read_text()
+        assert "click_at_xy(" not in source, f"coordinate click is forbidden in platform code: {path}"
+
+
+def test_skill_contract_requires_session_self_heal_and_writeback():
+    skill = (ROOT / "SKILL.md").read_text()
+    assert "requires `--session-id` by default" in skill
+    assert "--auto-session" in skill and "does not provide orchestrator self-heal" in skill
+    assert "Self-heal writeback is mandatory" in skill
+    assert "same session" in skill.lower()
+    assert "click_at_xy()" in skill
+    assert "must not use screen coordinates" in skill

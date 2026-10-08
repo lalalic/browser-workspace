@@ -12,11 +12,14 @@ def next_step(label):
     print(f"[{step[0]}/{total_steps}] {label}")
 
 def click_btn(text):
+    text_s = json.dumps(text)
     for _ in range(5):
-        r = js('var btns=document.querySelectorAll("ytcp-button");var b=Array.from(btns).find(function(x){return x.textContent.trim()==="' + text + '"});b?JSON.stringify(b.getBoundingClientRect()):null')
-        if r and r != "None":
-            rect = json.loads(r)
-            click_at_xy(int(rect["x"]+rect["width"]/2), int(rect["y"]+rect["height"]/2))
+        clicked = js(
+            '(function(){ var btns=document.querySelectorAll("ytcp-button"); '
+            'var b=Array.from(btns).find(function(el){return el.textContent.trim()===' + text_s + ' && !el.disabled;}); '
+            'if(!b)return false; b.click(); return true; })()'
+        )
+        if clicked:
             return True
         time.sleep(1)
     return False

@@ -235,12 +235,17 @@ if CFG["action"] == "publish":
         nodes = cdp("Accessibility.getFullAXTree")["nodes"]
         target = next((n for n in nodes if (n.get("role") or {}).get("value") == "button" and (n.get("name") or {}).get("value") == "发布" and n.get("backendDOMNodeId")), None)
         if target:
-            box = cdp("DOM.getBoxModel", backendNodeId=target["backendDOMNodeId"])["model"]["content"]
-            x = sum(box[0::2]) / 4
-            y = sum(box[1::2]) / 4
-            click_at_xy(x, y)
-            publish_result = "clicked"
-        else:
+            resolved = cdp("DOM.resolveNode", backendNodeId=target["backendDOMNodeId"])["object"]
+            object_id = resolved.get("objectId")
+            if object_id:
+                cdp(
+                    "Runtime.callFunctionOn",
+                    objectId=object_id,
+                    functionDeclaration="function(){ this.click(); return true; }",
+                    returnByValue=True,
+                )
+                publish_result = "clicked"
+        if publish_result != "clicked":
             print("ERROR: publish button not found")
             capture_screenshot()
             raise SystemExit(1)

@@ -44,6 +44,7 @@ def test_platform_runner_owns_lifecycle_and_hides_session_id(monkeypatch, tmp_pa
         "microsoft-teams",
         "meeting",
         config_path=str(cfg),
+        auto_session=True,
     )
 
     assert [call["op"] for call in calls] == ["start", "exec", "stop"]
@@ -51,6 +52,8 @@ def test_platform_runner_owns_lifecycle_and_hides_session_id(monkeypatch, tmp_pa
     assert "session_id" not in result
     assert result["workspace_supported"] is True
     assert result["result"]["ok"] is True
+    assert result["session_mode"] == "auto_session_no_self_heal"
+    assert result["self_heal_capable"] is False
     assert result["result"]["cleanup"] == {"closed_tabs": 2, "release_error": None}
 
 
@@ -74,6 +77,7 @@ def test_platform_runner_stops_after_action_failure(monkeypatch, tmp_path):
         "microsoft-teams",
         "meeting",
         config_path=str(cfg),
+        auto_session=True,
     )
 
     assert [call["op"] for call in calls] == ["start", "exec", "stop"]
@@ -101,4 +105,45 @@ def test_platform_runner_reuses_caller_owned_session(monkeypatch,tmp_path):
     result=platform_runner.run_platform_action('microsoft-teams','meeting',config_path=str(cfg),session_id='owned-session')
     assert [c['op'] for c in calls]==['exec']
     assert calls[0]['session_id']=='owned-session'
+    assert result['session_mode']=='caller_owned_self_heal_capable'
+    assert result['self_heal_capable'] is True
     assert result['result']['cleanup']=={'caller_owned_session':True}
+
+
+def test_platform_runner_requires_explicit_session_mode(tmp_path):
+    cfg = tmp_path / "config.json"
+    cfg.write_text('{"action":"status"}')
+    try:
+        platform_runner.run_platform_action("microsoft-teams", "meeting", config_path=str(cfg))
+    except ValueError as exc:
+        message = str(exc)
+        assert "requires session_id" in message
+        assert "session start" in message
+        assert "self-heal" in message
+    else:
+        raise AssertionError("platform runner silently created a session")
+
+
+def test_platform_runner_rejects_session_id_plus_auto_session(tmp_path):
+    cfg = tmp_path / "config.json"
+    cfg.write_text('{"action":"status"}')
+    try:
+        platform_runner.run_platform_action(
+            "microsoft-teams", "meeting", config_path=str(cfg), session_id="s1", auto_session=True
+        )
+    except ValueError as exc:
+        assert "mutually exclusive" in str(exc)
+    else:
+        raise AssertionError("conflicting session modes were accepted")
+
+
+def test_declared_actions_accept_unquoted_yaml_paths(tmp_path, monkeypatch):
+    platforms = tmp_path / "platforms"
+    platform = platforms / "demo"
+    actions = platform / "actions"
+    actions.mkdir(parents=True)
+    (actions / "_post.py").write_text("print('ok')\n")
+    (platform / "manifest.yaml").write_text("actions:\n  post: actions/_post.py\n")
+    monkeypatch.setattr(platform_runner, "PLATFORMS", platforms)
+    resolved = platform_runner.declared_actions("demo")
+    assert resolved["post"] == actions / "_post.py"
