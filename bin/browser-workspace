@@ -30,18 +30,165 @@ def status():
     }
 
 def main():
-    p=argparse.ArgumentParser(prog='browser-workspace')
-    sp=p.add_subparsers(dest='group',required=True)
-    sp.add_parser('status')
-    session=sp.add_parser('session'); ssp=session.add_subparsers(dest='cmd',required=True)
-    start=ssp.add_parser('start'); start.add_argument('--workspace', help=argparse.SUPPRESS); start.add_argument('--url')
-    ssp.add_parser('list')
-    ex=ssp.add_parser('exec'); ex.add_argument('session_id'); ex.add_argument('--code-file')
-    stop=ssp.add_parser('stop'); stop.add_argument('session_id', nargs='?'); stop.add_argument('--all', action='store_true', dest='stop_all')
-    platform=sp.add_parser('platform'); psp=platform.add_subparsers(dest='pcmd',required=True)
-    profile=psp.add_parser('profile'); profile.add_argument('platform')
-    source=psp.add_parser('source'); source.add_argument('platform'); source.add_argument('action'); source.add_argument('--config')
-    run=psp.add_parser('run'); run.add_argument('platform'); run.add_argument('action'); run.add_argument('--config'); run.add_argument('--url'); run.add_argument('--session-id')
+    fmt=argparse.RawDescriptionHelpFormatter
+    p=argparse.ArgumentParser(
+        prog='browser-workspace',
+        description='Control the shared Browser Workspace Chrome, browser sessions, and platform automations.',
+        epilog='''Examples:
+  browser-workspace status
+  browser-workspace session start --url https://example.com
+  browser-workspace session list
+  browser-workspace session exec SESSION_ID --code-file script.py
+  browser-workspace session stop SESSION_ID
+  browser-workspace session stop --all
+  browser-workspace platform profile wechat-channels
+  browser-workspace platform run wechat-channels manage --session-id SESSION_ID --config status.json
+  browser-workspace platform run wechat-channels post --session-id SESSION_ID --config post.json
+  browser-workspace platform run wechat-channels manage --auto-session --config status.json
+''',
+        formatter_class=fmt,
+    )
+    sp=p.add_subparsers(dest='group',required=True,title='commands',metavar='COMMAND')
+
+    sp.add_parser(
+        'status',
+        help='Show Browser Workspace runtime, managed Chrome, daemon, and active-session status.',
+        description='Show Browser Workspace runtime, managed Chrome, daemon, and active-session status.',
+        epilog='Example:\n  browser-workspace status',
+        formatter_class=fmt,
+    )
+
+    session=sp.add_parser(
+        'session',
+        help='Create, inspect, execute code in, and stop browser sessions.',
+        description='Manage Browser Workspace sessions.',
+        epilog='''Examples:
+  browser-workspace session start --url https://example.com
+  browser-workspace session list
+  browser-workspace session exec SESSION_ID --code-file script.py
+  cat script.py | browser-workspace session exec SESSION_ID
+  browser-workspace session stop SESSION_ID
+  browser-workspace session stop --all
+''',
+        formatter_class=fmt,
+    )
+    ssp=session.add_subparsers(dest='cmd',required=True,title='session commands',metavar='COMMAND')
+
+    start=ssp.add_parser(
+        'start',
+        help='Start a browser session, optionally opening a URL.',
+        description='Start a browser session. The shared managed Chrome is reused; this does not launch a separate browser per session.',
+        epilog='''Examples:
+  browser-workspace session start
+  browser-workspace session start --url https://example.com
+''',
+        formatter_class=fmt,
+    )
+    start.add_argument('--workspace', help=argparse.SUPPRESS)
+    start.add_argument('--url', metavar='URL', help='URL to open when the session starts.')
+
+    ssp.add_parser(
+        'list',
+        help='List currently active Browser Workspace sessions.',
+        description='List currently active Browser Workspace sessions and their target tabs.',
+        epilog='Example:\n  browser-workspace session list',
+        formatter_class=fmt,
+    )
+
+    ex=ssp.add_parser(
+        'exec',
+        help='Execute Browser Workspace Python helpers inside an existing session.',
+        description='Execute Python using Browser Workspace helpers in an existing session. Read code from --code-file or stdin.',
+        epilog='''Examples:
+  browser-workspace session exec SESSION_ID --code-file script.py
+
+  browser-workspace session exec SESSION_ID <<'PY'
+  print(page_info())
+  print(snapshot(interactive_only=False))
+  PY
+''',
+        formatter_class=fmt,
+    )
+    ex.add_argument('session_id', metavar='SESSION_ID', help='Session ID returned by "session start" or "session list".')
+    ex.add_argument('--code-file', metavar='PATH', help='Read Python code from this file instead of stdin.')
+
+    stop=ssp.add_parser(
+        'stop',
+        help='Stop one session or all sessions and release their Browser Workspace tabs.',
+        description='Stop one Browser Workspace session, or all sessions with --all.',
+        epilog='''Examples:
+  browser-workspace session stop SESSION_ID
+  browser-workspace session stop --all
+''',
+        formatter_class=fmt,
+    )
+    stop.add_argument('session_id', nargs='?', metavar='SESSION_ID', help='Session ID to stop.')
+    stop.add_argument('--all', action='store_true', dest='stop_all', help='Stop all active Browser Workspace sessions.')
+
+    platform=sp.add_parser(
+        'platform',
+        help='Inspect and run reusable website-specific platform automations.',
+        description='Inspect and run reusable Browser Workspace platform automations.',
+        epilog='''Examples:
+  browser-workspace platform profile wechat-channels
+  browser-workspace platform source wechat-channels post --config post.json
+  browser-workspace session start --url https://channels.weixin.qq.com/platform/post/list
+  browser-workspace platform run wechat-channels manage --session-id SESSION_ID --config status.json
+  browser-workspace platform run wechat-channels post --session-id SESSION_ID --config post.json
+  browser-workspace session stop SESSION_ID
+
+One-shot mode (no orchestrator self-heal):
+  browser-workspace platform run wechat-channels manage --auto-session --config status.json
+''',
+        formatter_class=fmt,
+    )
+    psp=platform.add_subparsers(dest='pcmd',required=True,title='platform commands',metavar='COMMAND')
+
+    profile=psp.add_parser(
+        'profile',
+        help='Show a platform manifest/profile: fields, media rules, and capabilities.',
+        description='Show the declared Browser Workspace profile for a platform.',
+        epilog='Example:\n  browser-workspace platform profile wechat-channels',
+        formatter_class=fmt,
+    )
+    profile.add_argument('platform', metavar='PLATFORM', help='Platform name, for example "wechat-channels".')
+
+    source=psp.add_parser(
+        'source',
+        help='Print the fully prepared Python source for one platform action without running it.',
+        description='Render the action source after injecting the optional JSON config path. No browser action is executed.',
+        epilog='''Examples:
+  browser-workspace platform source wechat-channels post --config post.json
+  browser-workspace platform source wechat-channels manage --config status.json
+''',
+        formatter_class=fmt,
+    )
+    source.add_argument('platform', metavar='PLATFORM', help='Platform name, for example "wechat-channels".')
+    source.add_argument('action', metavar='ACTION', help='Declared action name, for example "post" or "manage".')
+    source.add_argument('--config', metavar='PATH', help='JSON configuration file used to prepare the action.')
+
+    run=psp.add_parser(
+        'run',
+        help='Run one platform action in Browser Workspace.',
+        description='Run a declared platform action. A caller-owned --session-id is required by default so an orchestrator can inspect failures, self-heal in the same browser state, write repairs back to platform code, and close the session only after completion. --auto-session is an explicit one-shot mode without orchestrator self-heal.',
+        epilog='''Examples:
+  browser-workspace session start --url https://channels.weixin.qq.com/platform/post/list
+  browser-workspace platform run wechat-channels manage --session-id SESSION_ID --config status.json
+  browser-workspace platform run wechat-channels post --session-id SESSION_ID --config post.json
+  browser-workspace session stop SESSION_ID
+
+One-shot mode (no orchestrator self-heal):
+  browser-workspace platform run wechat-channels manage --auto-session --config status.json
+''',
+        formatter_class=fmt,
+    )
+    run.add_argument('platform', metavar='PLATFORM', help='Platform name, for example "wechat-channels".')
+    run.add_argument('action', metavar='ACTION', help='Declared action name, for example "post" or "manage".')
+    run.add_argument('--config', metavar='PATH', help='JSON configuration file for the platform action.')
+    run.add_argument('--url', metavar='URL', help='Optional initial URL for a temporary session.')
+    session_mode = run.add_mutually_exclusive_group()
+    session_mode.add_argument('--session-id', metavar='SESSION_ID', help='Required by default. Reuse a caller-owned session so failures can be inspected and self-healed before the session is closed.')
+    session_mode.add_argument('--auto-session', action='store_true', help='Explicit one-shot mode: create and clean up a temporary session automatically. No orchestrator self-heal is available after failure.')
     args=p.parse_args()
     if args.group=='status': emit(status()); return
     if args.group=='session' and args.cmd=='list':
@@ -71,5 +218,19 @@ def main():
         from platform_runner import platform_profile
         emit(platform_profile(args.platform)); return
     if args.group=='platform' and args.pcmd=='run':
-        r=run_platform_action(args.platform,args.action,config_path=args.config,url=args.url,session_id=args.session_id); emit(r); raise SystemExit(0 if (r.get('result') or {}).get('ok',False) else 1)
+        if not args.session_id and not args.auto_session:
+            emit({
+                'ok': False,
+                'error': 'session_id_required',
+                'message': 'platform run requires --session-id by default so the orchestrator can self-heal failures in the same browser session.',
+                'suggested_workflow': [
+                    'browser-workspace session start --url <URL>',
+                    'browser-workspace platform run <PLATFORM> <ACTION> --session-id SESSION_ID [--config FILE]',
+                    'inspect/self-heal failures in the same SESSION_ID and write successful repairs back to platform code',
+                    'browser-workspace session stop SESSION_ID',
+                ],
+                'auto_session': 'Use --auto-session only for a one-shot run. It creates and closes its own session and does not provide orchestrator self-heal.',
+            })
+            raise SystemExit(2)
+        r=run_platform_action(args.platform,args.action,config_path=args.config,url=args.url,session_id=args.session_id,auto_session=args.auto_session); emit(r); raise SystemExit(0 if (r.get('result') or {}).get('ok',False) else 1)
 if __name__=='__main__': main()

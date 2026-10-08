@@ -30,13 +30,6 @@ def open_or_reuse_wechat(url):
 def shadow_js(expr):
     return js(SB + expr)
 
-def find_rect(sel):
-    code = SB + '.querySelector("' + sel + '") ? (function(){ var r = ' + SB + '.querySelector("' + sel + '").getBoundingClientRect(); return JSON.stringify({x:Math.round(r.x+r.width/2), y:Math.round(r.y+r.height/2)}); })() : "null"'
-    r = js(code)
-    if r and r != "null":
-        return json.loads(r)
-    return None
-
 print("[1/6] Opening or reusing the WeChat Channels create tab...")
 open_or_reuse_wechat("https://channels.weixin.qq.com/platform/post/create")
 wait_for_load()
@@ -87,17 +80,23 @@ else:
 print("  -> Waiting for upload...")
 for attempt in range(120):
     time.sleep(5)
-    btn_cls = shadow_js('.querySelector(".weui-desktop-btn_primary")?.classList?.contains("weui-desktop-btn_disabled") ? "disabled" : "enabled"')
-    vid_ok = shadow_js('.querySelector(".cover-wrap, video, [class*=uploaded], [class*=video-info], .upload-success, .post-edit-wrap") ? "ready" : "wait"')
-    if vid_ok == "ready" or btn_cls == "enabled":
+    upload_state = js(SB + '.innerText ? (function(text){ var match=text.match(/(?:^|\\n)(\\d{1,3})%(?:\\n|$)/); var percent=match?parseInt(match[1],10):null; var uploading=text.indexOf(\"取消上传\")>=0; return JSON.stringify({percent:percent,uploading:uploading}); })(' + SB + '.innerText) : JSON.stringify({percent:null,uploading:false})')
+    try:
+        state = json.loads(upload_state or "{}")
+    except Exception:
+        state = {}
+    # Do not infer completion from editor/preview presence or Publish enabled state:
+    # those can appear while the video is still uploading.
+    if state.get("percent") is None and not state.get("uploading"):
         print("  -> Upload done!")
         break
-    if attempt % 6 == 5:
-        pct = shadow_js('.querySelector("[class*=progress], .percent")?.textContent || "..."')
-        print("  -> Uploading... " + str(pct) + " (" + str((attempt+1)*5) + "s)")
+    if attempt % 3 == 2:
+        pct = state.get("percent")
+        print("  -> Uploading... " + ((str(pct) + "%") if pct is not None else "processing") + " (" + str((attempt+1)*5) + "s)")
 else:
-    print("WARNING: Upload timeout.")
+    print("ERROR: Upload did not reach a completed state before timeout.")
     capture_screenshot()
+    raise SystemExit(1)
 time.sleep(2)
 
 print("[3/6] Setting description...")
@@ -115,13 +114,12 @@ actual = shadow_js('.querySelector(".input-editor")?.textContent?.substring(0,50
 if actual:
     print("  -> Description: " + actual)
 else:
-    print("  -> WARNING: Description may not have been set, trying click+type...")
-    c = find_rect(".input-editor")
-    if c:
-        click_at_xy(c["x"], c["y"])
-        time.sleep(0.5)
-        type_text(CFG["desc"])
-        time.sleep(0.5)
+    print("  -> WARNING: Description may not have been set; retrying through the semantic editor element...")
+    retry_desc = json.dumps(CFG["desc"])
+    js(SB + '.querySelector(".input-editor")?.focus()')
+    js(SB + '.querySelector(".input-editor").textContent = ' + retry_desc)
+    js(SB + '.querySelector(".input-editor").dispatchEvent(new Event("input", {bubbles:true}))')
+    time.sleep(0.5)
 
 if CFG["title"]:
     print("[4/6] Setting short title: " + CFG["title"])
@@ -135,28 +133,30 @@ else:
     print("[4/6] No short title, skipping...")
 
 # Scroll down to make buttons visible
-shadow_js('.scrollTo(0, 99999)')
-js('document.querySelector("wujie-app").shadowRoot.querySelector("html")?.scrollTo(0, 99999)')
-time.sleep(1)
-
 print("[5/6] Pre-action screenshot...")
 capture_screenshot()
 time.sleep(1)
 
-def find_btn_by_text(text):
-    # Find a visible button by its text content (avoids matching hidden dialog buttons)
-    r = js(SB + '.querySelectorAll(".weui-desktop-btn").forEach(function(b){}); var found=null; ' + SB + '.querySelectorAll(".weui-desktop-btn").forEach(function(b){ var rect=b.getBoundingClientRect(); if(b.textContent.trim()==="' + text + '" && rect.width>0 && !b.classList.contains("weui-desktop-btn_disabled")){ found={x:Math.round(rect.x+rect.width/2), y:Math.round(rect.y+rect.height/2)}; }}); found ? JSON.stringify(found) : "null"')
-    if r and r != "null":
-        return json.loads(r)
-    return None
+def click_btn_by_text(text):
+    # Semantic DOM click only. Never derive or use viewport/screen coordinates.
+    text_s = json.dumps(text)
+    return js(
+        '(function(){ var body=' + SB + '; var target=null; '
+        'body.querySelectorAll(".weui-desktop-btn").forEach(function(btn){ '
+        'var style=getComputedStyle(btn); '
+        'if(btn.textContent.trim()===' + text_s + ' && '
+        '!btn.disabled && !btn.classList.contains("weui-desktop-btn_disabled") && '
+        'style.display!=="none" && style.visibility!=="hidden"){ target=btn; } }); '
+        'if(!target) return false; target.click(); return true; })()'
+    )
+
 
 if CFG["publish"]:
     print("[6/6] Publishing...")
-    c = find_btn_by_text("\u53d1\u8868")  # 发表
-    if c:
-        click_at_xy(c["x"], c["y"])
+    clicked = click_btn_by_text("发表")
+    if clicked:
         time.sleep(3)
-        # Handle confirmation dialog
+        # Handle confirmation dialog semantically as well.
         shadow_js('.querySelectorAll(".weui-desktop-dialog__wrp").forEach(function(d){ if(d.style.display !== "none"){ var b = d.querySelector(".weui-desktop-btn_primary"); if(b) b.click(); }})')
         time.sleep(3)
         print("  -> Publish action submitted; verifying manager state...")
@@ -167,9 +167,8 @@ if CFG["publish"]:
         raise SystemExit(1)
 else:
     print("[6/6] Saving draft...")
-    c = find_btn_by_text("\u4fdd\u5b58\u8349\u7a3f")  # 保存草稿
-    if c:
-        click_at_xy(c["x"], c["y"])
+    clicked = click_btn_by_text("保存草稿")
+    if clicked:
         time.sleep(3)
         print("  -> Draft action submitted; verifying manager state...")
         action = "draft"

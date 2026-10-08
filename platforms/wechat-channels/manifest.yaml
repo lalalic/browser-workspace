@@ -1,14 +1,15 @@
 platform: wechat-channels
-status: migrated_unverified
-last_verified: null
+status: partially_verified
+last_verified: '2026-10-04'
 actions:
   post: actions/_post.py
   manage: actions/_manage.py
 verification:
-  status: migrated_unverified
-  last_verified: null
-  evidence: Existing post/shadow-DOM and manager mechanics migrated from the working
-    post adapter. Current Browser Workspace live verification pending.
+  status: partially_verified
+  last_verified: '2026-10-04'
+  evidence: Live publish succeeded with creator confirmation 已发表 and manager list
+    count increasing to 4. Exact title/description manager-row matching remains unverified
+    because list rows do not expose those fields in visible text.
 url_patterns:
 - https://channels.weixin.qq.com/*
 authentication:
@@ -19,17 +20,18 @@ provenance:
   migrated_code: true
 flows:
   post:
-    status: migrated_unverified
-    evidence: Migrated action; current Browser Workspace live verification pending.
+    status: verified
+    evidence: Live publish succeeded on 2026-10-04; creator UI showed 已发表 and manager
+      list gained a new 10:33 row.
   manage:
-    status: migrated_unverified
-    evidence: Migrated manager action; current Browser Workspace live verification
-      pending.
+    status: partially_verified
+    evidence: Live manager list at /platform/post/list loaded and exposed video count/timestamps;
+      exact title/description row matching is not yet verified.
 display_name: WeChat Channels
 aliases:
 - wechat
 - channels
-implementation_status: code_only_live_ui_unverified
+implementation_status: live_publish_verified_manager_matching_partial
 media:
   modes:
   - video
@@ -49,12 +51,14 @@ fields:
     implemented: true
   title:
     cli: --title
-    required: false
+    required: true
     type: string
     min_chars: 6
     max_chars: 16
     implemented: true
     meaning: short title
+    note: Live creator UI on 2026-10-04 kept Publish disabled until a valid short
+      title was provided.
   tags:
     cli: --tags
     required: false
@@ -116,3 +120,5 @@ notes:
   state before any deliberate retry.
 - Update/edit, comment reading, comments, and replies are intentionally unimplemented
   until their exact creator UI is observed.
+- Live creator UI requires a valid short title before Publish becomes enabled; treat
+  title as required for post actions.

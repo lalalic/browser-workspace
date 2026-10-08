@@ -35,7 +35,7 @@ def load_cli(monkeypatch, ensure_daemon_impl):
 def test_normal_help_exposes_status_session_platform_only():
     result = subprocess.run([sys.executable, str(CLI), "--help"], cwd=ROOT, text=True, capture_output=True)
     assert result.returncode == 0
-    assert "{status,session,platform}" in result.stdout
+    assert "status" in result.stdout and "session" in result.stdout and "platform" in result.stdout
     assert "\n  workspace" not in result.stdout.lower()
 
 
@@ -119,3 +119,28 @@ def test_node_admin_helper_surfaces_daemon_error(tmp_path):
     assert seen == [{"op": "workspace-delete", "name": "Relay", "force": False}]
     assert result.returncode != 0
     assert "RuntimeError: leased tabs" in result.stderr
+
+
+def test_platform_run_requires_session_id_or_auto_session(monkeypatch, capsys):
+    cli = load_cli(monkeypatch, lambda: {"ok": True, "pid": 123, "session_count": 0})
+    monkeypatch.setattr(sys, "argv", ["browser-workspace", "platform", "run", "microsoft-teams", "meeting"])
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["error"] == "session_id_required"
+    assert "session start" in payload["suggested_workflow"][0]
+    assert "write successful repairs back to platform code" in payload["suggested_workflow"][2]
+    assert "--auto-session" in payload["auto_session"]
+    assert "does not provide orchestrator self-heal" in payload["auto_session"]
+
+
+def test_platform_run_help_explains_session_and_auto_session():
+    result = subprocess.run(
+        [sys.executable, str(CLI), "platform", "run", "--help"],
+        cwd=ROOT, text=True, capture_output=True,
+    )
+    assert result.returncode == 0
+    assert "--session-id SESSION_ID" in result.stdout
+    assert "--auto-session" in result.stdout
+    assert "self-heal" in result.stdout

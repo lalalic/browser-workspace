@@ -18,22 +18,24 @@ $BW_CLI status
 
 On first use, Browser Workspace bootstraps its own `.venv` automatically.
 
-Use one of two execution paths:
+Use one session-owned execution path for orchestrated browser work:
 
 ```text
-known platform flow
-  -> $BW_CLI platform run <platform> <action> [--config FILE]
-  -> runner creates the browser session
-  -> runner executes the platform action
-  -> runner always stops and cleans up
-
-custom browser workflow
-  -> $BW_CLI session start
-  -> $BW_CLI session exec <session_id>
-  -> $BW_CLI session stop <session_id>
+start one Browser Workspace session
+  -> retain SESSION_ID for the whole workflow
+  -> platform run <platform> <action> --session-id SESSION_ID
+  -> inspect each result
+  -> on recoverable failure, diagnose and self-heal in the SAME session
+  -> write every successful site-specific repair back to the platform code
+  -> continue until the external workflow reaches a terminal outcome
+  -> verify the terminal external state
+finally
+  -> stop SESSION_ID
 ```
 
-Do not manually create a session around a platform action unless product code intentionally owns a longer-lived browser context. There are no separate top-level `open`, `tabs`, `status`, or `screenshot` commands.
+`platform run` therefore requires `--session-id` by default. If omitted, the CLI returns a structured error that recommends the `session start -> platform run --session-id -> self-heal -> session stop` workflow. `--auto-session` is an explicit one-shot escape hatch: it creates and cleans up a temporary session automatically, but **does not provide orchestrator self-heal** after failure.
+
+There are no separate top-level `open`, `tabs`, `status`, or `screenshot` commands.
 
 Every logical browser workflow must follow:
 
@@ -216,21 +218,41 @@ platforms/<name>/
 
 Platform rules:
 
-- Platform actions may use browser helpers such as `new_tab()`, `current_tab()`, `snapshot()`, `js()`, `cdp()`, uploads, downloads, and screenshots. `cdp()` must not create targets; `Target.createTarget` is blocked and tab creation must use `new_tab()`.
+- Platform actions may use semantic browser helpers such as `new_tab()`, `current_tab()`, `snapshot()`, `click(selector)`, `fill_input(selector, text)`, `js()`, `cdp()`, uploads, downloads, and screenshots. `cdp()` must not create targets; `Target.createTarget` is blocked and tab creation must use `new_tab()`.
+- Platform interaction code must be **semantic and element-based**. It must not use screen coordinates, viewport coordinates, `x/y` click targets, `click_at_xy()`, or coordinate calculations to interact with the page. Browser size, zoom, display resolution, and viewport geometry must not affect correctness.
 - Platform actions must **not** create/stop Browser Workspace sessions, choose a workspace, call workspace-management APIs, invoke the Browser Workspace CLI, or import session/workspace infrastructure.
+- The orchestrator owns the session lifecycle for normal platform execution: start once, retain the same session across execution and recovery, and stop only after terminal success, terminal failure, or an explicit human blocker.
+- On any recoverable failure, the orchestrator must inspect the live page in the same session, diagnose the failure, repair/recover, and resume from the safest point rather than restarting the whole workflow.
+- **Self-heal writeback is mandatory:** if recovery discovers a site-specific selector, flow, wait condition, validation rule, or other adapter fix that makes the action work, write that repair back to `platforms/<name>/actions/` (and update platform docs/verification metadata when applicable) before declaring the workflow complete. A repair that exists only in an ad-hoc session snippet is not complete.
+- After a possible external side effect (publish, send, payment, delete, submit, etc.), recovery must be verification-first. Never repeat the side effect until read-only evidence proves the previous attempt did not take effect.
 - Platform `README.md` and flow docs should describe site behavior, preconditions, side effects, and verification evidence—not Browser Workspace lifecycle mechanics.
-- Platform actions must remain usable in either a generic runner-owned session or a product-owned browser context.
-- The generic runner owns the normal lifecycle: start a default Harness session, inject browser helpers/config, execute the action, then always stop the session and close its owned tabs.
-- Products that require a dedicated or persistent browser context (for example Family Tutor or Agents Relay) may execute the same platform action inside product-owned infrastructure. The platform code itself stays unchanged.
 - Do not rediscover a known site's mechanics when a verified platform flow/action already exists.
 
-Run a platform action through the generic runner:
+Normal orchestrator workflow:
 
 ```bash
-$BW_CLI platform run microsoft-teams meeting --config /path/to/config.json
+SESSION_JSON=$($BW_CLI session start --url https://example.com)
+SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
+
+$BW_CLI platform run microsoft-teams meeting \
+  --session-id "$SESSION_ID" \
+  --config /path/to/config.json
+
+# If it fails: inspect/self-heal using the same SESSION_ID, write the repair
+# back to the platform implementation, then resume safely.
+
+$BW_CLI session stop "$SESSION_ID"
 ```
 
-The runner output hides the raw session ID. It returns the platform/action result, optional workspace-extension warning, and cleanup evidence.
+One-shot mode is explicit and is not self-healing:
+
+```bash
+$BW_CLI platform run microsoft-teams meeting \
+  --auto-session \
+  --config /path/to/config.json
+```
+
+Use `--auto-session` only when losing the browser state after a failure is acceptable.
 
 ### Platform verification contract
 

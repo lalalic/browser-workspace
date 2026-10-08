@@ -102,11 +102,16 @@ def declared_actions(platform: str) -> dict[str, Path]:
         raise ValueError(f"{platform}/manifest.yaml has no actions block")
 
     actions: dict[str, Path] = {}
-    for name, relative in re.findall(
-        r'^\s{2}([\w-]+):\s*["\']([^"\']+)["\']\s*$',
-        match.group("body"),
-        flags=re.MULTILINE,
-    ):
+    for line in match.group("body").splitlines():
+        entry = re.match(r'^\s{2}([\w-]+):\s*(.+?)\s*$', line)
+        if not entry:
+            continue
+        name, relative = entry.groups()
+        if len(relative) >= 2 and relative[0] == relative[-1] and relative[0] in {"\"", "'"}:
+            relative = relative[1:-1]
+        # Actions are simple relative file paths; comments and nested mappings are not runnable actions.
+        if not relative or relative.startswith(("#", "{", "[")) or " #" in relative:
+            continue
         path = PLATFORMS / platform / relative
         if not path.is_file():
             raise FileNotFoundError(f"declared platform action missing: {platform}/{name} -> {relative}")
@@ -146,6 +151,7 @@ def run_platform_action(
     config_path: str | None = None,
     url: str | None = None,
     session_id: str | None = None,
+    auto_session: bool = False,
 ) -> dict:
     path = action_path(platform, action)
     config_file = Path(config_path) if config_path else None
@@ -156,7 +162,16 @@ def run_platform_action(
         validate_platform_config(platform, action, config)
     code = prepare_action(path, config_file)
 
-    owned_session = not bool(session_id)
+    if not session_id and not auto_session:
+        raise ValueError(
+            "platform run requires session_id; orchestrators should use: "
+            "session start -> platform run --session-id SESSION_ID -> self-heal in the same session -> session stop. "
+            "Use auto_session=True only for a one-shot run without orchestrator self-heal."
+        )
+    if session_id and auto_session:
+        raise ValueError("session_id and auto_session are mutually exclusive")
+
+    owned_session = bool(auto_session)
     started = request({"op": "start", "workspace": None, "url": url}) if owned_session else {"session_id": session_id, "workspace_supported": None}
     sid = started["session_id"]
     result = None
@@ -168,6 +183,8 @@ def run_platform_action(
             "platform": platform,
             "action": action,
             "workspace_supported": started.get("workspace_supported"),
+            "session_mode": "auto_session_no_self_heal" if owned_session else "caller_owned_self_heal_capable",
+            "self_heal_capable": not owned_session,
             "result": result,
         }
         if started.get("warning"):
