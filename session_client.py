@@ -78,20 +78,30 @@ def ping():
     try: return request({'op':'ping'},ensure=False)
     except Exception: return None
 
+def owner_is_running():
+    """An exclusive owner lock means a live daemon already exists."""
+    owner_path=RUNTIME_DIR/'session.lock'
+    with open(owner_path,'a+b') as owner:
+        try:
+            fcntl.flock(owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        finally:
+            try: fcntl.flock(owner,fcntl.LOCK_UN)
+            except OSError: pass
+    return False
+
 def ensure_daemon():
     p=ping()
     if p and p.get('ok'): return p
     RUNTIME_DIR.mkdir(parents=True,exist_ok=True)
-    lock_path=RUNTIME_DIR/'session-daemon.lock'
-    with open(lock_path,'a+b') as lock:
-        fcntl.flock(lock,fcntl.LOCK_EX)
-        p=ping()
+    if owner_is_running():
+        raise RuntimeError('browser-workspace daemon is alive but its socket is unreachable; refusing duplicate startup')
+    runtime_python=ensure_runtime_python()
+    log=open(RUNTIME_DIR/'session-daemon.log','ab',buffering=0)
+    subprocess.Popen([str(runtime_python),str(SOURCE/'session_daemon.py')],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True,close_fds=True)
+    deadline=time.time()+15
+    while time.time()<deadline:
+        time.sleep(.1); p=ping()
         if p and p.get('ok'): return p
-        runtime_python=ensure_runtime_python()
-        log=open(RUNTIME_DIR/'session-daemon.log','ab',buffering=0)
-        subprocess.Popen([str(runtime_python),str(SOURCE/'session_daemon.py')],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True,close_fds=True)
-        deadline=time.time()+15
-        while time.time()<deadline:
-            time.sleep(.1); p=ping()
-            if p and p.get('ok'): return p
     raise RuntimeError(f'browser-workspace session daemon did not start; see {RUNTIME_DIR / "session-daemon.log"}')

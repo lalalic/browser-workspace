@@ -21,7 +21,7 @@ from browser_harness import helpers as bh
 DEFAULT_WORKSPACE = os.environ.get('BH_WORKSPACE_NAME','Harness')
 RUNTIME_DIR = Path.home()/'.config/browser-workspace/runtime'
 SOCKET_PATH = (Path(os.environ['BROWSER_WORKSPACE_SESSION_SOCKET']) if os.environ.get('BROWSER_WORKSPACE_TEST_MODE')=='1' and os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET') else RUNTIME_DIR/'session.sock')
-OWNER_LOCK_PATH = RUNTIME_DIR/'session-daemon.owner.lock'
+OWNER_LOCK_PATH = RUNTIME_DIR/'session.lock'
 SESSIONS = {}
 SESSIONS_LOCK = threading.Lock()
 BROWSER_LOCK = threading.RLock()
@@ -256,12 +256,25 @@ def stop_session(sid):
         if errors: release_error='; '.join(errors)
     return {'session_id':sid,'workspace':s.workspace,'target_id':s.target_id,'closed_tabs':closed_count,'release_error':release_error}
 
+SOCKET_IDENTITY = None
+
+def remove_owned_socket():
+    """Never unlink a socket replaced by another owner."""
+    if SOCKET_IDENTITY is None:
+        return
+    try:
+        st = SOCKET_PATH.lstat()
+        if (st.st_dev, st.st_ino) == SOCKET_IDENTITY:
+            SOCKET_PATH.unlink()
+    except FileNotFoundError:
+        pass
+
 def cleanup():
     with SESSIONS_LOCK: ids=list(SESSIONS)
     for sid in ids:
         try: stop_session(sid)
         except Exception: pass
-    try: SOCKET_PATH.unlink(missing_ok=True)
+    try: remove_owned_socket()
     except Exception: pass
 atexit.register(cleanup)
 
@@ -309,6 +322,7 @@ def serve_conn(conn):
         f.write((json.dumps(result,ensure_ascii=False)+'\n').encode()); f.flush()
 
 def main():
+    global SOCKET_IDENTITY
     RUNTIME_DIR.mkdir(parents=True,exist_ok=True)
     try: os.chmod(RUNTIME_DIR,0o700)
     except Exception: pass
@@ -318,8 +332,9 @@ def main():
         fcntl.flock(owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
     except BlockingIOError:
         owner.close(); return
+    # Lock ownership is required before changing the shared socket path.
     SOCKET_PATH.unlink(missing_ok=True)
-    srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); srv.bind(str(SOCKET_PATH)); os.chmod(SOCKET_PATH,0o600); srv.listen(32)
+    srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); srv.bind(str(SOCKET_PATH)); os.chmod(SOCKET_PATH,0o600); SOCKET_IDENTITY=(SOCKET_PATH.stat().st_dev, SOCKET_PATH.stat().st_ino); srv.listen(32)
     try:
         while True:
             conn,_=srv.accept(); threading.Thread(target=serve_conn,args=(conn,),daemon=True).start()
