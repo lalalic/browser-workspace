@@ -6,6 +6,7 @@ storing recoverable cookies. Chrome remains running; no browser commands issued.
 """
 import argparse
 import datetime as dt
+import fcntl
 import hashlib
 import hmac
 import json
@@ -22,6 +23,8 @@ SITES = {
     'google_store': ('google.com', 'googleusercontent.com'),
 }
 CHROME_EPOCH_OFFSET = 11644473600
+# Non-secret cookie names, never values. Watch the known WeChat session pair.
+WATCHED_COOKIES = {'wechat': {'sessionid', 'wxuin'}}
 
 
 def utc_cookie_time(micros):
@@ -91,6 +94,7 @@ def collect(db_path, key):
                 'persistent': bool(persistent), 'secure': bool(secure),
                 'http_only': bool(httponly), 'same_site': samesite,
                 'partitioned': bool(partition),
+                'watched_name': name if any(name in WATCHED_COOKIES.get(site, set()) for site in sites) else None,
             }
             for site in sites:
                 result.setdefault(site, {})[identifier] = record
@@ -134,6 +138,8 @@ def main(argv=None):
     parser.add_argument('--status', choices=['unknown', 'logged_in', 'login_required', 'page_error'], default='unknown',
                         help='Optional manually confirmed status; not inferred from cookie presence')
     parser.add_argument('--site', choices=list(SITES), help='Site to attach an observed status to')
+    parser.add_argument('--page-evidence', choices=['backend_visible', 'login_redirect', 'page_load_failed', 'feed_only', 'unknown'], default='unknown',
+                        help='Optional observable reason (never URLs, user content, or credentials)')
     args = parser.parse_args(argv)
     args.data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(args.data_dir, 0o700)
@@ -141,6 +147,13 @@ def main(argv=None):
     if not db.is_file():
         parser.error('Chrome Cookie database not found; refusing to start Chrome or change profiles')
     key = load_key(args.data_dir / 'audit.key')
+    with (args.data_dir / 'collector.lock').open('a+') as guard:
+        os.chmod(args.data_dir / 'collector.lock', 0o600)
+        fcntl.flock(guard, fcntl.LOCK_EX)
+        return sample_locked(args, db, key)
+
+
+def sample_locked(args, db, key):
     now = int(time.time())
     current = collect(db, key)
     state_path = args.data_dir / 'latest.json'
@@ -156,9 +169,15 @@ def main(argv=None):
                                if item['expires_at'] is not None and item['expires_at'] > now), default=None),
         **change[site],
     } for site, cookies in current.items()}
-    event = {'schema': 1, 'timestamp': now, 'utc': dt.datetime.fromtimestamp(now, dt.timezone.utc).isoformat(),
+    watched = {site: {name: {'expires_at': item['expires_at'],
+                 'updated_at': item['updated_at'],
+                 'created_at': item['created_at']}
+                 for item in cookies.values() if (name := item.get('watched_name'))}
+               for site, cookies in current.items() if site in WATCHED_COOKIES}
+    event = {'schema': 2, 'watched_cookie_metadata': watched, 'timestamp': now, 'utc': dt.datetime.fromtimestamp(now, dt.timezone.utc).isoformat(),
              'profile': str(args.profile), 'sites': summary,
-             'observed_status': {args.site: args.status} if args.site else {}}
+             'observed_status': {args.site: args.status} if args.site else {},
+             'page_evidence': {args.site: args.page_evidence} if args.site else {}}
     append_jsonl(args.data_dir / 'events.jsonl', event)
     state = {'timestamp': now, 'sites': current}
     tmp_path = args.data_dir / f'.latest-{os.getpid()}.tmp'

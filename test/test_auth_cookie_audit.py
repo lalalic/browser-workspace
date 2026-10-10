@@ -29,6 +29,24 @@ class CookieAuditTests(unittest.TestCase):
         self.assertEqual(change, dict(added=1, removed=0, value_rotated=1,
             expiry_extended=1, expiry_shortened=0, last_update_changed=1))
 
+    def test_collect_tracks_wechat_session_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'Cookies'
+            c = sqlite3.connect(path)
+            c.execute('''CREATE TABLE cookies(host_key text, name text, path text,
+             top_frame_site_key text, encrypted_value blob, value text,
+             expires_utc integer, creation_utc integer, last_update_utc integer,
+             last_access_utc integer, is_secure integer, is_httponly integer,
+             samesite integer, is_persistent integer)''')
+            c.execute('INSERT INTO cookies VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                ('channels.weixin.qq.com', 'sessionid', '/', '', b'ENCRYPTED-SECRET', '',
+                 0, 0, 123, 0, 1, 1, 1, 1))
+            c.commit()
+            c.close()
+            result = audit.collect(path, b'a' * 32)
+            self.assertEqual(next(iter(result['wechat'].values()))['watched_name'], 'sessionid')
+            self.assertNotIn('ENCRYPTED-SECRET', json.dumps(result))
+
     def test_collect_does_not_export_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'Cookies'

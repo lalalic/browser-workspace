@@ -48,3 +48,10 @@ Cookie expiry may belong to an unrelated cookie, not the authentication token.
 
 To remove the sampler, delete only its crontab entry. Do **not** delete or
 restart the Chrome profile, daemon, or existing page-check schedule.
+
+The sampler serializes all state reads/updates with an OS file lock to avoid
+false Cookie changes when the 15-minute cron overlaps a page-check annotation.
+For WeChat, the `sessionid` and `wxuin` cookie names are watched explicitly:
+only their timestamps and presence are published, never their values. A page
+check may include `--page-evidence backend_visible` or `login_redirect` /
+`page_load_failed` / `feed_only`; use only when the page was just checked.
