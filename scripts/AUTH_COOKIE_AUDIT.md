@@ -55,3 +55,17 @@ For WeChat, the `sessionid` and `wxuin` cookie names are watched explicitly:
 only their timestamps and presence are published, never their values. A page
 check may include `--page-evidence backend_visible` or `login_redirect` /
 `page_load_failed` / `feed_only`; use only when the page was just checked.
+
+## Proactive authenticated visits
+
+Besides passive cookie sampling (minute 0/15/30/45), a separate
+auth-keepalive-visit-cron.sh executes auth_keepalive_visit.py at minutes
+7/22/37/52. It navigates the three websites sequentially in the existing
+Browser Workspace profile using session CLI, reads page state, and closes
+only sessions it started in finally blocks. The script is guarded by lockf.
+
+Each run records cookie metadata before navigating and after each visit.
+Private auth-audit/visits.jsonl stores only site status, evidence kind, retry
+count and cleanup status. Never logs cookies or page content. Website visits
+cannot guarantee indefinite login: server-side revocation and forced
+authentication may still occur.
