@@ -1,5 +1,5 @@
 """CDP WS holder + IPC relay (Unix socket on POSIX, TCP loopback on Windows). One daemon per BU_NAME."""
-import asyncio, json, os, platform, socket, sys, time, urllib.error, urllib.request
+import asyncio, json, os, platform, socket, sys, threading, time, urllib.error, urllib.request
 from urllib.parse import urlparse
 from collections import deque
 from pathlib import Path
@@ -7,6 +7,7 @@ from pathlib import Path
 from . import _ipc as ipc
 from . import auth
 from . import paths
+from .admin import _process_start_time
 from cdp_use.client import CDPClient
 
 
@@ -35,6 +36,41 @@ SOCK = ipc.sock_addr(NAME)
 LOG = str(ipc.log_path(NAME))
 PID = str(ipc.pid_path(NAME))
 BUF = 500
+
+OWNER_PID = int(os.environ.get("BH_OWNER_PID") or "0")
+OWNER_STARTED = os.environ.get("BH_OWNER_STARTED") or None
+OWNER_TOKEN = os.environ.get("BH_OWNER_TOKEN") or None
+OWNER_PIPE_FD = int(os.environ.get("BH_OWNER_PIPE_FD") or "-1")
+
+
+def owner_alive():
+    """Reject PID reuse; unknown fingerprints cannot prove ownership."""
+    return bool(OWNER_PID > 0 and OWNER_STARTED
+                and _process_start_time(OWNER_PID) == OWNER_STARTED)
+
+
+def monitor_owner():
+    if not OWNER_TOKEN:
+        return
+    if OWNER_PIPE_FD >= 0:
+        # Readable EOF proves that the actual spawning session generation
+        # exited, SIGKILLed, or exec'd; a reused PID cannot keep this alive.
+        try:
+            while os.read(OWNER_PIPE_FD, 1):
+                pass
+        except OSError:
+            pass
+        os._exit(0)
+    # Windows compatibility: kernel process creation time + PID identity.
+    while owner_alive():
+        time.sleep(0.5)
+    os._exit(0)
+
+
+def begin_owner_monitor():
+    if OWNER_TOKEN:
+        threading.Thread(target=monitor_owner, name="harness-parent-watch", daemon=True).start()
+
 _MAC_PROFILES = (
     "Library/Application Support/Google/Chrome",
     "Library/Application Support/Google/Chrome Canary",
@@ -737,6 +773,11 @@ class Daemon:
             self._schedule_tab_marker(new_session)
             return {"session_id": new_session}
         if meta == "pending_dialog": return {"dialog": self.dialog}
+        if meta == "owner_shutdown":
+            if not OWNER_TOKEN or req.get("owner_token") != OWNER_TOKEN:
+                return {"error": "not harness owner"}
+            self.stop.set()
+            return {"ok": True}
         if meta == "shutdown":
             # Flip the barrier synchronously with recovery registration, then
             # cancel/drain existing handlers. In particular, a CDP replay that
@@ -881,6 +922,7 @@ if __name__ == "__main__":
         sys.exit(0)
     open(LOG, "w").close()
     _publish_own_pid()
+    begin_owner_monitor()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
