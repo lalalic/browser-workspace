@@ -65,6 +65,20 @@ jobs:
       - name: Publish
         if: steps.npm-version.outputs.publish == 'true'
         run: npm publish --access public
+      - name: Wait until exact published version is pullable
+        shell: bash
+        run: |
+          expected="${{ steps.npm-version.outputs.version }}"
+          for attempt in $(seq 1 150); do
+            observed="$(npm view "browser-workspace@$expected" version --registry=https://registry.npmjs.org 2>/dev/null || true)"
+            if [ "$observed" = "$expected" ]; then
+              echo "browser-workspace@$expected is pullable from npm."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "browser-workspace@$expected did not become pullable from npm in the bounded publish window." >&2
+          exit 1
       - name: Report verified publication
         env:
           GITHUB_TOKEN: ${{ github.token }}
