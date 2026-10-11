@@ -8,7 +8,7 @@ version = "0.4.5"
 description = "Agent browser workspace with persistent Python sessions, tab leasing, snapshots, and platform workflows."
 requires-python = ">=3.11"
 dependencies = [
-  "browser-harness @ git+https://github.com/lalalic/browser-harness.git@80b74e116b9126f5159c84e5e05a750573e5f192",
+  "browser-harness==0.1.13",
   "cdp-use==1.4.5",
   "fetch-use==0.4.0",
   "pillow==12.3.0",

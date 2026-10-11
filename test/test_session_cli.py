@@ -36,7 +36,7 @@ def test_agent_helper_dynamic_workspace_symbols():
 
 def test_runtime_uses_external_browser_harness_dependency():
     metadata = (ROOT / 'pyproject.toml').read_text()
-    assert 'browser-harness @ git+https://github.com/lalalic/browser-harness.git@80b74e116b9126f5159c84e5e05a750573e5f192' in metadata
+    assert 'browser-harness==0.1.13' in metadata
     assert not (ROOT / 'src/browser_harness').exists()
     client = (ROOT / 'session_client.py').read_text()
     assert "RUNTIME_DIR/'venv'/package_version()/'bin/python'" in client
@@ -140,3 +140,10 @@ def test_skill_contract_requires_session_self_heal_and_writeback():
     assert "same session" in skill.lower()
     assert "click_at_xy()" in skill
     assert "must not use screen coordinates" in skill
+
+
+def test_runtime_bootstrap_overlays_exact_harness_revision():
+    client = (ROOT / 'session_client.py').read_text()
+    assert "HARNESS_RUNTIME_SPEC='browser-harness @ git+https://github.com/lalalic/browser-harness.git@80b74e116b9126f5159c84e5e05a750573e5f192'" in client
+    assert "'--reinstall',HARNESS_RUNTIME_SPEC" in client
+    assert "'--force-reinstall',HARNESS_RUNTIME_SPEC" in client

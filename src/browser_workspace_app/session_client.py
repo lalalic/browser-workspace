@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parent
 RUNTIME_DIR=Path.home()/'.config/browser-workspace/runtime'
 SOCKET_PATH=(Path(os.environ['BROWSER_WORKSPACE_SESSION_SOCKET']) if os.environ.get('BROWSER_WORKSPACE_TEST_MODE')=='1' and os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET') else RUNTIME_DIR/'session.sock')
+HARNESS_RUNTIME_SPEC='browser-harness @ git+https://github.com/lalalic/browser-harness.git@80b74e116b9126f5159c84e5e05a750573e5f192'
 
 def package_version():
     try:
@@ -53,6 +54,7 @@ def ensure_runtime_python():
         if uv:
             subprocess.run([uv,'venv','--python','3.11',str(PYTHON.parent.parent)],check=True)
             subprocess.run([uv,'pip','install','--python',str(PYTHON),'-e',str(SOURCE)],check=True)
+            subprocess.run([uv,'pip','install','--python',str(PYTHON),'--reinstall',HARNESS_RUNTIME_SPEC],check=True)
             return PYTHON
         if sys.version_info < (3,11):
             raise RuntimeError(
@@ -61,6 +63,7 @@ def ensure_runtime_python():
             )
         subprocess.run([sys.executable,'-m','venv',str(PYTHON.parent.parent)],check=True)
         subprocess.run([str(PYTHON),'-m','pip','install','-e',str(SOURCE)],check=True)
+        subprocess.run([str(PYTHON),'-m','pip','install','--force-reinstall',HARNESS_RUNTIME_SPEC],check=True)
         return PYTHON
 
 def request(payload, ensure=True):
