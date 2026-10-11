@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import ast, atexit, contextlib, io, json, os, secrets, socket, sys, threading, time, traceback
+import ast, atexit, contextlib, io, json, os, secrets, signal, socket, sys, threading, time, traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -14,9 +14,30 @@ os.environ.setdefault('BH_WORKSPACE_NAME', 'Harness')
 
 from managed_chrome import ensure_managed_chrome
 MANAGED_CHROME = ensure_managed_chrome()
-from browser_harness.admin import ensure_daemon
-ensure_daemon()
+from browser_harness.admin import ensure_daemon, _process_start_time
+from browser_harness import _ipc as harness_ipc
 from browser_harness import helpers as bh
+
+HARNESS_OWNER_TOKEN = secrets.token_hex(24)
+HARNESS_OWNER_PID = os.getpid()
+HARNESS_OWNER_STARTED = _process_start_time(HARNESS_OWNER_PID)
+HARNESS_OWNER_PIPE = None
+
+
+def stop_owned_harness():
+    """Only a harness matching this daemon generation may stop."""
+    try:
+        conn, token = harness_ipc.connect(os.environ.get('BU_NAME', 'browser-workspace'), timeout=1)
+        with conn:
+            response = harness_ipc.request(conn, token, {'meta': 'owner_shutdown', 'owner_token': HARNESS_OWNER_TOKEN})
+        if isinstance(response, dict) and response.get('ok'):
+            # Allow the harness its graceful CDP/IPC cleanup before EOF of
+            # our owner pipe forces the crash-only exit path.
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline and harness_ipc.ping(os.environ.get('BU_NAME', 'browser-workspace'), timeout=0.1):
+                time.sleep(0.05)
+    except (OSError, ValueError, TimeoutError):
+        pass
 
 DEFAULT_WORKSPACE = os.environ.get('BH_WORKSPACE_NAME','Harness')
 RUNTIME_DIR = Path.home()/'.config/browser-workspace/runtime'
@@ -25,6 +46,47 @@ OWNER_LOCK_PATH = RUNTIME_DIR/'session.lock'
 SESSIONS = {}
 SESSIONS_LOCK = threading.Lock()
 BROWSER_LOCK = threading.RLock()
+
+SESSION_RECONCILE_SECONDS = 30
+
+
+def is_reclaimed(info):
+    url = info.get('url', '')
+    if not url.startswith('chrome-extension://'):
+        return False
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(url)
+        return parsed.path == '/workspace.html' and parse_qs(parsed.query).get('role') == ['idle']
+    except ValueError:
+        return False
+
+
+def reconcile_sessions():
+    """Drop records for completely released leases, never release those tabs again."""
+    with BROWSER_LOCK:
+        try:
+            targets = bh.cdp('Target.getTargets')['targetInfos']
+        except Exception:
+            return []
+        pages = {i['targetId']: i for i in targets if i.get('type') == 'page'}
+        removed = []
+        with SESSIONS_LOCK:
+            for sid, session in list(SESSIONS.items()):
+                if session.lock.locked():
+                    continue
+                # A leased root may have opened child tabs: keep any live child.
+                if all(tid not in pages or is_reclaimed(pages[tid])
+                       for tid in session.owned_target_ids):
+                    del SESSIONS[sid]
+                    removed.append(sid)
+        return removed
+
+
+def reconciliation_loop():
+    while True:
+        time.sleep(SESSION_RECONCILE_SECONDS)
+        reconcile_sessions()
 
 
 def compilable_module_body(body):
@@ -274,6 +336,12 @@ def cleanup():
     for sid in ids:
         try: stop_session(sid)
         except Exception: pass
+    stop_owned_harness()
+    # The write end is close-on-exec; its final close also detects SIGKILL
+    # and parent re-exec without relying on a recycled numeric PID.
+    if HARNESS_OWNER_PIPE is not None:
+        try: os.close(HARNESS_OWNER_PIPE)
+        except OSError: pass
     try: remove_owned_socket()
     except Exception: pass
 atexit.register(cleanup)
@@ -332,9 +400,29 @@ def main():
         fcntl.flock(owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
     except BlockingIOError:
         owner.close(); return
+    global HARNESS_OWNER_PIPE
+    read_fd, write_fd = os.pipe() if os.name == 'posix' else (None, None)
+    HARNESS_OWNER_PIPE = write_fd
+    try:
+        owner_env = {
+            'BH_OWNER_PID': str(HARNESS_OWNER_PID),
+            'BH_OWNER_STARTED': str(HARNESS_OWNER_STARTED or ''),
+            'BH_OWNER_TOKEN': HARNESS_OWNER_TOKEN,
+        }
+        if read_fd is not None:
+            owner_env['BH_OWNER_PIPE_FD'] = str(read_fd)
+        ensure_daemon(env=owner_env)
+    finally:
+        if read_fd is not None:
+            os.close(read_fd)
+    def terminate(_signum, _frame):
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, terminate)
+    signal.signal(signal.SIGINT, terminate)
     # Lock ownership is required before changing the shared socket path.
     SOCKET_PATH.unlink(missing_ok=True)
     srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); srv.bind(str(SOCKET_PATH)); os.chmod(SOCKET_PATH,0o600); SOCKET_IDENTITY=(SOCKET_PATH.stat().st_dev, SOCKET_PATH.stat().st_ino); srv.listen(32)
+    threading.Thread(target=reconciliation_loop, daemon=True).start()
     try:
         while True:
             conn,_=srv.accept(); threading.Thread(target=serve_conn,args=(conn,),daemon=True).start()

@@ -6,8 +6,17 @@ import types
 
 def load_execute(monkeypatch):
     admin = types.ModuleType("browser_harness.admin")
-    admin.ensure_daemon = lambda: {"ok": True, "session_count": 0}
+    admin.ensure_daemon = lambda **kwargs: {"ok": True, "session_count": 0}
+    admin._process_start_time = lambda pid: "test-generation"
+    ipc = types.ModuleType("browser_harness._ipc")
+    ipc.connect = lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError())
     helpers = types.ModuleType("browser_harness.helpers")
+    pkg = types.ModuleType("browser_harness")
+    pkg.admin = admin
+    pkg._ipc = ipc
+    pkg.helpers = helpers
+    monkeypatch.setitem(sys.modules, "browser_harness", pkg)
+    monkeypatch.setitem(sys.modules, "browser_harness._ipc", ipc)
     monkeypatch.setitem(sys.modules, "browser_harness.admin", admin)
     monkeypatch.setitem(sys.modules, "browser_harness.helpers", helpers)
 

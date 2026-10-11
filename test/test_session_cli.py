@@ -34,12 +34,12 @@ def test_agent_helper_dynamic_workspace_symbols():
     assert "ContextVar" in src
 
 
-def test_runtime_is_vendored():
-    assert (ROOT / "src/browser_harness/helpers.py").exists()
-    assert (ROOT / "src/browser_harness/daemon.py").exists()
-    client = (ROOT / "session_client.py").read_text()
+def test_runtime_uses_external_browser_harness_dependency():
+    metadata = (ROOT / 'pyproject.toml').read_text()
+    assert 'browser-harness @ git+https://github.com/lalalic/browser-harness.git@80b74e116b9126f5159c84e5e05a750573e5f192' in metadata
+    assert not (ROOT / 'src/browser_harness').exists()
+    client = (ROOT / 'session_client.py').read_text()
     assert "RUNTIME_DIR/'venv'/package_version()/'bin/python'" in client
-    assert "BROWSER_HARNESS_SKILL" not in client
 
 
 def test_session_start_returns_soft_workspace_warning_contract():
@@ -78,11 +78,11 @@ def test_npx_install_self_bootstraps_runtime():
     assert "runtime_python=ensure_runtime_python()" in client
 
 
-def test_skill_uses_installed_cli_path_for_npx_skills():
+def test_skill_uses_published_uvx_cli():
     skill = (ROOT / "SKILL.md").read_text()
-    assert 'BW_CLI="$HOME/.agents/skills/browser-workspace/bin/browser-workspace"' in skill
-    assert "$BW_CLI session start" in skill
-    assert "$BW_CLI platform run" in skill
+    assert 'bw() { uvx browser-workspace "$@"; }' in skill
+    assert "bw session start" in skill
+    assert "bw platform run" in skill
 
 
 def test_workspace_lifecycle_is_product_admin_only():

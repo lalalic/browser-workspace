@@ -26,7 +26,7 @@ browser-workspace session stop SESSION_ID
 
 ```text
 browser-workspace
-├── src/browser_harness/     low-level browser/CDP runtime (forked internally)
+├── pyproject.toml           pins the external browser-harness runtime dependency
 ├── agent-workspace/         Browser Workspace helper layer
 ├── extension/               Chrome workspace/tab manager
 ├── session_daemon.py        persistent Python session service

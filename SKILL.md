@@ -321,4 +321,4 @@ kgbghhigmbpefppgkocgjgnnnbhjchic
 
 ## Internal provenance
 
-The low-level browser runtime is forked from `browser-use/browser-harness` and kept internally under `src/browser_harness/`. Browser Workspace is the public product/skill/CLI surface. Upstream licensing is preserved under `licenses/`.
+The low-level browser runtime is the separately maintained `browser-harness` Python dependency. Browser Workspace owns the session/workspace/platform product layer and pins the exact Harness runtime revision it was tested with; Harness source is not vendored into this repository. Upstream licensing remains documented under `licenses/`.

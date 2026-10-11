@@ -11,8 +11,6 @@ for source_name, dest_name in [('bin/browser-workspace', 'cli.py'), ('session_cl
 for name in ('platforms', 'agent-workspace', 'interaction-skills', 'extension', 'licenses', 'node'):
     shutil.rmtree(target / name, ignore_errors=True)
     shutil.copytree(root / name, target / name, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.DS_Store', '.env', '.env.*', '*.pem', '*.key'))
-shutil.rmtree(target / 'src' / 'browser_harness', ignore_errors=True)
-shutil.copytree(root / 'src' / 'browser_harness', target / 'src' / 'browser_harness', ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.DS_Store', '.env', '.env.*', '*.pem', '*.key'))
 
 # PyPI entry lives directly inside browser_workspace_app, unlike npm bin/.
 cli = target / 'cli.py'
