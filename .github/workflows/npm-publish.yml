@@ -66,16 +66,16 @@ jobs:
         if: steps.npm-version.outputs.publish == 'true'
         run: npm publish --access public
       - name: Report verified publication
-        uses: lalalic/agents-relay/.github/actions/report-publication@publication-v1
-        with:
-          token: ${{ github.token }}
-          artifact: ${{ steps.npm-version.outputs.name }}
-          version: ${{ steps.npm-version.outputs.version }}
-          channel: https://registry.npmjs.org
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ steps.npm-version.outputs.name }}
+          ARTIFACT_VERSION: ${{ steps.npm-version.outputs.version }}
+          RELEASE_CHANNEL: https://registry.npmjs.org
+        run: node tools/report-agents-relay-publication.mjs success
       - name: Report release failure
         if: ${{ failure() }}
         continue-on-error: true
-        uses: lalalic/agents-relay/.github/actions/report-publication-failure@publication-v1
-        with:
-          token: ${{ github.token }}
-          stage: npm publish workflow
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLISH_STAGE: npm publish workflow
+        run: node tools/report-agents-relay-publication.mjs failure
