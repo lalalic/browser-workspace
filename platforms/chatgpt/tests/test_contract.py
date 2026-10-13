@@ -34,7 +34,8 @@ def test_action_uses_browser_helpers_without_infrastructure_import():
     assert "switch_tab(target_id)" in text
     assert "new_tab(thread_url)" in text
     assert '"recovered":recovered' in text
-    assert "from _readiness import wait_until_stable, submission_receipt" in text
+    assert "from _readiness import" in text
+    assert "submission_receipt" in text
 
 
 def test_project_setup_supports_required_inputs():
@@ -68,6 +69,44 @@ def test_prompt_match_tolerates_block_tag_boundary_whitespace():
     assert ns["prompt_text_matches"](observed, expected)
 
 
+def test_submission_receipt_requires_accepted_user_turn():
+    ns = {}
+    exec((ACTIONS / "_readiness.py").read_text(), ns)
+    accepted_turn = {"id": "msg_1", "text": "run the repair"}
+    assert ns["submission_receipt"]([accepted_turn], 0, "run the repair", "") == {
+        "verified_by": "user-turn",
+        "turn": accepted_turn,
+    }
+    assert ns["submission_receipt"]([], 0, "run the repair", "") is None
+    assert ns["submission_receipt"]([], 0, "run the repair", "run the repair") is None
+
+
+def test_submission_failure_preserves_bounded_fallback_diagnostic():
+    ns = {}
+    exec((ACTIONS / "_readiness.py").read_text(), ns)
+    existing_turn = {"id": "old", "text": "old"}
+    diagnostic = ns["submission_failure_diagnostic"](
+        [existing_turn],
+        1,
+        "run the repair",
+        "run the repair",
+        {"composer_present": True, "composer_text_length": 14, "send_enabled": True},
+        {"composer_present": False, "composer_text_length": 0, "send_enabled": False},
+    )
+    assert diagnostic == {
+        "accepted": False,
+        "reason": "no_accepted_user_turn",
+        "user_turn_matched": False,
+        "before_user_turn_count": 1,
+        "user_turn_count": 1,
+        "composer_populated": True,
+        "composer_text_length": 14,
+        "ui_changed": True,
+        "ui_before": {"composer_present": True, "composer_text_length": 14, "send_enabled": True},
+        "ui_after": {"composer_present": False, "composer_text_length": 0, "send_enabled": False},
+    }
+
+
 def test_wait_until_stable_retries_transient_read_errors():
     ns = {}
     exec((ACTIONS / "_readiness.py").read_text(), ns)
@@ -96,6 +135,15 @@ def test_submit_thread_is_submission_only():
     assert 'submission_receipt' in text
     assert 'response_complete' not in text
     assert "app_name" in text and "attach_app_and_restore_prompt" in text
+
+
+def test_submit_thread_fails_closed_with_diagnostic():
+    text = (ACTIONS / "_submit_thread.py").read_text()
+    submit = text.split("if not click_visible_send():", 1)[1]
+    assert "SubmissionVerificationError" in text
+    assert "submission_failure_diagnostic(" in submit
+    assert "ui_before" in submit
+    assert "composer-cleared" not in text
 
 
 def test_manifest_declares_mcp_app_action():
@@ -140,6 +188,25 @@ def test_lifecycle_actions_use_stable_ids_and_do_not_wait_for_new_answer():
     assert "session start" not in turn and "session stop" not in turn
     assert "session start" not in thread and "session stop" not in thread
     assert "submission_receipt" in common
+
+
+def test_lifecycle_submission_fails_closed_with_diagnostic():
+    common = (ACTIONS / "_lifecycle_common.py").read_text()
+    submit = common.split("def submit(prompt):", 1)[1]
+    assert "SubmissionVerificationError" in common
+    assert "verification_ui_state(selector)" in common
+    assert "submission_failure_diagnostic(" in submit
+    assert "ui_before" in submit
+    assert "composer-cleared" not in common
+
+
+def test_thread_turn_fails_closed_with_diagnostic():
+    text = (ACTIONS / "_thread_turn.py").read_text()
+    submit = text.split("def _submit(prompt, files, target_id):", 1)[1].split("def _result(", 1)[0]
+    assert "SubmissionVerificationError" in text
+    assert "submission_failure_diagnostic(" in submit
+    assert "ui_before" in submit
+    assert "composer-cleared" not in text
 
 
 def test_new_thread_supports_projectless_and_temporary_modes():

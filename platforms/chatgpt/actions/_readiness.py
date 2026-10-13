@@ -1,8 +1,16 @@
 """Bounded polling helpers for ChatGPT submit readiness."""
 from __future__ import annotations
 
+import json
 import re
 import time
+
+
+class SubmissionVerificationError(RuntimeError):
+    def __init__(self, message, diagnostic):
+        serialized = json.dumps(diagnostic, ensure_ascii=False, sort_keys=True)
+        super().__init__(f"{message}: {serialized}")
+        self.diagnostic = diagnostic
 
 def wait_until_stable(read_state, ready, *, timeout, interval=0.25, stable_samples=2, phase):
     deadline = time.monotonic() + timeout
@@ -47,6 +55,19 @@ def submission_receipt(turns, before_count, prompt, composer_text):
     for turn in turns[before_count:]:
         if prompt_text_matches(turn.get("text"), prompt):
             return {"verified_by": "user-turn", "turn": turn}
-    if not (composer_text or "").strip():
-        return {"verified_by": "composer-cleared", "turn": {"id": None, "text": prompt}}
     return None
+
+
+def submission_failure_diagnostic(turns, before_count, prompt, composer_text, ui_before=None, ui_after=None):
+    return {
+        "accepted": False,
+        "reason": "no_accepted_user_turn",
+        "user_turn_matched": False,
+        "before_user_turn_count": len(turns[:before_count]),
+        "user_turn_count": len(turns),
+        "composer_populated": bool((composer_text or "").strip()),
+        "composer_text_length": len((composer_text or "").strip()),
+        "ui_changed": None if ui_before is None or ui_after is None else bool(ui_before != ui_after),
+        "ui_before": ui_before,
+        "ui_after": ui_after,
+    }
