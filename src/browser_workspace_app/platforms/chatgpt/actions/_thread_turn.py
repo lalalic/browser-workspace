@@ -3,7 +3,13 @@ import os
 import re
 import time
 from urllib.parse import urlsplit
-from _readiness import wait_until_stable, submission_receipt, prompt_text_matches
+from _readiness import (
+    SubmissionVerificationError,
+    submission_failure_diagnostic,
+    submission_receipt,
+    prompt_text_matches,
+    wait_until_stable,
+)
 
 
 CFG = json.load(open("__CFG_PATH__", encoding="utf-8"))
@@ -260,6 +266,14 @@ def _submit(prompt, files, target_id):
         phase="send readiness",
     )
     selector=state["selector"]
+    ui_before={
+        "composer_present": bool(_composer()),
+        "composer_text_length": len((_composer_text(selector) or "").strip()),
+        "send_present": bool(_send_state().get("present")),
+        "send_enabled": bool(_send_state().get("enabled")),
+        "generating": _is_generating(),
+        "user_turn_count": len(_user_turns()),
+    }
     clicked=js("""(() => {
       const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"]');
       if (!b || b.disabled || b.getAttribute('aria-disabled') === 'true') return false;
@@ -272,7 +286,22 @@ def _submit(prompt, files, target_id):
         receipt=submission_receipt(_user_turns(), before_users, prompt, _composer_text(selector))
         if receipt: break
         time.sleep(.25)
-    if not receipt: raise RuntimeError("ChatGPT submission verification did not observe an accepted submission")
+    if not receipt:
+        raise SubmissionVerificationError(
+            "ChatGPT submission verification did not observe an accepted submission",
+            submission_failure_diagnostic(
+                _user_turns(), before_users, prompt, _composer_text(selector),
+                ui_before,
+                {
+                    "composer_present": bool(_composer()),
+                    "composer_text_length": len((_composer_text(selector) or "").strip()),
+                    "send_present": bool(_send_state().get("present")),
+                    "send_enabled": bool(_send_state().get("enabled")),
+                    "generating": _is_generating(),
+                    "user_turn_count": len(_user_turns()),
+                },
+            ),
+        )
     return before_assistants, attachments, receipt
 
 def _result(before_assistants, timeout):

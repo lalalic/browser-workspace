@@ -2,7 +2,13 @@ import json
 import os
 import time
 from urllib.parse import quote
-from _readiness import wait_until_stable, submission_receipt, prompt_text_matches
+from _readiness import (
+    SubmissionVerificationError,
+    submission_failure_diagnostic,
+    submission_receipt,
+    prompt_text_matches,
+    wait_until_stable,
+)
 
 CFG=json.load(open("__CFG_PATH__",encoding="utf-8"))
 project_id=str(CFG.get("project_id") or "").strip()
@@ -117,6 +123,8 @@ wait_until_stable(
     timeout=45 if attachments else 20,
     phase="send readiness",
 )
+state_before=composer_state()
+ui_before={"composer_present":state_before["present"],"composer_text_length":len(state_before["text"]),"send_enabled":state_before["sendEnabled"]}
 if not click_visible_send(): raise RuntimeError("ChatGPT send button changed before click")
 deadline=time.time()+15
 receipt=None
@@ -124,6 +132,15 @@ while time.time()<deadline:
     receipt=submission_receipt(user_turns(),before_users,prompt,visible_composer_text())
     if receipt: break
     time.sleep(.1)
-if not receipt: raise RuntimeError("ChatGPT submission verification did not observe an accepted submission")
+if not receipt:
+    state_after=composer_state()
+    raise SubmissionVerificationError(
+        "ChatGPT submission verification did not observe an accepted submission",
+        submission_failure_diagnostic(
+            user_turns(), before_users, prompt, visible_composer_text(),
+            ui_before,
+            {"composer_present":state_after["present"],"composer_text_length":len(state_after["text"]),"send_enabled":state_after["sendEnabled"]},
+        ),
+    )
 
-print(json.dumps({"status":"submitted","project_id":project_id,"thread_id":thread_id,"verified_by":receipt["verified_by"],"user_message_id":receipt["turn"].get("id") or None,"app":app_name or None},ensure_ascii=False),flush=True)
+print(json.dumps({"status":"submitted","project_id":project_id,"thread_id":thread_id,"thread_url":thread_url,"verified_by":receipt["verified_by"],"user_message_id":receipt["turn"].get("id") or None,"app":app_name or None},ensure_ascii=False),flush=True)

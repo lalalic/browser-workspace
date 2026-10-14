@@ -1,6 +1,12 @@
 import json
 import time
-from _readiness import wait_until_stable, submission_receipt, prompt_text_matches
+from _readiness import (
+    SubmissionVerificationError,
+    submission_failure_diagnostic,
+    submission_receipt,
+    prompt_text_matches,
+    wait_until_stable,
+)
 
 
 def composer_selector():
@@ -31,6 +37,16 @@ def send_enabled():
       const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"],form button[type="submit"]');
       return !!b && !b.disabled && b.getAttribute('aria-disabled') !== 'true';
     })()"""))
+
+
+def verification_ui_state(selector):
+    return {
+        "composer_selector": selector,
+        "composer_text_length": len((composer_text(selector) or "").strip()),
+        "send_enabled": send_enabled(),
+        "generating": is_generating(),
+        "user_turn_count": len(user_turns()),
+    }
 
 
 def is_generating():
@@ -105,6 +121,7 @@ def fill_prompt(prompt):
 def submit(prompt):
     before=len(user_turns())
     selector=fill_prompt(prompt)
+    ui_before=verification_ui_state(selector)
     clicked=js("""(() => {
       const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"],form button[type="submit"]');
       if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return false;
@@ -116,4 +133,10 @@ def submit(prompt):
         receipt=submission_receipt(user_turns(),before,prompt,composer_text(selector))
         if receipt: return receipt
         time.sleep(.2)
-    raise RuntimeError("ChatGPT lifecycle submission was not observed")
+    raise SubmissionVerificationError(
+        "ChatGPT lifecycle submission was not observed",
+        submission_failure_diagnostic(
+            user_turns(), before, prompt, composer_text(selector),
+            ui_before, verification_ui_state(selector),
+        ),
+    )
