@@ -143,4 +143,4 @@ if not receipt:
         ),
     )
 
-print(json.dumps({"status":"submitted","project_id":project_id,"thread_id":thread_id,"verified_by":receipt["verified_by"],"user_message_id":receipt["turn"].get("id") or None,"app":app_name or None},ensure_ascii=False),flush=True)
+print(json.dumps({"status":"submitted","project_id":project_id,"thread_id":thread_id,"thread_url":thread_url,"verified_by":receipt["verified_by"],"user_message_id":receipt["turn"].get("id") or None,"app":app_name or None},ensure_ascii=False),flush=True)

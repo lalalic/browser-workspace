@@ -28,6 +28,7 @@ print(json.dumps({
   "mode":"new-turn",
   "project_id":project_id,
   "thread_id":thread_id,
+  "thread_url":thread_url,
   "verified_by":receipt["verified_by"],
   "user_message_id":receipt["turn"].get("id") or None,
 },ensure_ascii=False),flush=True)

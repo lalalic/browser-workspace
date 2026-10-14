@@ -248,3 +248,11 @@ def test_temporary_submit_recovers_only_before_send_from_prefill_hydration():
     assert 'goto_url(temporary_chat_entry_url())' in code
     assert '"composer readiness was not observed ready" not in str(exc)' in code
     assert 'if not _temporary_chat_enabled():' in code
+
+
+def test_thread_url_returned_by_new_turn_and_submit_thread():
+    from pathlib import Path
+    actions = Path(__file__).resolve().parents[1] / "actions"
+    for name in ("_new_turn.py", "_submit_thread.py"):
+        source = (actions / name).read_text(encoding="utf-8")
+        assert "\"thread_url\":thread_url" in source
