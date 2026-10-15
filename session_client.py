@@ -31,6 +31,13 @@ def runtime_source():
         destination=tmp/name
         if source.is_dir(): shutil.copytree(source,destination)
         else: shutil.copy2(source,destination)
+    # A published wheel installs directly under browser_workspace_app/ without
+    # a nested src/ tree. Reconstruct the build layout only in the runtime
+    # cache, never in the repository or published source tree.
+    if not (tmp/'src').exists():
+        package_root = tmp/'src'/'browser_workspace_app'
+        package_root.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(ROOT, package_root, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.DS_Store'))
     (tmp/'.ready').write_text(package_version())
     shutil.rmtree(target,ignore_errors=True)
     tmp.rename(target)
