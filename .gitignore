@@ -12,3 +12,9 @@ uv.lock
 
 src/browser_workspace_app/**/.env
 src/browser_workspace_app/**/.env.*
+
+# Platform implementations are sourced from top-level platforms/ and bundled at build time.
+/src/browser_workspace_app/platforms/
+
+# Bundled only when building distributable packages.
+/src/browser_workspace_app/platform_runner.py

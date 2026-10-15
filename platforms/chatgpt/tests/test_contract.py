@@ -128,6 +128,29 @@ def test_wait_until_stable_retries_transient_read_errors():
     assert calls["n"] == 3
 
 
+def test_wait_until_stable_requires_same_ready_state():
+    ns = {}
+    exec((ACTIONS / "_readiness.py").read_text(), ns)
+    states = iter([{"selector": "textarea"}, {"selector": "#composer"}, {"selector": "#composer"}])
+    result = ns["wait_until_stable"](
+        lambda: next(states),
+        lambda state: bool(state["selector"]),
+        timeout=0.2,
+        interval=0.001,
+        stable_samples=2,
+        phase="test",
+    )
+    assert result == {"selector": "#composer"}
+
+
+def test_fill_prompt_prefers_canonical_composer_before_fallback():
+    text=(ACTIONS / "_lifecycle_common.py").read_text()
+    fill_prompt=text.split("def fill_prompt(",1)[1].split("def submit(",1)[0]
+    assert fill_prompt.index("primary_composer_selector(),") < fill_prompt.index("composer_selector(),")
+    assert "canonical composer readiness" in text
+    assert "ChatGPT composer readiness" in text
+
+
 def test_submit_thread_is_submission_only():
     text=(ACTIONS/"_submit_thread.py").read_text()
     assert 'project_id' in text and 'thread_id' in text
@@ -256,3 +279,11 @@ def test_thread_url_returned_by_new_turn_and_submit_thread():
     for name in ("_new_turn.py", "_submit_thread.py"):
         source = (actions / name).read_text(encoding="utf-8")
         assert "\"thread_url\":thread_url" in source
+
+
+def test_generic_contenteditable_fallback_is_unique_and_excludes_pending_home_input():
+    text=(ACTIONS / "_lifecycle_common.py").read_text()
+    part=text.split("def composer_selector():",1)[1].split("def primary_composer_selector():",1)[0]
+    assert "generic.length===1" in part
+    assert "pending-home-input" in part
+    assert "[contenteditable=\"true\"]:not(#pending-home-input)" in part

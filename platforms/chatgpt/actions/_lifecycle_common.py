@@ -18,6 +18,24 @@ def composer_selector():
         const r=e.getBoundingClientRect();
         if (r.width>0 && r.height>0) return selector;
       }
+      const generic=[...document.querySelectorAll('[contenteditable="true"]')].filter(e=>{
+        if (e.id==='pending-home-input' || e.disabled) return false;
+        const r=e.getBoundingClientRect();
+        return r.width>0 && r.height>0;
+      });
+      return generic.length===1 ? '[contenteditable="true"]:not(#pending-home-input)' : null;
+    })()""")
+
+
+def primary_composer_selector():
+    return js("""(() => {
+      const selectors=['#prompt-textarea','[contenteditable="true"][data-composer-markdown]','[contenteditable="true"][data-lexical-editor="true"]'];
+      for (const selector of selectors) {
+        const e=document.querySelector(selector);
+        if (!e || e.disabled) continue;
+        const r=e.getBoundingClientRect();
+        if (r.width>0 && r.height>0) return selector;
+      }
       return null;
     })()""")
 
@@ -82,12 +100,21 @@ def wait_for_idle(timeout=300):
 
 
 def fill_prompt(prompt):
-    selector=wait_until_stable(
-        lambda: composer_selector(),
-        lambda value: bool(value),
-        timeout=30,
-        phase="ChatGPT composer readiness",
-    )
+    try:
+        selector=wait_until_stable(
+            lambda: primary_composer_selector(),
+            lambda value: bool(value),
+            timeout=20,
+            phase="ChatGPT canonical composer readiness",
+        )
+    except RuntimeError:
+        # The preferred selector timed out; still try the generic composer.
+        selector=wait_until_stable(
+            lambda: composer_selector(),
+            lambda value: bool(value),
+            timeout=5,
+            phase="ChatGPT composer readiness",
+        )
     editable=bool(js(f"""(() => document.querySelector({json.dumps(selector)})?.getAttribute('contenteditable')==='true')()"""))
     if editable:
         chunks=[prompt[i:i+256] for i in range(0, len(prompt), 256)]
@@ -109,12 +136,15 @@ def fill_prompt(prompt):
         if not ok: raise RuntimeError("ChatGPT composer rejected lifecycle continuation")
     else:
         fill_input(selector,prompt,clear_first=True)
-    wait_until_stable(
-        lambda: {"text":composer_text(selector),"send":send_enabled()},
-        lambda state: prompt_text_matches(state["text"],prompt) and state["send"],
-        timeout=20,
-        phase="ChatGPT lifecycle continuation readiness",
-    )
+    try:
+        wait_until_stable(
+            lambda: {"text":composer_text(selector),"send":send_enabled()},
+            lambda state: prompt_text_matches(state["text"],prompt) and state["send"],
+            timeout=20,
+            phase="ChatGPT lifecycle continuation readiness",
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(f"{exc}; diagnostic={json.dumps(verification_ui_state(selector), ensure_ascii=False)}") from exc
     return selector
 
 

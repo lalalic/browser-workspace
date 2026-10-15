@@ -135,7 +135,11 @@ def action_path(platform: str, action: str) -> Path:
 
 def prepare_action(path: Path, config_path: Path | None = None) -> str:
     source = path.read_text()
-    source = "import sys\nsys.path.insert(0, " + repr(str(path.parent.resolve())) + ")\n" + source
+    # The daemon is long-lived: importing a previous installed platform module
+    # must never shadow the current action source in sys.modules.
+    siblings = [p.stem for p in path.parent.glob("_*.py")]
+    prelude = "import sys\n" + "\n".join(f"sys.modules.pop({name!r}, None)" for name in siblings)
+    source = prelude + "\nsys.path.insert(0, " + repr(str(path.parent.resolve())) + ")\n" + source
     if "__CFG_PATH__" in source:
         if config_path is None:
             raise ValueError(f"{path.parent.parent.name}/{path.stem}: --config is required")
@@ -173,7 +177,12 @@ def run_platform_action(
 
     owned_session = bool(auto_session)
     started = request({"op": "start", "workspace": None, "url": url}) if owned_session else {"session_id": session_id, "workspace_supported": None}
-    sid = started["session_id"]
+    sid = started.get("session_id")
+    if not sid:
+        return {"platform": platform, "action": action, "workspace_supported": started.get("workspace_supported"),
+                "session_mode": "auto_session_no_self_heal" if owned_session else "caller_owned_self_heal_capable",
+                "self_heal_capable": not owned_session,
+                "result": {"ok": False, "error": started.get("error", "session start returned no session_id")}}
     result = None
     cleanup = None
     try:

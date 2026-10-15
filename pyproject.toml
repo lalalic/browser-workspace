@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "browser-workspace"
-version = "0.4.6"
+version = "0.4.7"
 description = "Agent browser workspace with persistent Python sessions, tab leasing, snapshots, and platform workflows."
 requires-python = ">=3.11"
 dependencies = [
