@@ -7,10 +7,11 @@ def test_pypi_entrypoint_and_files():
     metadata = tomllib.loads((root / 'pyproject.toml').read_text())
     assert metadata['project']['scripts']['browser-workspace'] == 'browser_workspace_app.cli:main'
     directory = root / 'src' / 'browser_workspace_app'
-    for file in ('cli.py', 'session_client.py', 'session_daemon.py', 'platform_runner.py',
-                 'managed_chrome.py', 'package.json', 'pyproject.toml', 'node/admin.mjs',
-                 'platforms/wechat-channels/manifest.yaml'):
+    for file in ('cli.py', 'session_client.py', 'session_daemon.py',
+                 'managed_chrome.py', 'package.json', 'pyproject.toml', 'node/admin.mjs'):
         assert (directory / file).is_file(), file
+    for file in ('platform_runner.py', 'platforms/wechat-channels/manifest.yaml'):
+        assert (root / file).is_file(), file
     assert 'PyYAML==6.0.2' in metadata['project']['dependencies']
     assert 'browser-harness==0.1.13' in metadata['project']['dependencies']
     assert not any('git+' in dep for dep in metadata['project']['dependencies'])
