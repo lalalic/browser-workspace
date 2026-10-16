@@ -12,6 +12,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -30,6 +34,16 @@ jobs:
         with:
           name: pypi-distribution
           path: dist/*
+
+      - name: Report failed PyPI build
+        if: ${{ failure() }}
+        continue-on-error: true
+        uses: lalalic/agents-relay/.github/actions/report-publication-failure@publication-v1
+        with:
+          token: ${{ github.token }}
+          stage: PyPI build and validation
+          sha: ${{ github.sha }}
+          repository: ${{ github.repository }}
 
   publish:
     if: startsWith(github.ref, 'refs/tags/pypi-v')
