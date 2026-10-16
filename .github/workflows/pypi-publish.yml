@@ -54,17 +54,22 @@ jobs:
         id: publication
         shell: bash
         run: echo "version=${GITHUB_REF_NAME#pypi-v}" >> "$GITHUB_OUTPUT"
-      - name: Report verified publication
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          ARTIFACT_NAME: browser-workspace
-          ARTIFACT_VERSION: ${{ steps.publication.outputs.version }}
-          RELEASE_CHANNEL: https://pypi.org/project/browser-workspace/
-        run: node tools/report-agents-relay-publication.mjs success
-      - name: Report release failure
+      - name: Report successful PyPI publication
+        continue-on-error: true
+        uses: lalalic/agents-relay/.github/actions/report-publication@publication-v1
+        with:
+          token: ${{ github.token }}
+          artifact: browser-workspace
+          version: ${{ steps.publication.outputs.version }}
+          channel: pypi
+          sha: ${{ github.sha }}
+          repository: ${{ github.repository }}
+      - name: Report failed PyPI publication
         if: ${{ failure() }}
         continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PUBLISH_STAGE: PyPI publish workflow
-        run: node tools/report-agents-relay-publication.mjs failure
+        uses: lalalic/agents-relay/.github/actions/report-publication-failure@publication-v1
+        with:
+          token: ${{ github.token }}
+          stage: PyPI publish workflow
+          sha: ${{ github.sha }}
+          repository: ${{ github.repository }}
