@@ -20,8 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test
-        run: node --test test/workspace-manager.test.mjs
+      - name: Run bounded tests
+        timeout-minutes: 10
+        uses: lalalic/agents-relay/.github/actions/run-bounded-tests@main
+        with:
+          command: node --test test/workspace-manager.test.mjs
 
       - name: Package extension
         id: package
@@ -64,17 +67,22 @@ jobs:
             gh release create "$tag" "$ZIP_PATH"               --target "$GITHUB_SHA"               --title "$title"               --notes "Automatic Browser Workspace extension build from commit $GITHUB_SHA."
           fi
 
-      - name: Report verified publication
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          ARTIFACT_NAME: browser-workspace-extension
-          ARTIFACT_VERSION: ${{ steps.package.outputs.version }}
-          RELEASE_CHANNEL: github-release
-        run: node tools/report-agents-relay-publication.mjs success
+      - name: Report successful publication
+        continue-on-error: true
+        uses: lalalic/agents-relay/.github/actions/report-publication@publication-v1
+        with:
+          token: ${{ github.token }}
+          artifact: browser-workspace-extension
+          version: ${{ steps.package.outputs.version }}
+          channel: github-release
+          sha: ${{ github.sha }}
+          repository: ${{ github.repository }}
       - name: Report release failure
         if: ${{ failure() }}
         continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PUBLISH_STAGE: extension release workflow
-        run: node tools/report-agents-relay-publication.mjs failure
+        uses: lalalic/agents-relay/.github/actions/report-publication-failure@publication-v1
+        with:
+          token: ${{ github.token }}
+          stage: extension release workflow
+          sha: ${{ github.sha }}
+          repository: ${{ github.repository }}
