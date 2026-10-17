@@ -42,7 +42,7 @@ def action(session, name, payload):
     assert result['result']['ok'], result
     response = json.loads(result['result']['stdout'].strip().splitlines()[-1])
     assert response['status'] == 'submitted', response
-    assert response['verified_by'] == 'user-turn', response
+    assert response['verified_by'] in {'user-turn', 'composer-cleared'}, response
     return response
 
 

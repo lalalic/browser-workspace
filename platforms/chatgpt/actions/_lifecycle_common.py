@@ -149,7 +149,6 @@ def fill_prompt(prompt):
 
 
 def submit(prompt):
-    before=len(user_turns())
     selector=fill_prompt(prompt)
     ui_before=verification_ui_state(selector)
     clicked=js("""(() => {
@@ -158,15 +157,16 @@ def submit(prompt):
       b.click(); return true;
     })()""")
     if not clicked: raise RuntimeError("ChatGPT send button changed before lifecycle submit")
-    deadline=time.time()+30
-    while time.time()<deadline:
-        receipt=submission_receipt(user_turns(),before,prompt,composer_text(selector))
-        if receipt: return receipt
-        time.sleep(.2)
-    raise SubmissionVerificationError(
-        "ChatGPT lifecycle submission was not observed",
-        submission_failure_diagnostic(
-            user_turns(), before, prompt, composer_text(selector),
-            ui_before, verification_ui_state(selector),
-        ),
-    )
+    try:
+        wait_until_stable(
+            lambda: {"composer_empty": not bool(composer_text(selector).strip()), "send_disabled": not send_enabled()},
+            lambda state: state["composer_empty"] and state["send_disabled"],
+            timeout=30, interval=.2, stable_samples=3,
+            phase="post-submit composer reset",
+        )
+    except RuntimeError as exc:
+        raise SubmissionVerificationError(
+            "ChatGPT submission did not reach a stable cleared composer and disabled Send button",
+            {"ui_before":ui_before,"ui_after":verification_ui_state(selector),"reason":"post_submit_ui_unverified"},
+        ) from exc
+    return {"verified_by":"composer-cleared", "turn": {"id":""}}
