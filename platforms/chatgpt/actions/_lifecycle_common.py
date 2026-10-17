@@ -88,6 +88,28 @@ def user_turns():
     })()""") or []
 
 
+def visible_delivery_error():
+    """Read-only inspection of visible error banners, not historical chat text."""
+    return js("""(() => {
+      const composer=!!document.querySelector('#prompt-textarea,[data-composer-markdown]');
+      const alerts=[...document.querySelectorAll('[role="alert"],[role="status"],[data-sonner-toast],[data-testid*="toast"],[class*="toast"],[class*="error-banner"]')];
+      for(const e of alerts) {
+        if(!e.getClientRects().length) continue;
+        const t=(e.innerText||'').toLowerCase();
+        if(t.includes('this conversation is too long to continue') || t.includes('conversation is too long to continue')) return 'conversation_too_long';
+        if(t.includes('could not load this chatgpt conversation')) return 'thread_load_failed';
+      }
+      // A failed navigation may render an error page without an alert role.
+      if(!composer && (document.body?.innerText||'').toLowerCase().includes('could not load this chatgpt conversation')) return 'thread_load_failed';
+      return null;
+    })()""")
+
+
+def raise_if_visible_delivery_error():
+    code=visible_delivery_error()
+    if code: raise RuntimeError(f'ChatGPT visible delivery error: {code}')
+
+
 def wait_for_idle(timeout=300):
     return wait_until_stable(
         lambda: {"composer": composer_selector(), "generating": is_generating()},
@@ -144,6 +166,7 @@ def fill_prompt(prompt):
             phase="ChatGPT lifecycle continuation readiness",
         )
     except RuntimeError as exc:
+        raise_if_visible_delivery_error()
         raise RuntimeError(f"{exc}; diagnostic={json.dumps(verification_ui_state(selector), ensure_ascii=False)}") from exc
     return selector
 

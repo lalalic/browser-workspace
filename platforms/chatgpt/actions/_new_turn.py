@@ -5,6 +5,7 @@ import _lifecycle_common as lifecycle_common
 lifecycle_common.js = js
 lifecycle_common.fill_input = fill_input
 wait_for_idle = lifecycle_common.wait_for_idle
+raise_if_visible_delivery_error = lifecycle_common.raise_if_visible_delivery_error
 submit = lifecycle_common.submit
 
 CFG=json.load(open("__CFG_PATH__",encoding="utf-8"))
@@ -19,9 +20,11 @@ else:
     thread_url=f"https://chatgpt.com/c/{quote(thread_id,safe='')}"
 goto_url(thread_url)
 wait_for_load()
+raise_if_visible_delivery_error()
 if urlsplit(page_info().get("url","")).path.rstrip("/") != urlsplit(thread_url).path.rstrip("/"):
     raise RuntimeError("ChatGPT thread redirect mismatch")
 wait_for_idle(timeout=int(CFG.get("wait_timeout",300)))
+raise_if_visible_delivery_error()
 receipt=submit(message)
 print(json.dumps({
   "status":"submitted",

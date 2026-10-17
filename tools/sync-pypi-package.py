@@ -6,7 +6,7 @@ root = Path(__file__).resolve().parents[1]
 target = root / 'src' / 'browser_workspace_app'
 target.mkdir(parents=True, exist_ok=True)
 (target / '__init__.py').write_text('"""Browser Workspace Python distribution."""\n')
-for source_name, dest_name in [('bin/browser-workspace', 'cli.py'), ('session_client.py', 'session_client.py'), ('session_daemon.py', 'session_daemon.py'), ('managed_chrome.py', 'managed_chrome.py'), ('package.json', 'package.json'), ('pyproject.toml', 'pyproject.toml')]:
+for source_name, dest_name in [('bin/browser-workspace', 'cli.py'), ('session_client.py', 'session_client.py'), ('session_daemon.py', 'session_daemon.py'), ('managed_chrome.py', 'managed_chrome.py'), ('chatgpt_delivery_errors.py', 'chatgpt_delivery_errors.py'), ('package.json', 'package.json'), ('pyproject.toml', 'pyproject.toml')]:
     shutil.copy2(root / source_name, target / dest_name)
 for name in ('agent-workspace', 'interaction-skills', 'extension', 'licenses', 'node'):
     shutil.rmtree(target / name, ignore_errors=True)

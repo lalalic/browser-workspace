@@ -14,6 +14,7 @@ class BuildWithPlatforms(build_py):
             rmtree(target)
         copytree(source, target, ignore=lambda _dir, names: {n for n in names if n == '__pycache__' or n.endswith(('.pyc', '.pyo'))})
         copy2(Path(__file__).resolve().parent / 'platform_runner.py', Path(self.build_lib) / 'browser_workspace_app' / 'platform_runner.py')
+        copy2(Path(__file__).resolve().parent / 'chatgpt_delivery_errors.py', Path(self.build_lib) / 'browser_workspace_app' / 'chatgpt_delivery_errors.py')
 
 
 setup(cmdclass={'build_py': BuildWithPlatforms})

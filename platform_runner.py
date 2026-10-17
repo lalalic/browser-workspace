@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from session_client import request
+from chatgpt_delivery_errors import normalize_failure
 
 ROOT = Path(__file__).resolve().parent
 PLATFORMS = ROOT / "platforms"
@@ -186,8 +187,15 @@ def run_platform_action(
     result = None
     cleanup = None
     try:
-        raw_result = request({"op": "exec", "session_id": sid, "code": code})
+        try:
+            raw_result = request({"op": "exec", "session_id": sid, "code": code})
+        except Exception as exc:
+            if platform != "chatgpt" or action not in {"new-turn", "new-thread"}:
+                raise
+            raw_result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         result = {k: v for k, v in raw_result.items() if k not in {"session_id", "workspace", "target_id"}}
+        if platform == "chatgpt" and action in {"new-turn", "new-thread"}:
+            result = normalize_failure(result, action)
         output = {
             "platform": platform,
             "action": action,

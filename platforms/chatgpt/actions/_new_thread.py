@@ -6,6 +6,7 @@ import _lifecycle_common as lifecycle_common
 lifecycle_common.js = js
 lifecycle_common.fill_input = fill_input
 wait_for_idle = lifecycle_common.wait_for_idle
+raise_if_visible_delivery_error = lifecycle_common.raise_if_visible_delivery_error
 submit = lifecycle_common.submit
 
 CFG=json.load(open("__CFG_PATH__",encoding="utf-8"))
@@ -28,6 +29,7 @@ else:
 
 goto_url(start_url)
 wait_for_load()
+raise_if_visible_delivery_error()
 wait_for_idle(timeout=60)
 
 if temporary:
@@ -41,6 +43,7 @@ if temporary:
     if not is_temporary:
         raise RuntimeError("ChatGPT Temporary Chat mode was not activated")
 
+raise_if_visible_delivery_error()
 receipt=submit(message)
 
 if temporary:
