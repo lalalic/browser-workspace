@@ -45,9 +45,20 @@ SOCKET_PATH = (Path(os.environ['BROWSER_WORKSPACE_SESSION_SOCKET']) if os.enviro
 OWNER_LOCK_PATH = RUNTIME_DIR/'session.lock'
 SESSIONS = {}
 SESSIONS_LOCK = threading.Lock()
+RETIRING = False
+DAEMON_VERSION = 'dev'
+try:
+    DAEMON_VERSION = (ROOT/'.ready').read_text().strip()
+except OSError:
+    try:
+        DAEMON_VERSION = json.loads((ROOT/'package.json').read_text()).get('version', 'dev')
+    except (OSError, ValueError):
+        pass
 BROWSER_LOCK = threading.RLock()
 
 SESSION_RECONCILE_SECONDS = 30
+# Zero disables idle lease eviction. Never evict an executing Session.
+SESSION_IDLE_TTL_SECONDS = max(0, int(os.environ.get('BROWSER_WORKSPACE_SESSION_IDLE_TTL_SECONDS', '7200')))
 
 
 def is_reclaimed(info):
@@ -87,6 +98,31 @@ def reconciliation_loop():
     while True:
         time.sleep(SESSION_RECONCILE_SECONDS)
         reconcile_sessions()
+        collect_idle_sessions()
+
+
+def collect_idle_sessions(now=None):
+    """Close owned tabs for stale leases, never in-flight executions."""
+    if not SESSION_IDLE_TTL_SECONDS:
+        return []
+    current = time.time() if now is None else now
+    with SESSIONS_LOCK:
+        candidates = [sid for sid, s in SESSIONS.items()
+                      if current - s.last_used_at >= SESSION_IDLE_TTL_SECONDS
+                      and not s.lock.locked()]
+    collected = []
+    for sid in candidates:
+        with SESSIONS_LOCK:
+            session = SESSIONS.get(sid)
+        if session is None or session.lock.locked() or current - session.last_used_at < SESSION_IDLE_TTL_SECONDS:
+            continue
+        try:
+            result = stop_session(sid, idle_before=current - SESSION_IDLE_TTL_SECONDS)
+            if result is not None:
+                collected.append(result)
+        except Exception:
+            continue
+    return collected
 
 
 def compilable_module_body(body):
@@ -193,9 +229,13 @@ def start_session(workspace=None, url=None):
     start_url=(url or 'about:blank').strip()
     extension=bh.workspace_extension_status()
     supported=bool(extension.get('supported'))
-    with BROWSER_LOCK, with_workspace(workspace, supported): tid=bh.new_tab(start_url)
-    s=Session(sid,workspace,tid,supported)
-    with SESSIONS_LOCK: SESSIONS[sid]=s
+    with BROWSER_LOCK:
+        if RETIRING:
+            raise RuntimeError('daemon_retiring')
+        with with_workspace(workspace, supported):
+            tid = bh.new_tab(start_url)
+        s=Session(sid,workspace,tid,supported)
+        with SESSIONS_LOCK: SESSIONS[sid]=s
     result={'session_id':sid,'workspace':workspace,'target_id':tid,'url':start_url,'workspace_supported':supported}
     if not supported:
         result['warning']='Browser Workspace extension is not installed; workspace grouping/leases are unavailable. Browser automation will continue without workspace isolation.'
@@ -307,16 +347,31 @@ def stop_all_sessions():
             errors.append({'session_id':sid,'error':f'{type(exc).__name__}: {exc}'})
     return {'stopped_count':len(stopped),'error_count':len(errors),'stopped':stopped,'errors':errors}
 
-def stop_session(sid):
-    with SESSIONS_LOCK: s=SESSIONS.pop(sid,None)
+def stop_session(sid, idle_before=None):
+    with SESSIONS_LOCK:
+        s=SESSIONS.get(sid)
     if not s: raise KeyError(f'unknown session_id: {sid}')
-    release_error=None
-    with s.lock, BROWSER_LOCK, with_workspace(s.workspace, s.workspace_supported):
-        absorb_owned_children(s)
-        closed_count=len(s.owned_target_ids)
-        errors=close_owned_tabs(s)
-        if errors: release_error='; '.join(errors)
-    return {'session_id':sid,'workspace':s.workspace,'target_id':s.target_id,'closed_tabs':closed_count,'release_error':release_error}
+    # A stale GC candidate may have become active after the initial scan.
+    if idle_before is not None and not s.lock.acquire(blocking=False):
+        return None
+    elif idle_before is None:
+        s.lock.acquire()
+    try:
+        with SESSIONS_LOCK:
+            if SESSIONS.get(sid) is not s:
+                raise KeyError(f'unknown session_id: {sid}')
+            if idle_before is not None and s.last_used_at > idle_before:
+                return None
+            SESSIONS.pop(sid)
+        release_error=None
+        with BROWSER_LOCK, with_workspace(s.workspace, s.workspace_supported):
+            absorb_owned_children(s)
+            closed_count=len(s.owned_target_ids)
+            errors=close_owned_tabs(s)
+            if errors: release_error='; '.join(errors)
+        return {'session_id':sid,'workspace':s.workspace,'target_id':s.target_id,'closed_tabs':closed_count,'release_error':release_error}
+    finally:
+        s.lock.release()
 
 SOCKET_IDENTITY = None
 
@@ -370,9 +425,19 @@ def delete_workspace(name, force=False):
 
 def handle(req):
     op=req.get('op')
-    if op=='ping': return {'ok':True,'pid':os.getpid(),'session_count':len(SESSIONS),'managed_chrome':MANAGED_CHROME}
+    if op=='ping': return {'ok':True,'pid':os.getpid(),'version':DAEMON_VERSION,'session_count':len(SESSIONS),'managed_chrome':MANAGED_CHROME}
+    if op=='retire-if-idle':
+        global RETIRING
+        with BROWSER_LOCK, SESSIONS_LOCK:
+            if SESSIONS or RETIRING:
+                return {'ok':False,'reason':'active_sessions','session_count':len(SESSIONS)}
+            RETIRING = True
+        threading.Thread(target=lambda: (time.sleep(.2), os.kill(os.getpid(), signal.SIGTERM)), daemon=True).start()
+        return {'ok':True,'retiring':True}
     if op=='list': return list_sessions()
-    if op=='start': return start_session(req.get('workspace'), req.get('url'))
+    if op=='start':
+        if RETIRING: return {'ok':False,'error':'daemon_retiring'}
+        return start_session(req.get('workspace'), req.get('url'))
     if op=='exec': return exec_session(req['session_id'],req.get('code',''))
     if op=='stop': return stop_session(req['session_id'])
     if op=='stop-all': return stop_all_sessions()

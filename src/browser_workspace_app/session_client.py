@@ -25,7 +25,7 @@ def runtime_source():
     tmp=target.with_name(target.name+'.tmp')
     shutil.rmtree(tmp,ignore_errors=True)
     tmp.mkdir(parents=True)
-    for name in ['pyproject.toml','session_daemon.py','session_client.py','platform_runner.py','managed_chrome.py','src','agent-workspace','interaction-skills','platforms','extension','licenses']:
+    for name in ['pyproject.toml','package.json','session_daemon.py','session_client.py','platform_runner.py','managed_chrome.py','src','agent-workspace','interaction-skills','platforms','extension','licenses']:
         source=ROOT/name
         if not source.exists(): continue
         destination=tmp/name
@@ -103,7 +103,25 @@ def owner_is_running():
 
 def ensure_daemon():
     p=ping()
-    if p and p.get('ok'): return p
+    if p and p.get('ok'):
+        if p.get('version') == package_version(): return p
+        # Never interrupt an active session. Older daemons without a retire
+        # protocol remain usable until their owner explicitly stops them.
+        if p.get('session_count', 1) != 0 or not p.get('version'):
+            return p
+        try:
+            retired=request({'op':'retire-if-idle'},ensure=False)
+        except (OSError, RuntimeError):
+            return p
+        if not retired.get('retiring'): return p
+        deadline=time.monotonic()+8
+        while time.monotonic()<deadline:
+            if not owner_is_running(): break
+            time.sleep(.1)
+        else:
+            raise RuntimeError('old browser-workspace daemon did not retire safely')
+        p=ping()
+        if p and p.get('ok'): return p
     RUNTIME_DIR.mkdir(parents=True,exist_ok=True)
     if owner_is_running():
         raise RuntimeError('browser-workspace daemon is alive but its socket is unreachable; refusing duplicate startup')

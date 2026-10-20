@@ -1,6 +1,6 @@
 {
   "name": "browser-workspace",
-  "version": "0.4.11",
+  "version": "0.4.12",
   "description": "Agent browser workspace with persistent sessions, tab leasing, snapshots, and platform workflows.",
   "bin": {
     "browser-workspace": "bin/browser-workspace"
@@ -14,6 +14,7 @@
     "platforms/",
     "licenses/",
     "platform_runner.py",
+    "chatgpt_delivery_errors.py",
     "session_client.py",
     "session_daemon.py",
     "pyproject.toml",

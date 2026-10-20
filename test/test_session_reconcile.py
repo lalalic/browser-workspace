@@ -81,3 +81,64 @@ def test_unrelated_extension_page_not_reclaimed(monkeypatch):
         {'targetId': 'a', 'type': 'page', 'url': 'chrome-extension://xyz/other.html?role=idle'}
     ]}
     assert daemon.reconcile_sessions() == []
+
+
+def test_idle_gc_closes_only_stale_nonexecuting_sessions(monkeypatch):
+    daemon = load_daemon(monkeypatch)
+    daemon.SESSION_IDLE_TTL_SECONDS = 120
+    stale = session('a'); stale.last_used_at = 1
+    fresh = session('b'); fresh.last_used_at = 190
+    busy = session('c'); busy.last_used_at = 1; busy.lock.acquire()
+    daemon.SESSIONS.update({'stale': stale, 'fresh': fresh, 'busy': busy})
+    closed = []
+    def fake_stop(sid, idle_before=None):
+        assert idle_before == 80
+        closed.append(sid)
+        daemon.SESSIONS.pop(sid)
+        return {'session_id': sid}
+    monkeypatch.setattr(daemon, 'stop_session', fake_stop)
+    assert daemon.collect_idle_sessions(now=200) == [{'session_id': 'stale'}]
+    assert closed == ['stale']
+    assert set(daemon.SESSIONS) == {'fresh', 'busy'}
+    busy.lock.release()
+
+
+def test_gc_is_disableable(monkeypatch):
+    daemon = load_daemon(monkeypatch)
+    daemon.SESSION_IDLE_TTL_SECONDS = 0
+    daemon.SESSIONS['stale'] = session('a')
+    assert daemon.collect_idle_sessions(now=100000) == []
+    assert 'stale' in daemon.SESSIONS
+
+
+def test_retire_rejects_active_sessions(monkeypatch):
+    daemon = load_daemon(monkeypatch)
+    daemon.SESSIONS['active'] = session('a')
+    result = daemon.handle({'op': 'retire-if-idle'})
+    assert result['reason'] == 'active_sessions'
+    assert daemon.RETIRING is False
+
+
+def test_gc_stop_is_fenced_against_recent_activity(monkeypatch):
+    daemon = load_daemon(monkeypatch)
+    entry = session('tab')
+    entry.workspace = 'Harness'
+    entry.workspace_supported = False
+    entry.target_id = 'tab'
+    entry.last_used_at = 190
+    daemon.SESSIONS['lease'] = entry
+    assert daemon.stop_session('lease', idle_before=80) is None
+    assert daemon.SESSIONS['lease'] is entry
+
+
+def test_gc_stop_skips_executing_session(monkeypatch):
+    daemon = load_daemon(monkeypatch)
+    entry = session('tab')
+    entry.last_used_at = 1
+    daemon.SESSIONS['lease'] = entry
+    entry.lock.acquire()
+    try:
+        assert daemon.stop_session('lease', idle_before=80) is None
+        assert daemon.SESSIONS['lease'] is entry
+    finally:
+        entry.lock.release()
