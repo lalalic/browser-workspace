@@ -20,13 +20,7 @@ if not message:
 if temporary and project_id:
     raise RuntimeError("temporary=true cannot be combined with project_id")
 
-if temporary:
-    start_url="https://chatgpt.com/?temporary-chat=true"
-elif project_id:
-    start_url=f"https://chatgpt.com/g/{quote(project_id,safe='')}/project"
-else:
-    start_url="https://chatgpt.com/"
-
+start_url=lifecycle_common.target_url(project_id=project_id, temporary=temporary)
 goto_url(start_url)
 wait_for_load()
 raise_if_visible_delivery_error()

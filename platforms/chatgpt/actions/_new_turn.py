@@ -14,10 +14,7 @@ thread_id=str(CFG.get("thread_id") or "").strip()
 message=str(CFG.get("message") or "").strip()
 if not thread_id: raise RuntimeError("thread_id is required")
 if not message: raise RuntimeError("message is required")
-if project_id:
-    thread_url=f"https://chatgpt.com/g/{quote(project_id,safe='')}/c/{quote(thread_id,safe='')}"
-else:
-    thread_url=f"https://chatgpt.com/c/{quote(thread_id,safe='')}"
+thread_url=lifecycle_common.target_url(project_id=project_id, thread_id=thread_id)
 goto_url(thread_url)
 wait_for_load()
 raise_if_visible_delivery_error()

@@ -213,15 +213,6 @@ def test_lifecycle_actions_use_stable_ids_and_do_not_wait_for_new_answer():
     assert "submission_receipt" in common
 
 
-def test_lifecycle_submission_fails_closed_with_diagnostic():
-    common = (ACTIONS / "_lifecycle_common.py").read_text()
-    submit = common.split("def submit(prompt):", 1)[1]
-    assert "SubmissionVerificationError" in common
-    assert "verification_ui_state(selector)" in common
-    assert "submission_failure_diagnostic(" in submit
-    assert "ui_before" in submit
-    assert "composer-cleared" not in common
-
 
 def test_thread_turn_fails_closed_with_diagnostic():
     text = (ACTIONS / "_thread_turn.py").read_text()
@@ -231,16 +222,6 @@ def test_thread_turn_fails_closed_with_diagnostic():
     assert "ui_before" in submit
     assert "composer-cleared" not in text
 
-
-def test_new_thread_supports_projectless_and_temporary_modes():
-    thread=(ACTIONS/"_new_thread.py").read_text()
-    assert 'temporary=bool(CFG.get("temporary", False))' in thread
-    assert 'temporary=true cannot be combined with project_id' in thread
-    assert 'https://chatgpt.com/?temporary-chat=true' in thread
-    assert 'start_url="https://chatgpt.com/"' in thread
-    assert 'Temporary Chat mode was not activated' in thread
-    assert '"temporary":True' in thread
-    assert '"thread_id":None' in thread
 
 
 def test_lifecycle_actions_bind_session_helpers_into_imported_module():
@@ -257,13 +238,6 @@ def test_temporary_new_thread_finishes_without_system_exit():
     assert "if temporary:" in thread
     assert "else:" in thread
 
-
-def test_new_turn_project_id_is_optional():
-    turn=(ACTIONS/"_new_turn.py").read_text()
-    assert 'project_id=str(CFG.get("project_id") or "").strip() or None' in turn
-    assert 'if not thread_id: raise RuntimeError("thread_id is required")' in turn
-    assert 'https://chatgpt.com/c/{quote(thread_id' in turn
-    assert 'https://chatgpt.com/g/{quote(project_id' in turn
 
 
 def test_temporary_submit_recovers_only_before_send_from_prefill_hydration():

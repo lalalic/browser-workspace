@@ -141,6 +141,8 @@ def prepare_action(path: Path, config_path: Path | None = None) -> str:
     siblings = [p.stem for p in path.parent.glob("_*.py")]
     prelude = "import sys\n" + "\n".join(f"sys.modules.pop({name!r}, None)" for name in siblings)
     source = prelude + "\nsys.path.insert(0, " + repr(str(path.parent.resolve())) + ")\n" + source
+    if "__OPTIONAL_CONFIG_PATH__" in source:
+        source = source.replace("__OPTIONAL_CONFIG_PATH__", repr(str(config_path.resolve()) if config_path else ""))
     if "__CFG_PATH__" in source:
         if config_path is None:
             raise ValueError(f"{path.parent.parent.name}/{path.stem}: --config is required")

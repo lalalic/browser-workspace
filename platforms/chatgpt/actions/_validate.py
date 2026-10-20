@@ -1,43 +1,34 @@
-"""Non-mutating ChatGPT readiness diagnostic for caller-owned sessions."""
+"""Read-only Send availability plus explicit, visible ChatGPT page errors."""
 import json
-from urllib.parse import urlsplit
 import _lifecycle_common as common
-from _readiness import wait_until_stable
 
 common.js = js
 
-def observe():
-    info = page_info()
-    url = info.get("url", "")
-    selector = common.composer_selector()
-    return {
-        "host": urlsplit(url).hostname,
-        "path": urlsplit(url).path,
-        "composer_ready": bool(selector),
-        "generating": common.is_generating(),
-        "delivery_error": common.visible_delivery_error(),
-    }
+config_path = __OPTIONAL_CONFIG_PATH__
+cfg = json.load(open(config_path, encoding="utf-8")) if config_path else {}
+probe = "BrowserWorkspaceValidateProbe20261020"
+goto_url(common.target_url(
+    project_id=str(cfg.get("project_id") or "").strip() or None,
+    thread_id=str(cfg.get("thread_id") or "").strip() or None,
+    temporary=bool(cfg.get("temporary", False)),
+    prompt=probe,
+))
+wait_for_load()
 
-# A successful check returns true. A failed check returns one stable error ID.
-try:
-    wait_for_load()
-    wait_until_stable(
-        observe,
-        lambda x: x["host"] == "chatgpt.com" and x["composer_ready"] and not x["delivery_error"],
-        timeout=12, phase="platform validation",
-    )
-    print(json.dumps(True), flush=True)
-except Exception:
-    try:
-        state = observe()
-        if state["delivery_error"]:
-            failure_id = "DELIVERY_ERROR"
-        elif state["host"] != "chatgpt.com":
-            failure_id = "PAGE_NOT_READY"
-        elif not state["composer_ready"]:
-            failure_id = "COMPOSER_NOT_READY"
-        else:
-            failure_id = "PAGE_NOT_READY"
-    except Exception:
-        failure_id = "PAGE_NOT_READY"
-    print(json.dumps(failure_id), flush=True)
+# Error classification is separate from readiness. Reuse the delivery-page
+# evidence already consumed by new-turn/new-thread rather than guessing from
+# an empty or disabled composer.
+error = common.visible_delivery_error()
+if error:
+    result = error
+else:
+    # An explicit login screen is evidence; a missing/disabled Send button is not.
+    login_required = bool(js("""(() => {
+      const visible = e => !!e.getClientRects().length;
+      const login = [...document.querySelectorAll('a,button')].some(e =>
+        visible(e) && /^(log in|sign in)$/i.test((e.innerText||'').trim()));
+      const page = (document.body?.innerText||'').toLowerCase();
+      return login && (page.includes('log in to chatgpt') || page.includes('sign in to chatgpt'));
+    })()"""))
+    result = 'authentication_required' if login_required else bool(common.submit(probe, send=False)["send_enabled"])
+print(json.dumps(result), flush=True)

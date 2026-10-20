@@ -1,19 +1,12 @@
-"""Contract tests for conservative, non-mutating platform validation."""
+"""Validate is a non-sending probe using the shared submission protocol."""
 from pathlib import Path
-
 ROOT = Path(__file__).resolve().parents[1]
 
-
-def test_validate_declared_and_reuses_common_readiness():
-    manifest = (ROOT / 'manifest.yaml').read_text()
+def test_validate_uses_shared_send_switch():
     source = (ROOT / 'actions/_validate.py').read_text()
-    assert 'validate: "actions/_validate.py"' in manifest
-    assert 'common.composer_selector()' in source
+    assert 'common.target_url(' in source
+    assert 'common.submit(probe, send=False)' in source
     assert 'common.visible_delivery_error()' in source
-    assert 'wait_until_stable(' in source
-    assert 'json.dumps(True)' in source
-    for error in ('PAGE_NOT_READY', 'COMPOSER_NOT_READY', 'DELIVERY_ERROR'):
-        assert error in source
-    assert 'submit(' not in source
-    assert 'fill_prompt(' not in source
-    assert 'AUTH_REQUIRED' not in source
+    assert 'authentication_required' in source
+    assert 'goto_url(' in source
+    assert 'send=True' not in source

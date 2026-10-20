@@ -1,5 +1,6 @@
 import json
 import time
+from urllib.parse import quote, urlencode
 from _readiness import (
     SubmissionVerificationError,
     submission_failure_diagnostic,
@@ -7,6 +8,27 @@ from _readiness import (
     prompt_text_matches,
     wait_until_stable,
 )
+
+
+def target_url(*, project_id=None, thread_id=None, temporary=False, prompt=None):
+    """Shared ChatGPT navigation URL for new-thread, new-turn and validation."""
+    if temporary and (project_id or thread_id):
+        raise ValueError("temporary cannot be combined with project_id or thread_id")
+    if temporary:
+        base = "https://chatgpt.com/"
+    elif thread_id:
+        prefix = f"/g/{quote(project_id, safe='')}" if project_id else ""
+        base = f"https://chatgpt.com{prefix}/c/{quote(thread_id, safe='')}"
+    elif project_id:
+        base = f"https://chatgpt.com/g/{quote(project_id, safe='')}/project"
+    else:
+        base = "https://chatgpt.com/"
+    params = {}
+    if temporary:
+        params["temporary-chat"] = "true"
+    if prompt is not None:
+        params["prompt"] = prompt
+    return base + ("?" + urlencode(params) if params else "")
 
 
 def composer_selector():
@@ -171,7 +193,9 @@ def fill_prompt(prompt):
     return selector
 
 
-def submit(prompt):
+def submit(prompt, *, send=True):
+    if not send:
+        return {"send_enabled": send_enabled()}
     selector=fill_prompt(prompt)
     ui_before=verification_ui_state(selector)
     clicked=js("""(() => {
