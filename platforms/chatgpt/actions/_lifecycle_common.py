@@ -6,6 +6,7 @@ from _readiness import (
     submission_failure_diagnostic,
     submission_receipt,
     prompt_text_matches,
+    send_ready,
     wait_until_stable,
 )
 
@@ -183,7 +184,7 @@ def fill_prompt(prompt):
     try:
         wait_until_stable(
             lambda: {"text":composer_text(selector),"send":send_enabled()},
-            lambda state: prompt_text_matches(state["text"],prompt) and state["send"],
+            lambda state: send_ready(state, prompt=prompt),
             timeout=20,
             phase="ChatGPT lifecycle continuation readiness",
         )
@@ -195,7 +196,18 @@ def fill_prompt(prompt):
 
 def submit(prompt, *, send=True):
     if not send:
-        return {"send_enabled": send_enabled()}
+        # URL-prefilled probe: wait for hydration exactly as real submission
+        # waits for Send, but never fill the composer or click the button.
+        try:
+            wait_until_stable(
+                lambda: {"send": send_enabled()},
+                lambda state: send_ready(state),
+                timeout=15, interval=.25, stable_samples=3,
+                phase="prefilled Send readiness",
+            )
+            return {"send_enabled": True}
+        except RuntimeError:
+            return {"send_enabled": False}
     selector=fill_prompt(prompt)
     ui_before=verification_ui_state(selector)
     clicked=js("""(() => {

@@ -37,6 +37,22 @@ def wait_until_stable(read_state, ready, *, timeout, interval=0.25, stable_sampl
         time.sleep(interval)
     raise RuntimeError(f"ChatGPT {phase} was not observed ready")
 
+def send_ready(state, *, prompt=None, attachments=()):
+    """Shared Send gate for preflight and real submissions."""
+    button = state.get("send", False)
+    enabled = button.get("enabled", False) if isinstance(button, dict) else bool(button)
+    if not enabled:
+        return False
+    if prompt is not None and not prompt_text_matches(state.get("text", ""), prompt):
+        return False
+    if attachments:
+        observed = state.get("attachments", {})
+        names = observed.get("names", ()) if isinstance(observed, dict) else ()
+        if not set(attachments).issubset(set(names)):
+            return False
+    return True
+
+
 def prompt_text_matches(observed, expected):
     def normalize(value):
         text=re.sub(r"\s+", " ", value or "").strip()

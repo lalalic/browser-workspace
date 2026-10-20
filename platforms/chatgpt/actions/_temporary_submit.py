@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping
 from urllib.parse import urlencode
+from _readiness import send_ready
 
 
 def wait_until_stable(
@@ -383,11 +384,7 @@ def _wait_for_send_ready(selector, prompt, attachments):
 
     return wait_until_stable(
         read_state,
-        lambda state: (
-            prompt_text_matches(state["text"], prompt)
-            and expected.issubset(state["attachments"]["names"])
-            and state["send"]["enabled"]
-        ),
+        lambda state: send_ready(state, prompt=prompt, attachments=expected),
         timeout=45 if expected else 15,
         phase="send readiness",
     )
