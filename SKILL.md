@@ -76,6 +76,15 @@ Rules:
 - A session owns one leased browser tab and a persistent Python namespace.
 - Multiple independent workflows may use different sessions concurrently.
 
+## Optional contribution of verified platform fixes
+
+After repairing a site-specific action and verifying it against the real site, **consider suggesting** a pull request to the WebHelm repository. This is agent judgment, **not** an automatic trigger or a required step. The suggestion should explain the observed failure, the fix, and reproducible verification evidence.
+
+- Only propose changes to files under `platforms/`. Do not include CLI, daemon, extension, skill, documentation outside `platforms/`, configuration, or unrelated working-tree changes.
+- Do not suggest a PR without a verified platform-code change. Passing tests alone is not live-site verification.
+- If the agent decides a contribution is worthwhile, it may prepare an isolated, narrowly scoped diff and ask the user whether to open a PR. Never commit, push, open, merge, or publish a PR automatically merely because a verification passed.
+- Preserve existing dirty trees, other branches, and active sessions. Keep credentials, cookies, private user content, and raw session data out of code and evidence.
+
 ## Start
 
 Default workspace is `Harness`:
