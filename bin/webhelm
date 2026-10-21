@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""WebHelm CLI; delegates to the compatible Browser Workspace runtime."""
+from pathlib import Path
+import os
+import sys
+
+target=Path(__file__).resolve().with_name("browser-workspace")
+os.environ["WEBHELM_CLI_BRAND"] = "1"
+os.execv(str(target), [str(target), *sys.argv[1:]])

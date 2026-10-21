@@ -1,22 +1,37 @@
 ---
-name: browser-workspace
+name: webhelm
 description: Control the real browser through one Browser Workspace skill and CLI, with leased tab workspaces, persistent Python sessions, compact snapshots, and built-in platform workflows.
 ---
 
-# Browser Workspace
+# WebHelm
 
-Browser Workspace is the **only browser skill agents should load**. It includes the browser-control runtime, workspace/tab leasing, persistent Python sessions, snapshot refs, and site-specific platform workflows. Do not load or invoke a separate `browser-harness` or `browser-platforms` skill.
+WebHelm is the **only browser skill agents should load**. It includes the browser-control runtime, workspace/tab leasing, persistent Python sessions, snapshot refs, and site-specific platform workflows. Do not load or invoke a separate `browser-harness` or `browser-platforms` skill.
 
-## Agent contract
+## Install and self-setup
 
-Install the Skill instructions through your preferred skill manager, but run the published Python CLI through **PyPI/uvx**. The Skill directory is documentation, not the executable source of truth:
+Install this standalone skill from its public repository:
 
 ```bash
-bw() { uvx browser-workspace "$@"; }
-bw status
+npx skills add lalalic/browser-workspace --skill webhelm
 ```
 
-On first use, `uvx` installs Browser Workspace and Python dependencies from PyPI into its managed cache. No local source checkout, `.venv`, `.env`, or `npx` CLI is required. Use `uvx browser-workspace ...` consistently, including in NeoY/Agents Relay workers.
+The skill's user-facing CLI is **webhelm**. The shipped legacy
+`browser-workspace` runtime is retained as a compatibility alias.
+On first use, the skill discovers Chrome and initializes the dedicated
+managed Browser Workspace profile and session daemon:
+
+```bash
+npx --yes --package browser-workspace webhelm status
+npx --yes --package browser-workspace webhelm session start
+```
+
+The Chrome Web Store extension is optional for basic browser control;
+when needed for workspace grouping, the skill must open the official listing
+in the managed profile, request user approval for installation, and verify
+the extension bridge before claiming it is ready. Never silently alter the
+user's default Chrome profile or bypass Chrome Store approval.
+Until an independent `webhelm` npm distribution exists, the above
+`npx --package browser-workspace webhelm` is the supported executable.
 
 Use one session-owned execution path for orchestrated browser work:
 

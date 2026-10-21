@@ -1,9 +1,10 @@
 {
   "name": "browser-workspace",
-  "version": "0.4.13",
+  "version": "0.4.14",
   "description": "Agent browser workspace with persistent sessions, tab leasing, snapshots, and platform workflows.",
   "bin": {
-    "browser-workspace": "bin/browser-workspace"
+    "browser-workspace": "bin/browser-workspace",
+    "webhelm": "bin/webhelm"
   },
   "files": [
     "bin/",

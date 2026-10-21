@@ -133,9 +133,27 @@ Platform action code is infrastructure-agnostic. It may use browser helpers, but
 Each platform manifest records explicit verification status and evidence. `verified` means live-site verification; migrated code is labeled `migrated_unverified` until exercised in the current integration.
 
 
-## npx skills installation
+## WebHelm skill installation
 
-After `npx skills add ...`, invoke `~/.agents/skills/browser-workspace/bin/browser-workspace` directly. The first session start bootstraps the skill-owned Python virtual environment automatically; running `scripts/install.sh` is optional.
+Install the self-contained skill with:
+
+```bash
+npx skills add lalalic/browser-workspace --skill webhelm
+```
+
+Run the branded CLI using the published npm runtime:
+
+```bash
+npx --yes --package browser-workspace webhelm status
+npx --yes --package browser-workspace webhelm session start
+npx --yes --package browser-workspace webhelm platform profile chatgpt
+```
+
+The `webhelm` command delegates to the existing Browser Workspace runtime.
+The legacy `browser-workspace` CLI and Python entry point remain functional
+for existing integrations. WebHelm owns its managed Chrome profile and daemon;
+it does not modify a user's default Chrome profile. The Chrome Store extension
+may require explicit user approval.
 
 ### Python distribution (PyPI)
 

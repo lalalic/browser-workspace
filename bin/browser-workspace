@@ -32,7 +32,7 @@ def status():
 def main():
     fmt=argparse.RawDescriptionHelpFormatter
     p=argparse.ArgumentParser(
-        prog='browser-workspace',
+        prog='webhelm' if os.environ.get('WEBHELM_CLI_BRAND') == '1' else 'browser-workspace',
         description='Control the shared Browser Workspace Chrome, browser sessions, and platform automations.',
         epilog='''Examples:
   browser-workspace status
