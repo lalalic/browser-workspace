@@ -30,9 +30,10 @@ def status():
     }
 
 def main():
+    cli_name = 'webhelm' if (os.environ.get('WEBHELM_CLI_BRAND') == '1' or Path(sys.argv[0]).name == 'webhelm') else 'browser-workspace'
     fmt=argparse.RawDescriptionHelpFormatter
     p=argparse.ArgumentParser(
-        prog='webhelm' if (os.environ.get('WEBHELM_CLI_BRAND') == '1' or Path(sys.argv[0]).name == 'webhelm') else 'browser-workspace',
+        prog=cli_name,
         description='Control the shared Browser Workspace Chrome, browser sessions, and platform automations.',
         epilog='''Examples:
   browser-workspace status
@@ -189,6 +190,17 @@ One-shot mode (no orchestrator self-heal):
     session_mode = run.add_mutually_exclusive_group()
     session_mode.add_argument('--session-id', metavar='SESSION_ID', help='Required by default. Reuse a caller-owned session so failures can be inspected and self-healed before the session is closed.')
     session_mode.add_argument('--auto-session', action='store_true', help='Explicit one-shot mode: create and clean up a temporary session automatically. No orchestrator self-heal is available after failure.')
+    # Keep all example commands consistent with the invoked executable,
+    # including nested subcommand help. Legacy CLI examples remain unchanged.
+    if cli_name == 'webhelm':
+        def brand_help(parser):
+            if parser.epilog:
+                parser.epilog = parser.epilog.replace('browser-workspace', cli_name)
+            for action in parser._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    for subparser in action.choices.values():
+                        brand_help(subparser)
+        brand_help(p)
     args=p.parse_args()
     if args.group=='status': emit(status()); return
     if args.group=='session' and args.cmd=='list':
@@ -224,10 +236,10 @@ One-shot mode (no orchestrator self-heal):
                 'error': 'session_id_required',
                 'message': 'platform run requires --session-id by default so the orchestrator can self-heal failures in the same browser session.',
                 'suggested_workflow': [
-                    'browser-workspace session start --url <URL>',
-                    'browser-workspace platform run <PLATFORM> <ACTION> --session-id SESSION_ID [--config FILE]',
+                    f'{cli_name} session start --url <URL>',
+                    f'{cli_name} platform run <PLATFORM> <ACTION> --session-id SESSION_ID [--config FILE]',
                     'inspect/self-heal failures in the same SESSION_ID and write successful repairs back to platform code',
-                    'browser-workspace session stop SESSION_ID',
+                    f'{cli_name} session stop SESSION_ID',
                 ],
                 'auto_session': 'Use --auto-session only for a one-shot run. It creates and closes its own session and does not provide orchestrator self-heal.',
             })

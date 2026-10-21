@@ -20,3 +20,21 @@ def test_python_webhelm_entrypoint():
     assert metadata['project']['scripts']['webhelm']=='browser_workspace_app.cli:main'
     assert metadata['project']['scripts']['browser-workspace']=='browser_workspace_app.cli:main'
     assert 'uvx --from browser-workspace webhelm' in (ROOT/'SKILL.md').read_text()
+
+
+def test_default_workspace_is_webhelm():
+    assert "os.environ.setdefault('BH_WORKSPACE_NAME', 'webhelm')" in (ROOT/'session_daemon.py').read_text()
+    assert "_os.environ.get(\"BH_MDB_GROUP_NAME\", \"webhelm\")" in (ROOT/'agent-workspace/agent_helpers.py').read_text()
+    assert 'Default workspace is `webhelm`' in (ROOT/'SKILL.md').read_text()
+
+
+def test_webhelm_help_examples_match_invoked_name():
+    import subprocess
+    executable=ROOT/'bin/browser-workspace'
+    for command in ('webhelm', 'browser-workspace'):
+        env=dict(__import__('os').environ)
+        env['WEBHELM_CLI_BRAND'] = '1' if command == 'webhelm' else '0'
+        for suffix in (['--help'], ['session', '--help'], ['platform', 'run', '--help']):
+            result=subprocess.run([str(executable), *suffix], env=env, capture_output=True, text=True)
+            assert result.returncode == 0, result.stderr
+            assert f'{command} session start' in result.stdout if suffix != ['platform', 'run', '--help'] else command in result.stdout
