@@ -21,8 +21,8 @@ On first use, the skill discovers Chrome and initializes the dedicated
 managed Browser Workspace profile and session daemon:
 
 ```bash
-npx --yes --package browser-workspace webhelm status
-npx --yes --package browser-workspace webhelm session start
+uvx --from browser-workspace webhelm status
+uvx --from browser-workspace webhelm session start
 ```
 
 The Chrome Web Store extension is optional for basic browser control;
@@ -30,8 +30,7 @@ when needed for workspace grouping, the skill must open the official listing
 in the managed profile, request user approval for installation, and verify
 the extension bridge before claiming it is ready. Never silently alter the
 user's default Chrome profile or bypass Chrome Store approval.
-Until an independent `webhelm` npm distribution exists, the above
-`npx --package browser-workspace webhelm` is the supported executable.
+The `uvx` entry point is provided by the existing `browser-workspace` PyPI distribution; no npm CLI installation is required.
 
 Use one session-owned execution path for orchestrated browser work:
 

@@ -141,12 +141,12 @@ Install the self-contained skill with:
 npx skills add lalalic/browser-workspace --skill webhelm
 ```
 
-Run the branded CLI using the published npm runtime:
+Run the branded CLI using the published Python/PyPI runtime:
 
 ```bash
-npx --yes --package browser-workspace webhelm status
-npx --yes --package browser-workspace webhelm session start
-npx --yes --package browser-workspace webhelm platform profile chatgpt
+uvx --from browser-workspace webhelm status
+uvx --from browser-workspace webhelm session start
+uvx --from browser-workspace webhelm platform profile chatgpt
 ```
 
 The `webhelm` command delegates to the existing Browser Workspace runtime.

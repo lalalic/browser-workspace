@@ -80,7 +80,7 @@ def test_npx_install_self_bootstraps_runtime():
 
 def test_skill_uses_published_uvx_cli():
     skill = (ROOT / "SKILL.md").read_text()
-    assert 'npx --yes --package browser-workspace webhelm status' in skill
+    assert 'uvx --from browser-workspace webhelm status' in skill
     assert "webhelm session start" in skill
     assert "platform run" in skill
 
