@@ -30,5 +30,5 @@ else:
       const page = (document.body?.innerText||'').toLowerCase();
       return login && (page.includes('log in to chatgpt') || page.includes('sign in to chatgpt'));
     })()"""))
-    result = 'authentication_required' if login_required else bool(common.submit(probe, send=False)["send_enabled"])
+    result = 'authentication_required' if login_required else bool(common.prefilled_submit(probe, send=False)["send_enabled"])
 print(json.dumps(result), flush=True)

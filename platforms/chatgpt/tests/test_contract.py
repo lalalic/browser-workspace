@@ -143,12 +143,14 @@ def test_wait_until_stable_requires_same_ready_state():
     assert result == {"selector": "#composer"}
 
 
-def test_fill_prompt_prefers_canonical_composer_before_fallback():
+def test_url_prefilled_lifecycle_has_no_composer_dependency():
     text=(ACTIONS / "_lifecycle_common.py").read_text()
-    fill_prompt=text.split("def fill_prompt(",1)[1].split("def submit(",1)[0]
-    assert fill_prompt.index("primary_composer_selector(),") < fill_prompt.index("composer_selector(),")
-    assert "canonical composer readiness" in text
-    assert "ChatGPT composer readiness" in text
+    for name in ("composer_selector", "composer_text", "fill_prompt", "wait_for_idle"):
+        assert f"def {name}(" not in text
+    submit=text.split("def prefilled_submit(",1)[1]
+    assert "send_enabled()" in submit
+    assert "composer" not in submit.lower()
+    assert "send-button-disabled" in submit
 
 
 def test_submit_thread_is_submission_only():
@@ -203,14 +205,14 @@ def test_lifecycle_actions_use_stable_ids_and_do_not_wait_for_new_answer():
     thread=(ACTIONS/"_new_thread.py").read_text()
     common=(ACTIONS/"_lifecycle_common.py").read_text()
     assert "project_id" in turn and "thread_id" in turn
-    assert "wait_for_idle" in turn and "submit(message)" in turn
+    assert "prefilled_submit" in turn and "submit(message)" in turn
     assert "project_id" in thread and "source_thread_id" in thread
     assert "local-chatgpt" in thread and "thread_id" in thread
     assert "assistant" not in turn.lower().split("print(json.dumps",1)[-1]
     assert "assistant" not in thread.lower().split("print(json.dumps",1)[-1]
     assert "session start" not in turn and "session stop" not in turn
     assert "session start" not in thread and "session stop" not in thread
-    assert "submission_receipt" in common
+    assert "prefilled_submit" in common
 
 
 
@@ -229,7 +231,7 @@ def test_lifecycle_actions_bind_session_helpers_into_imported_module():
         text=(ACTIONS/name).read_text()
         assert "import _lifecycle_common as lifecycle_common" in text
         assert "lifecycle_common.js = js" in text
-        assert "lifecycle_common.fill_input = fill_input" in text
+        assert "lifecycle_common.fill_input = fill_input" not in text
 
 
 def test_temporary_new_thread_finishes_without_system_exit():
@@ -255,9 +257,11 @@ def test_thread_url_returned_by_new_turn_and_submit_thread():
         assert "\"thread_url\":thread_url" in source
 
 
-def test_generic_contenteditable_fallback_is_unique_and_excludes_pending_home_input():
-    text=(ACTIONS / "_lifecycle_common.py").read_text()
-    part=text.split("def composer_selector():",1)[1].split("def primary_composer_selector():",1)[0]
-    assert "generic.length===1" in part
-    assert "pending-home-input" in part
-    assert "[contenteditable=\"true\"]:not(#pending-home-input)" in part
+def test_new_thread_is_chat_only_and_rejects_job_context():
+    source=(ACTIONS/"_new_thread.py").read_text()
+    assert 'CFG.get("mode", "chat") != "chat"' in source
+    assert '"job_id", "jobId", "task_id", "taskId"' in source
+    assert "ensure_chat_mode()" in source
+    assert "chat.getAttribute('aria-pressed')==='true'" in source
+    assert "work.getAttribute('aria-pressed')==='false'" in source
+    assert source.index("ensure_chat_mode()") < source.index("receipt=submit(message)")

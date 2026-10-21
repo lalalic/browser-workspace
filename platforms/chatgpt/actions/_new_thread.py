@@ -4,10 +4,8 @@ from urllib.parse import quote, urlsplit
 import _lifecycle_common as lifecycle_common
 
 lifecycle_common.js = js
-lifecycle_common.fill_input = fill_input
-wait_for_idle = lifecycle_common.wait_for_idle
 raise_if_visible_delivery_error = lifecycle_common.raise_if_visible_delivery_error
-submit = lifecycle_common.submit
+submit = lifecycle_common.prefilled_submit
 
 CFG=json.load(open("__CFG_PATH__",encoding="utf-8"))
 project_id=str(CFG.get("project_id") or "").strip() or None
@@ -15,16 +13,60 @@ message=str(CFG.get("message") or "").strip()
 source_thread_id=str(CFG.get("source_thread_id") or "").strip() or None
 temporary=bool(CFG.get("temporary", False))
 
+# The creation action is for ordinary Chat conversations, not Relay jobs.
+if any(key in CFG for key in ("job_id", "jobId", "task_id", "taskId", "pr_number", "prNumber")):
+    raise RuntimeError("new-thread does not accept Job/Task/PR context")
+if CFG.get("mode", "chat") != "chat":
+    raise RuntimeError("new-thread supports chat mode only")
+
+def ensure_chat_mode():
+    def current_mode():
+        return js("""(() => {
+          const buttons=[...document.querySelectorAll('button')];
+          const find=name=>buttons.find(b=>(b.textContent||'').trim()===name && b.hasAttribute('aria-pressed'));
+          const chat=find('Chat'), work=find('Work');
+          if (!chat || !work) return 'unknown';
+          if (chat.getAttribute('aria-pressed')==='true' && work.getAttribute('aria-pressed')==='false') return 'chat';
+          if (work.getAttribute('aria-pressed')==='true' && chat.getAttribute('aria-pressed')==='false') return 'work';
+          return 'unknown';
+        })()""")
+    if current_mode() == 'work':
+        if not js("""(() => {
+          const chat=[...document.querySelectorAll('button')].find(b=>(b.textContent||'').trim()==='Chat' && b.hasAttribute('aria-pressed'));
+          if (!chat || chat.disabled) return false;
+          chat.click(); return true;
+        })()"""):
+            raise RuntimeError("Cannot select Chat mode")
+        for _ in range(30):
+            if current_mode() == 'chat': break
+            time.sleep(.2)
+    if current_mode() == 'chat':
+        return
+    # Temporary Chat has no Chat/Work toggle; verify the dedicated mode UI.
+    if temporary and js("""(() => {
+      const temporaryButton=[...document.querySelectorAll('button')].some(b =>
+        (b.getAttribute('aria-label')||'').toLowerCase().includes('turn off temporary chat'));
+      const composer=[...document.querySelectorAll('[role="textbox"],textarea')].some(e =>
+        (e.getAttribute('aria-label')||'').trim()==='Ask ChatGPT');
+      return temporaryButton && composer;
+    })()"""):
+        return
+    raise RuntimeError("new-thread Chat mode could not be verified")
+
 if not message:
     raise RuntimeError("message is required")
 if temporary and project_id:
     raise RuntimeError("temporary=true cannot be combined with project_id")
 
-start_url=lifecycle_common.target_url(project_id=project_id, temporary=temporary)
+start_url=lifecycle_common.target_url(project_id=project_id, temporary=temporary, prompt=message)
 goto_url(start_url)
 wait_for_load()
 raise_if_visible_delivery_error()
-wait_for_idle(timeout=60)
+ensure_chat_mode()
+# Switching Work to Chat may discard the URL prefill: navigate again in Chat mode.
+if not temporary:
+    goto_url(start_url)
+    wait_for_load()
 
 if temporary:
     is_temporary=bool(js("""(() => {

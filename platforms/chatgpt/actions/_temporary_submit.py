@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Mapping
-from urllib.parse import urlencode
+from _lifecycle_common import target_url
 from _readiness import send_ready
 
 
@@ -44,12 +44,8 @@ def actionable_temporary_chat_candidates(candidates):
 
 
 def temporary_chat_entry_url(prompt=""):
-    """Open Temporary Chat and let ChatGPT prefill the prompt from the URL."""
-    query = {"temporary-chat": "true"}
-    if prompt:
-        query["prompt"] = prompt
-    return "https://chatgpt.com/?" + urlencode(query)
-
+    """Use the canonical URL prefill path shared by new-thread/new-turn/validate."""
+    return target_url(temporary=True, prompt=prompt or None)
 
 
 def temporary_chat_enabled_state(url, candidates):
