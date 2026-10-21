@@ -1,6 +1,6 @@
 ---
 name: webhelm
-description: Control the real browser through one Browser Workspace skill and CLI, with leased tab workspaces, persistent Python sessions, compact snapshots, and built-in platform workflows.
+description: Control the real browser through the WebHelm skill and Python CLI, with leased tab workspaces, persistent Python sessions, compact snapshots, and built-in platform workflows.
 ---
 
 # WebHelm
@@ -23,6 +23,12 @@ managed Browser Workspace profile and session daemon:
 ```bash
 uvx --from browser-workspace webhelm status
 uvx --from browser-workspace webhelm session start
+```
+
+For concise session commands in this document:
+
+```bash
+bw() { uvx --from browser-workspace webhelm "$@"; }
 ```
 
 The Chrome Web Store extension is optional for basic browser control;
@@ -78,7 +84,7 @@ Default workspace is `Harness`:
 bw session start
 ```
 
-Normal agents do not choose or manage workspaces. `session start` defaults to `Harness`; the `--workspace` implementation option is hidden from normal CLI help. Workspace lifecycle is not exposed through the agent CLI. Product runtimes that need persistent isolation discover the product-only Node admin helper with `browser-workspace status`, then call `ensureWorkspace` / `deleteWorkspace` through that helper.
+Normal agents do not choose or manage workspaces. `session start` defaults to `Harness`; the `--workspace` implementation option is hidden from normal CLI help. Workspace lifecycle is not exposed through the agent CLI. Product runtimes that need persistent isolation discover the product-only Node admin helper with `webhelm status`, then call `ensureWorkspace` / `deleteWorkspace` through that helper.
 
 Start directly at a URL when known:
 

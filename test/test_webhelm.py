@@ -25,7 +25,7 @@ def test_python_webhelm_entrypoint():
 def test_default_workspace_is_webhelm():
     assert "os.environ.setdefault('BH_WORKSPACE_NAME', 'webhelm')" in (ROOT/'session_daemon.py').read_text()
     assert "_os.environ.get(\"BH_MDB_GROUP_NAME\", \"webhelm\")" in (ROOT/'agent-workspace/agent_helpers.py').read_text()
-    assert 'Default workspace is `webhelm`' in (ROOT/'SKILL.md').read_text()
+    assert 'Default workspace is `Harness`' in (ROOT/'SKILL.md').read_text()
 
 
 def test_webhelm_help_examples_match_invoked_name():
@@ -38,3 +38,11 @@ def test_webhelm_help_examples_match_invoked_name():
             result=subprocess.run([str(executable), *suffix], env=env, capture_output=True, text=True)
             assert result.returncode == 0, result.stderr
             assert f'{command} session start' in result.stdout if suffix != ['platform', 'run', '--help'] else command in result.stdout
+
+
+def test_skill_documents_webhelm_commands():
+    skill=(ROOT/'SKILL.md').read_text()
+    assert 'bw() { uvx --from browser-workspace webhelm "$@"; }' in skill
+    readme=(ROOT/'README.md').read_text()
+    assert 'npx skills add lalalic/browser-workspace --skill webhelm' in readme
+    assert 'webhelm session start' in readme
