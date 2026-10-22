@@ -1,11 +1,18 @@
 ---
 name: webhelm
 description: Control the real browser through the WebHelm skill and Python CLI, with leased tab workspaces, persistent Python sessions, compact snapshots, and built-in platform workflows.
+requires:
+  skills:
+    - daemon-service-manage
 ---
 
 # WebHelm
 
 WebHelm is the **only browser skill agents should load**. It includes the browser-control runtime, workspace/tab leasing, persistent Python sessions, snapshot refs, and site-specific platform workflows. Do not load or invoke a separate `browser-harness` or `browser-platforms` skill.
+
+## Service ownership
+
+Persistent services owned by this Skill require the global `daemon-service-manage` Skill. Register and manage each service through its CLI, using the enforced `<skillname>/<service-name>` identity; do not create new unqualified PM2 process names. Existing service names are migration inputs, not a reason to bypass namespacing.
 
 ## Install and self-setup
 
