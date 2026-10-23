@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import ast, atexit, contextlib, io, json, os, secrets, signal, socket, sys, threading, time, traceback
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -57,6 +58,43 @@ except OSError:
     except (OSError, ValueError):
         pass
 BROWSER_LOCK = threading.RLock()
+# Queue sessions use explicit CDP attachments; context-local routing avoids the
+# shared Harness tab selection that requires BROWSER_LOCK for ordinary sessions.
+_CDP_SESSION = ContextVar('browser_workspace_cdp_session', default=None)
+_CDP_TARGET = ContextVar('browser_workspace_cdp_target', default=None)
+_BROWSER_CDP = bh.cdp
+_BROWSER_CURRENT_TAB = bh.current_tab
+
+
+def _session_cdp(method, session_id=None, _response_timeout=5.0, **params):
+    if session_id is None:
+        session_id = _CDP_SESSION.get()
+    return _BROWSER_CDP(method, session_id=session_id,
+                        _response_timeout=_response_timeout, **params)
+
+
+def _session_current_tab():
+    target_id = _CDP_TARGET.get()
+    if target_id is None:
+        return _BROWSER_CURRENT_TAB()
+    info = _BROWSER_CDP('Target.getTargetInfo', targetId=target_id).get('targetInfo', {})
+    return {'targetId': target_id, 'target_id': target_id,
+            'url': info.get('url', ''), 'title': info.get('title', '')}
+
+
+def _session_switch_tab(target, activate=False):
+    target_id = target.get('targetId') or target.get('target_id') if isinstance(target, dict) else target
+    if _CDP_TARGET.get() is not None:
+        if target_id != _CDP_TARGET.get() or activate:
+            raise RuntimeError('isolated session cannot switch or activate another tab')
+        return _CDP_SESSION.get()
+    return _BROWSER_SWITCH_TAB(target, activate=activate)
+
+
+_BROWSER_SWITCH_TAB = bh.switch_tab
+bh.cdp = _session_cdp
+bh.current_tab = _session_current_tab
+bh.switch_tab = _session_switch_tab
 NEW_TURN_QUEUE = NewTurnQueue(Path.home()/'.config/browser-workspace/runtime/new-turn-queue.sqlite3')
 NEW_TURN_WAKE = threading.Event()
 NEW_TURN_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix='new-turn')
@@ -86,7 +124,7 @@ def dispatch_new_turn(claim):
                     raise RuntimeError('new-turn submission claim was lost')
                 submission_started = True
             namespace['queue_before_submit'] = before_submit
-            result = exec_session(session_id, code)
+            result = exec_session(session_id, code, isolated=True)
         finally:
             try: os.unlink(config_path)
             except OSError: pass
@@ -233,8 +271,9 @@ class SessionBrowserProxy:
     def cdp(self, method, **kwargs): return self._session._cdp(method, **kwargs)
 
 class Session:
-    def __init__(self, sid, workspace, target_id, workspace_supported):
+    def __init__(self, sid, workspace, target_id, workspace_supported, cdp_session_id=None):
         self.session_id=sid; self.workspace=workspace; self.target_id=target_id; self.workspace_supported=bool(workspace_supported)
+        self.cdp_session_id=cdp_session_id
         self.created_at=time.time(); self.last_used_at=self.created_at
         self.owned_target_ids={target_id}
         self.lock=threading.Lock()
@@ -317,7 +356,8 @@ def start_session(workspace=None, url=None):
             raise RuntimeError('daemon_retiring')
         with with_workspace(workspace, supported):
             tid = bh.new_tab(start_url)
-        s=Session(sid,workspace,tid,supported)
+            cdp_session_id = _BROWSER_CDP('Target.attachToTarget', targetId=tid, flatten=True)['sessionId']
+        s=Session(sid,workspace,tid,supported,cdp_session_id)
         with SESSIONS_LOCK: SESSIONS[sid]=s
     result={'session_id':sid,'workspace':workspace,'target_id':tid,'url':start_url,'workspace_supported':supported}
     if not supported:
@@ -389,16 +429,23 @@ def get_session(sid):
     if not s: raise KeyError(f'unknown session_id: {sid}')
     return s
 
-def exec_session(sid, code):
+def exec_session(sid, code, *, isolated=False):
     s=get_session(sid)
     s.last_used_at=time.time()
-    with s.lock, BROWSER_LOCK, with_workspace(s.workspace, s.workspace_supported):
-        bh.switch_tab(s.target_id,activate=False)
-        r=execute(code,s.namespace)
-        absorb_owned_children(s)
+    with s.lock, (contextlib.nullcontext() if isolated else BROWSER_LOCK), with_workspace(s.workspace, s.workspace_supported):
+        session_token = _CDP_SESSION.set(s.cdp_session_id) if isolated else None
+        target_token = _CDP_TARGET.set(s.target_id) if isolated else None
         try:
-            cur=bh.current_tab(); s.target_id=cur.get('targetId') or s.target_id; s.namespace['target_id']=s.target_id
-        except Exception: pass
+            if not isolated:
+                bh.switch_tab(s.target_id,activate=False)
+            r=execute(code,s.namespace)
+            absorb_owned_children(s)
+            try:
+                cur=bh.current_tab(); s.target_id=cur.get('targetId') or s.target_id; s.namespace['target_id']=s.target_id
+            except Exception: pass
+        finally:
+            if target_token is not None: _CDP_TARGET.reset(target_token)
+            if session_token is not None: _CDP_SESSION.reset(session_token)
     return {'session_id':sid,'workspace':s.workspace,'target_id':s.target_id,**r}
 
 def list_sessions():

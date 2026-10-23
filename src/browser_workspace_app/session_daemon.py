@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import ast, atexit, contextlib, io, json, os, secrets, signal, socket, sys, threading, time, traceback
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -17,6 +19,7 @@ MANAGED_CHROME = ensure_managed_chrome()
 from browser_harness.admin import ensure_daemon, _process_start_time
 from browser_harness import _ipc as harness_ipc
 from browser_harness import helpers as bh
+from browser_workspace_app.new_turn_queue import NewTurnQueue
 
 HARNESS_OWNER_TOKEN = secrets.token_hex(24)
 HARNESS_OWNER_PID = os.getpid()
@@ -55,6 +58,124 @@ except OSError:
     except (OSError, ValueError):
         pass
 BROWSER_LOCK = threading.RLock()
+# Queue sessions use explicit CDP attachments; context-local routing avoids the
+# shared Harness tab selection that requires BROWSER_LOCK for ordinary sessions.
+_CDP_SESSION = ContextVar('browser_workspace_cdp_session', default=None)
+_CDP_TARGET = ContextVar('browser_workspace_cdp_target', default=None)
+_BROWSER_CDP = bh.cdp
+_BROWSER_CURRENT_TAB = bh.current_tab
+
+
+def _session_cdp(method, session_id=None, _response_timeout=5.0, **params):
+    if session_id is None:
+        session_id = _CDP_SESSION.get()
+    return _BROWSER_CDP(method, session_id=session_id,
+                        _response_timeout=_response_timeout, **params)
+
+
+def _session_current_tab():
+    target_id = _CDP_TARGET.get()
+    if target_id is None:
+        return _BROWSER_CURRENT_TAB()
+    info = _BROWSER_CDP('Target.getTargetInfo', targetId=target_id).get('targetInfo', {})
+    return {'targetId': target_id, 'target_id': target_id,
+            'url': info.get('url', ''), 'title': info.get('title', '')}
+
+
+def _session_switch_tab(target, activate=False):
+    target_id = target.get('targetId') or target.get('target_id') if isinstance(target, dict) else target
+    if _CDP_TARGET.get() is not None:
+        if target_id != _CDP_TARGET.get() or activate:
+            raise RuntimeError('isolated session cannot switch or activate another tab')
+        return _CDP_SESSION.get()
+    return _BROWSER_SWITCH_TAB(target, activate=activate)
+
+
+_BROWSER_SWITCH_TAB = bh.switch_tab
+bh.cdp = _session_cdp
+bh.current_tab = _session_current_tab
+bh.switch_tab = _session_switch_tab
+NEW_TURN_QUEUE = NewTurnQueue(Path.home()/'.config/browser-workspace/runtime/new-turn-queue.sqlite3')
+NEW_TURN_WAKE = threading.Event()
+NEW_TURN_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix='new-turn')
+
+
+def dispatch_new_turn(claim):
+    request = claim['request']
+    token = claim['claim_token']
+    request_id = claim['request_id']
+    submission_started = False
+    session_id = None
+    try:
+        import tempfile
+        import platform_runner
+        action = platform_runner.action_path('chatgpt', 'new-turn')
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.json', delete=False) as cfg:
+            json.dump(request, cfg, ensure_ascii=False)
+            config_path = cfg.name
+        try:
+            code = platform_runner.prepare_action(action, Path(config_path))
+            session = start_session()
+            session_id = session['session_id']
+            namespace = get_session(session_id).namespace
+            def before_submit():
+                nonlocal submission_started
+                if not NEW_TURN_QUEUE.mark_submitting(request_id, token):
+                    raise RuntimeError('new-turn submission claim was lost')
+                submission_started = True
+            namespace['queue_before_submit'] = before_submit
+            result = exec_session(session_id, code, isolated=True)
+        finally:
+            try: os.unlink(config_path)
+            except OSError: pass
+        if not result.get('ok'):
+            reason = result.get('error') or result.get('stderr') or 'new-turn action failed'
+            if submission_started:
+                NEW_TURN_QUEUE.mark_unknown(request_id, token, reason)
+            else:
+                NEW_TURN_QUEUE.fail_before_submit(request_id, token, reason)
+            return
+        payload = next((line for line in reversed(result.get('stdout', '').splitlines()) if line.strip()), '')
+        action_result = json.loads(payload)
+        if action_result.get('status') == 'busy':
+            if submission_started:
+                NEW_TURN_QUEUE.defer_busy_after_submit_check(request_id, token)
+            else:
+                NEW_TURN_QUEUE.defer_busy(request_id, token)
+        elif action_result.get('status') == 'submitted' and submission_started:
+            NEW_TURN_QUEUE.mark_submitted(request_id, token, action_result, wake=NEW_TURN_WAKE)
+        else:
+            reason = 'new-turn action returned an unexpected result'
+            if submission_started:
+                NEW_TURN_QUEUE.mark_unknown(request_id, token, reason)
+            else:
+                NEW_TURN_QUEUE.fail_before_submit(request_id, token, reason)
+    except Exception as exc:
+        reason = f'{type(exc).__name__}: {exc}'
+        if submission_started:
+            NEW_TURN_QUEUE.mark_unknown(request_id, token, reason)
+        else:
+            NEW_TURN_QUEUE.fail_before_submit(request_id, token, reason)
+    finally:
+        if session_id:
+            try: stop_session(session_id)
+            except Exception: pass
+        NEW_TURN_WAKE.set()
+
+
+def new_turn_dispatch_loop():
+    futures = set()
+    while True:
+        NEW_TURN_WAKE.clear()
+        futures = {future for future in futures if not future.done()}
+        while len(futures) < 4:
+            claim = NEW_TURN_QUEUE.claim()
+            if claim is None:
+                break
+            futures.add(NEW_TURN_EXECUTOR.submit(dispatch_new_turn, claim))
+        delay = NEW_TURN_QUEUE.next_wakeup()
+        wait_for = delay if delay is not None and delay > 0 else 1.0
+        NEW_TURN_WAKE.wait(timeout=min(wait_for, 1.0))
 
 SESSION_RECONCILE_SECONDS = 30
 # Zero disables idle lease eviction. Never evict an executing Session.
@@ -150,8 +271,9 @@ class SessionBrowserProxy:
     def cdp(self, method, **kwargs): return self._session._cdp(method, **kwargs)
 
 class Session:
-    def __init__(self, sid, workspace, target_id, workspace_supported):
+    def __init__(self, sid, workspace, target_id, workspace_supported, cdp_session_id=None):
         self.session_id=sid; self.workspace=workspace; self.target_id=target_id; self.workspace_supported=bool(workspace_supported)
+        self.cdp_session_id=cdp_session_id
         self.created_at=time.time(); self.last_used_at=self.created_at
         self.owned_target_ids={target_id}
         self.lock=threading.Lock()
@@ -234,7 +356,8 @@ def start_session(workspace=None, url=None):
             raise RuntimeError('daemon_retiring')
         with with_workspace(workspace, supported):
             tid = bh.new_tab(start_url)
-        s=Session(sid,workspace,tid,supported)
+            cdp_session_id = _BROWSER_CDP('Target.attachToTarget', targetId=tid, flatten=True)['sessionId']
+        s=Session(sid,workspace,tid,supported,cdp_session_id)
         with SESSIONS_LOCK: SESSIONS[sid]=s
     result={'session_id':sid,'workspace':workspace,'target_id':tid,'url':start_url,'workspace_supported':supported}
     if not supported:
@@ -306,16 +429,23 @@ def get_session(sid):
     if not s: raise KeyError(f'unknown session_id: {sid}')
     return s
 
-def exec_session(sid, code):
+def exec_session(sid, code, *, isolated=False):
     s=get_session(sid)
     s.last_used_at=time.time()
-    with s.lock, BROWSER_LOCK, with_workspace(s.workspace, s.workspace_supported):
-        bh.switch_tab(s.target_id,activate=False)
-        r=execute(code,s.namespace)
-        absorb_owned_children(s)
+    with s.lock, (contextlib.nullcontext() if isolated else BROWSER_LOCK), with_workspace(s.workspace, s.workspace_supported):
+        session_token = _CDP_SESSION.set(s.cdp_session_id) if isolated else None
+        target_token = _CDP_TARGET.set(s.target_id) if isolated else None
         try:
-            cur=bh.current_tab(); s.target_id=cur.get('targetId') or s.target_id; s.namespace['target_id']=s.target_id
-        except Exception: pass
+            if not isolated:
+                bh.switch_tab(s.target_id,activate=False)
+            r=execute(code,s.namespace)
+            absorb_owned_children(s)
+            try:
+                cur=bh.current_tab(); s.target_id=cur.get('targetId') or s.target_id; s.namespace['target_id']=s.target_id
+            except Exception: pass
+        finally:
+            if target_token is not None: _CDP_TARGET.reset(target_token)
+            if session_token is not None: _CDP_SESSION.reset(session_token)
     return {'session_id':sid,'workspace':s.workspace,'target_id':s.target_id,**r}
 
 def list_sessions():
@@ -443,6 +573,15 @@ def handle(req):
     if op=='stop-all': return stop_all_sessions()
     if op=='workspace-create': return create_workspace(req['name'], req.get('pool_size', 5))
     if op=='workspace-delete': return delete_workspace(req['name'], req.get('force', False))
+    if op=='enqueue-new-turn':
+        return NEW_TURN_QUEUE.enqueue(req.get('request') or {}, wake=NEW_TURN_WAKE)
+    if op=='resolve-new-turn':
+        if req.get('state') == 'failed':
+            resolved=NEW_TURN_QUEUE.resolve_failed(req['request_id'], req['resolution'])
+        else:
+            resolved=NEW_TURN_QUEUE.resolve_unknown(req['request_id'], req['resolution'])
+        NEW_TURN_WAKE.set()
+        return {'resolved': resolved}
     raise ValueError(f'unknown op: {op}')
 
 def serve_conn(conn):
@@ -465,6 +604,8 @@ def main():
         fcntl.flock(owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
     except BlockingIOError:
         owner.close(); return
+    NEW_TURN_QUEUE.recover_after_restart()
+    threading.Thread(target=new_turn_dispatch_loop, daemon=True).start()
     global HARNESS_OWNER_PIPE
     read_fd, write_fd = os.pipe() if os.name == 'posix' else (None, None)
     HARNESS_OWNER_PIPE = write_fd

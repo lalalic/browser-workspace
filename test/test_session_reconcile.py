@@ -7,10 +7,20 @@ from types import SimpleNamespace
 
 
 def load_daemon(monkeypatch):
+    managed_chrome = types.ModuleType('managed_chrome')
+    managed_chrome.ensure_managed_chrome = lambda: {'enabled': False}
+    monkeypatch.setitem(sys.modules, 'managed_chrome', managed_chrome)
     admin = types.ModuleType('browser_harness.admin')
     admin.ensure_daemon = lambda **kwargs: None
     admin._process_start_time = lambda pid: 'test-generation'
     helpers = types.ModuleType('browser_harness.helpers')
+    helpers.cdp = lambda *_args, **_kwargs: {}
+    helpers.current_tab = lambda: {'targetId': 'default', 'url': 'about:blank', 'title': ''}
+    helpers.switch_tab = lambda *_args, **_kwargs: 'attached-session'
+    helpers.workspace_set_name = lambda _name: None
+    helpers.workspace_reset_name = lambda _token: None
+    helpers.workspace_set_supported = lambda _supported: None
+    helpers.workspace_reset_supported = lambda _token: None
     ipc = types.ModuleType('browser_harness._ipc')
     ipc.connect = lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError())
     ipc.request = lambda *a, **kw: {'ok': True}
