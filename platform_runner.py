@@ -167,6 +167,25 @@ def run_platform_action(
         if not isinstance(config, dict):
             raise ValueError("platform config must be a JSON object")
         validate_platform_config(platform, action, config)
+    if platform == "chatgpt" and action == "new-turn":
+        import uuid
+        if config_file is None:
+            raise ValueError("chatgpt/new-turn requires --config")
+        if not config.get("thread_id") or not config.get("message"):
+            raise ValueError("thread_id and message are required")
+        # The durable enqueue is independent of Browser Workspace sessions.
+        # Callers receive a queue ID immediately; the daemon owns delivery.
+        receipt = request({
+            "op": "chatgpt-new-turn-enqueue",
+            "thread_id": str(config["thread_id"]),
+            "project_id": config.get("project_id"),
+            "message": str(config["message"]),
+            "idempotency_key": str(config.get("idempotency_key") or uuid.uuid4()),
+        })
+        if not receipt.get("ok"):
+            receipt = normalize_failure(receipt, action)
+        return {"platform": platform, "action": action, "session_mode": "durable_queue",
+                "self_heal_capable": False, "result": receipt}
     code = prepare_action(path, config_file)
 
     if not session_id and not auto_session:

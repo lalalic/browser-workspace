@@ -10,7 +10,7 @@ os.environ.setdefault('BH_HOME', str(Path.home()/'.config/browser-workspace/brow
 os.environ.setdefault('BH_RUNTIME_DIR', str(Path.home()/'.config/browser-workspace/browser-core-runtime'))
 os.environ.setdefault('BU_NAME', 'browser-workspace')
 os.environ.setdefault('BH_AGENT_WORKSPACE', str(ROOT/'agent-workspace'))
-os.environ.setdefault('BH_WORKSPACE_NAME', 'Harness')
+os.environ['BH_WORKSPACE_NAME'] = 'Harness'
 
 from managed_chrome import ensure_managed_chrome
 MANAGED_CHROME = ensure_managed_chrome()
@@ -41,7 +41,7 @@ def stop_owned_harness():
 
 DEFAULT_WORKSPACE = os.environ.get('BH_WORKSPACE_NAME','Harness')
 RUNTIME_DIR = Path.home()/'.config/browser-workspace/runtime'
-SOCKET_PATH = (Path(os.environ['BROWSER_WORKSPACE_SESSION_SOCKET']) if os.environ.get('BROWSER_WORKSPACE_TEST_MODE')=='1' and os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET') else RUNTIME_DIR/'session.sock')
+SOCKET_PATH = RUNTIME_DIR / 'session.sock'
 OWNER_LOCK_PATH = RUNTIME_DIR/'session.lock'
 SESSIONS = {}
 SESSIONS_LOCK = threading.Lock()
@@ -55,6 +55,7 @@ except OSError:
     except (OSError, ValueError):
         pass
 BROWSER_LOCK = threading.RLock()
+CHATGPT_QUEUE = None
 
 SESSION_RECONCILE_SECONDS = 30
 # Zero disables idle lease eviction. Never evict an executing Session.
@@ -387,6 +388,8 @@ def remove_owned_socket():
         pass
 
 def cleanup():
+    if CHATGPT_QUEUE is not None:
+        CHATGPT_QUEUE.close()
     with SESSIONS_LOCK: ids=list(SESSIONS)
     for sid in ids:
         try: stop_session(sid)
@@ -425,6 +428,13 @@ def delete_workspace(name, force=False):
 
 def handle(req):
     op=req.get('op')
+    if op=='chatgpt-new-turn-enqueue':
+        if CHATGPT_QUEUE is None: raise RuntimeError('chatgpt_queue_unavailable')
+        return CHATGPT_QUEUE.enqueue(req)
+    if op=='chatgpt-new-turn-list':
+        return CHATGPT_QUEUE.list_pending()
+    if op=='chatgpt-new-turn-reconcile':
+        return CHATGPT_QUEUE.reconcile(req)
     if op=='ping': return {'ok':True,'pid':os.getpid(),'version':DAEMON_VERSION,'session_count':len(SESSIONS),'managed_chrome':MANAGED_CHROME}
     if op=='retire-if-idle':
         global RETIRING
@@ -455,7 +465,7 @@ def serve_conn(conn):
         f.write((json.dumps(result,ensure_ascii=False)+'\n').encode()); f.flush()
 
 def main():
-    global SOCKET_IDENTITY
+    global SOCKET_IDENTITY, CHATGPT_QUEUE
     RUNTIME_DIR.mkdir(parents=True,exist_ok=True)
     try: os.chmod(RUNTIME_DIR,0o700)
     except Exception: pass
@@ -487,6 +497,8 @@ def main():
     # Lock ownership is required before changing the shared socket path.
     SOCKET_PATH.unlink(missing_ok=True)
     srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); srv.bind(str(SOCKET_PATH)); os.chmod(SOCKET_PATH,0o600); SOCKET_IDENTITY=(SOCKET_PATH.stat().st_dev, SOCKET_PATH.stat().st_ino); srv.listen(32)
+    from chatgpt_queue_runtime import DaemonTurnQueue
+    CHATGPT_QUEUE = DaemonTurnQueue(RUNTIME_DIR, start_session, exec_session, stop_session)
     threading.Thread(target=reconciliation_loop, daemon=True).start()
     try:
         while True:

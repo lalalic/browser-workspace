@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 
 function socketPath() {
-  if (process.env.BROWSER_WORKSPACE_TEST_MODE === "1" && process.env.BROWSER_WORKSPACE_SESSION_SOCKET) return process.env.BROWSER_WORKSPACE_SESSION_SOCKET;
   return path.join(os.homedir(), ".config", "browser-workspace", "runtime", "session.sock");
 }
 

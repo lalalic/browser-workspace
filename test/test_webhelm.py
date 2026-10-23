@@ -22,9 +22,9 @@ def test_python_webhelm_entrypoint():
     assert 'uvx --from browser-workspace webhelm' in (ROOT/'SKILL.md').read_text()
 
 
-def test_default_workspace_is_webhelm():
-    assert "os.environ.setdefault('BH_WORKSPACE_NAME', 'webhelm')" in (ROOT/'session_daemon.py').read_text()
-    assert "_os.environ.get(\"BH_MDB_GROUP_NAME\", \"webhelm\")" in (ROOT/'agent-workspace/agent_helpers.py').read_text()
+def test_default_workspace_is_Harness():
+    assert "os.environ['BH_WORKSPACE_NAME'] = 'Harness'" in (ROOT/'session_daemon.py').read_text()
+    assert "\"Harness\"" in (ROOT/'agent-workspace/agent_helpers.py').read_text()
     assert 'Default workspace is `Harness`' in (ROOT/'SKILL.md').read_text()
 
 

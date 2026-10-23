@@ -230,7 +230,7 @@ One-shot mode (no orchestrator self-heal):
         from platform_runner import platform_profile
         emit(platform_profile(args.platform)); return
     if args.group=='platform' and args.pcmd=='run':
-        if not args.session_id and not args.auto_session:
+        if not args.session_id and not args.auto_session and not (args.platform == 'chatgpt' and args.action.replace('_','-') == 'new-turn'):
             emit({
                 'ok': False,
                 'error': 'session_id_required',

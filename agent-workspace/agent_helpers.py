@@ -18,7 +18,7 @@ _EXTENSION_ID = _os.environ.get(
 )
 _DEFAULT_WORKSPACE_NAME = _os.environ.get(
     "BH_WORKSPACE_NAME",
-    _os.environ.get("BH_MDB_GROUP_NAME", "Harness"),
+    "Harness",
 )
 _WORKSPACE_NAME = _DEFAULT_WORKSPACE_NAME
 _WORKSPACE_CONTEXT = _contextvars.ContextVar("browser_workspace_name", default=None)

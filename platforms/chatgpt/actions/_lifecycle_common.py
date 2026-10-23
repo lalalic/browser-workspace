@@ -28,11 +28,14 @@ def target_url(*, project_id=None, thread_id=None, temporary=False, prompt=None)
     return base + ("?" + urlencode(params) if params else "")
 
 
-def send_enabled():
-    return bool(js("""(() => {
+SEND_ENABLED_JS = """(() => {
       const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"],form button[type="submit"]');
       return !!b && !b.disabled && b.getAttribute('aria-disabled') !== 'true';
-    })()"""))
+    })()"""
+
+
+def send_enabled():
+    return bool(js(SEND_ENABLED_JS))
 
 
 def visible_delivery_error():
@@ -56,6 +59,28 @@ def raise_if_visible_delivery_error():
     if code: raise RuntimeError(f'ChatGPT visible delivery error: {code}')
 
 
+CLICK_SEND_JS = """(() => {
+      const visible=e=>!!e&&!!e.getClientRects().length;
+      const running=[...document.querySelectorAll('button')].some(b=>{
+        if(!visible(b)) return false;
+        const label=(b.getAttribute('aria-label')||'').trim().toLowerCase();
+        const title=(b.getAttribute('title')||'').trim().toLowerCase();
+        const test=(b.getAttribute('data-testid')||'').trim().toLowerCase();
+        return ['stop generating','stop answering','stop response','stop'].includes(label)
+          || ['stop generating','stop answering'].includes(title)
+          || ['stop-button','stop-generating-button'].includes(test);
+      });
+      if(running) return false;
+      const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"],form button[type="submit"]');
+      if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return false;
+      b.click(); return true;
+    })()"""
+
+
+def click_send_once():
+    """One atomic click gate shared by new-turn and FIFO."""
+    return js(CLICK_SEND_JS)
+
 def prefilled_submit(prompt, *, send=True):
     """Shared URL-prefilled Send gate; validation never clicks or fills."""
     ready=wait_for_send_ready()
@@ -63,11 +88,7 @@ def prefilled_submit(prompt, *, send=True):
         return {"send_enabled": ready}
     if not ready:
         raise RuntimeError("URL-prefilled Send button was not observed ready")
-    clicked=js("""(() => {
-      const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"],form button[type="submit"]');
-      if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return false;
-      b.click(); return true;
-    })()""")
+    clicked=click_send_once()
     if not clicked:
         raise RuntimeError("URL-prefilled Send became unavailable before click")
     try:

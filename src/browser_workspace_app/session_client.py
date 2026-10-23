@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parent
 RUNTIME_DIR=Path.home()/'.config/browser-workspace/runtime'
-SOCKET_PATH=(Path(os.environ['BROWSER_WORKSPACE_SESSION_SOCKET']) if os.environ.get('BROWSER_WORKSPACE_TEST_MODE')=='1' and os.environ.get('BROWSER_WORKSPACE_SESSION_SOCKET') else RUNTIME_DIR/'session.sock')
+SOCKET_PATH = RUNTIME_DIR / 'session.sock'
 HARNESS_RUNTIME_SPEC='browser-harness @ git+https://github.com/lalalic/browser-harness.git@80b74e116b9126f5159c84e5e05a750573e5f192'
 
 def package_version():
@@ -25,7 +25,7 @@ def runtime_source():
     tmp=target.with_name(target.name+'.tmp')
     shutil.rmtree(tmp,ignore_errors=True)
     tmp.mkdir(parents=True)
-    for name in ['pyproject.toml','package.json','session_daemon.py','session_client.py','platform_runner.py','managed_chrome.py','src','agent-workspace','interaction-skills','platforms','extension','licenses']:
+    for name in ['pyproject.toml','package.json','session_daemon.py','session_client.py','platform_runner.py','managed_chrome.py','fifo_queue.py','turn_dispatcher.py','chatgpt_probe.py','chatgpt_queue_runtime.py','src','agent-workspace','interaction-skills','platforms','extension','licenses']:
         source=ROOT/name
         if not source.exists(): continue
         destination=tmp/name
