@@ -54,7 +54,31 @@ Destructive controls (`Disconnect`, `Uninstall`, `Delete app`) are intentionally
 
 Browser Workspace owns the ChatGPT UI mechanics for orchestrator lifecycle handoff.
 
-- `new-turn`: given stable `project_id`, `thread_id`, and `message`, wait until the current assistant turn is no longer generating, submit the continuation as the next user turn in the same thread, verify acceptance, and return without waiting for the new assistant answer.
+- `new-turn`: given stable `project_id`, `thread_id`, and `message`, durably enqueue the complete request in the existing WebHelm session daemon shared SQLite queue and promptly return `{status: "queued", position}`. The daemon dispatches one FIFO lane per thread. It opens the target thread through the current-URL plus prompt-prefill path, verifies the loaded thread URL, and checks the visible Stop-generation button: visible means busy and schedules a recheck in 60 seconds; absent on a verified loaded thread permits submission. Loading, wrong-thread, visible error, and other action errors fail closed. After verified submission the daemon immediately checks for another lane item without waiting for model completion.
 - `new-thread`: given stable `project_id` and `message` (plus optional `source_thread_id` provenance), open the same Project, submit the continuation to create a fresh thread, and return the durable new `thread_id` once ChatGPT replaces any temporary local id.
 
 These actions are control-transfer primitives. The generic Browser Workspace runner owns session start/stop and cleanup. Product code should pass stable Project/Thread IDs rather than persist ChatGPT URLs or DOM identities.
+
+
+### Durable queue recovery
+
+Queue state lives at `~/.config/browser-workspace/runtime/new-turn-queue.sqlite3`; the existing session daemon owns dispatch, so no additional service is started. Requests in `checking` are safe to requeue after daemon restart because the durable pre-submit boundary has not been crossed. Requests in `submitting` become `unknown` and block later requests for that thread. This avoids retrying a message that might already have reached ChatGPT.
+
+An operator can list blocked request IDs without printing message bodies:
+
+```sh
+sqlite3 ~/.config/browser-workspace/runtime/new-turn-queue.sqlite3 \
+  "select request_id, thread_id, state, datetime(created_at,'unixepoch'), outcome from new_turn_requests where state in ('unknown','failed') order by id"
+```
+
+For `unknown`, inspect the indicated ChatGPT thread and search for the queued user message. Resolve it as `submitted` if present; resolve it as `retry` only after confirming it is absent. For a failed pre-submit request, use `retry` after resolving the cause, or `discard` if the message should not be sent:
+Retrieve the exact queued text only for the row being reviewed with `select json_extract(request_json, '$.message') from new_turn_requests where request_id='<request_id>'`; avoid dumping every request body.
+
+
+```python
+from session_client import request
+request({"op": "resolve-new-turn", "request_id": "<request_id>", "resolution": "submitted"})
+# unknown can instead use resolution="retry"; failed also requires state="failed"
+```
+
+For a failed request add `"state": "failed"`; its resolution is `retry` or `discard`. Resolution is explicit and durable.

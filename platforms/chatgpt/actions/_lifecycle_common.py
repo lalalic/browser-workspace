@@ -56,18 +56,24 @@ def raise_if_visible_delivery_error():
     if code: raise RuntimeError(f'ChatGPT visible delivery error: {code}')
 
 
-def prefilled_submit(prompt, *, send=True):
+def prefilled_submit(prompt, *, send=True, before_click=None):
     """Shared URL-prefilled Send gate; validation never clicks or fills."""
     ready=wait_for_send_ready()
     if not send:
         return {"send_enabled": ready}
     if not ready:
         raise RuntimeError("URL-prefilled Send button was not observed ready")
+    if before_click is not None:
+        before_click()
     clicked=js("""(() => {
+      const running=[...document.querySelectorAll('button[data-testid="stop-button"],button[aria-label*="Stop generating"],button[aria-label*="Stop response"]')];
+      if(running.some(b=>b.getClientRects().length&&getComputedStyle(b).visibility!=='hidden'&&getComputedStyle(b).display!=='none'))return 'busy';
       const b=document.querySelector('button[data-testid="send-button"],button[aria-label="Send prompt"],button[aria-label="Send"],form button[type="submit"]');
       if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return false;
       b.click(); return true;
     })()""")
+    if clicked == "busy":
+        return {"busy": True}
     if not clicked:
         raise RuntimeError("URL-prefilled Send became unavailable before click")
     try:

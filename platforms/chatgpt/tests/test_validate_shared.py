@@ -35,6 +35,16 @@ def test_prefilled_validation_never_clicks(monkeypatch):
     monkeypatch.setattr(lifecycle, 'wait_for_send_ready', lambda: True)
     assert lifecycle.prefilled_submit('probe', send=False) == {'send_enabled': True}
 
+
+def test_prefilled_submit_rechecks_visible_stop_button_before_click(monkeypatch):
+    called = []
+    monkeypatch.setattr(lifecycle, 'wait_for_send_ready', lambda: True)
+    monkeypatch.setattr(lifecycle, 'js', lambda _expression: 'busy', raising=False)
+    result = lifecycle.prefilled_submit('probe', before_click=lambda: called.append('boundary'))
+    assert result == {'busy': True}
+    assert called == ['boundary']
+
+
 def test_live_actions_use_url_prefill_and_one_shared_submit_path():
     thread=(ACTIONS/'_new_thread.py').read_text()
     turn=(ACTIONS/'_new_turn.py').read_text()
@@ -42,5 +52,5 @@ def test_live_actions_use_url_prefill_and_one_shared_submit_path():
     for source in (thread, turn):
         assert 'prompt=message' in source
         assert 'submit = lifecycle_common.prefilled_submit' in source
-        assert 'receipt=submit(message)' in source
+        assert 'receipt=submit(message, before_click=' in source or 'receipt=submit(message)' in source
     assert 'return target_url(temporary=True, prompt=prompt or None)' in temp

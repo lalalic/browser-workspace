@@ -47,6 +47,21 @@ def test_platform_runner_failure_uses_compact_json(monkeypatch, tmp_path):
     assert 'Traceback' not in json.dumps(result)
 
 
+def test_new_turn_returns_prompt_queued_status_without_starting_browser_session(monkeypatch, tmp_path):
+    cfg = tmp_path / 'payload.json'
+    request = {'thread_id': 'thread1', 'message': 'hello'}
+    cfg.write_text(json.dumps(request))
+    calls = []
+    def accept(payload):
+        calls.append(payload)
+        return {'status': 'queued', 'position': 1}
+    monkeypatch.setattr(platform_runner, 'request', accept)
+    result = platform_runner.run_platform_action('chatgpt', 'new-turn', config_path=str(cfg), session_id='existing')
+    assert calls == [{'op': 'enqueue-new-turn', 'request': request}]
+    assert result['result'] == {'status': 'queued', 'position': 1}
+    assert result['session_mode'] == 'durable_queue'
+
+
 def test_new_thread_failure_and_transport_exception(monkeypatch, tmp_path):
     monkeypatch.setattr(errors, 'LOG', tmp_path / 'errors.jsonl')
     cfg = tmp_path / 'payload.json'

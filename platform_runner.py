@@ -160,6 +160,8 @@ def run_platform_action(
     session_id: str | None = None,
     auto_session: bool = False,
 ) -> dict:
+    platform = platform.strip()
+    action = action.strip().replace("_", "-")
     path = action_path(platform, action)
     config_file = Path(config_path) if config_path else None
     if config_file is not None:
@@ -177,6 +179,24 @@ def run_platform_action(
         )
     if session_id and auto_session:
         raise ValueError("session_id and auto_session are mutually exclusive")
+
+    if platform == "chatgpt" and action == "new-turn":
+        try:
+            accepted = request({"op": "enqueue-new-turn", "request": config})
+        except Exception as exc:
+            accepted = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        result = accepted if accepted.get("status") == "queued" else normalize_failure(
+            accepted if accepted.get("error") or accepted.get("stderr") else
+            {"ok": False, "error": "new-turn request was not queued"}, action
+        )
+        return {
+            "platform": platform,
+            "action": action,
+            "workspace_supported": None,
+            "session_mode": "durable_queue",
+            "self_heal_capable": False,
+            "result": result,
+        }
 
     owned_session = bool(auto_session)
     started = request({"op": "start", "workspace": None, "url": url}) if owned_session else {"session_id": session_id, "workspace_supported": None}

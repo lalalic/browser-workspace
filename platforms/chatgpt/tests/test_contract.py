@@ -205,7 +205,7 @@ def test_lifecycle_actions_use_stable_ids_and_do_not_wait_for_new_answer():
     thread=(ACTIONS/"_new_thread.py").read_text()
     common=(ACTIONS/"_lifecycle_common.py").read_text()
     assert "project_id" in turn and "thread_id" in turn
-    assert "prefilled_submit" in turn and "submit(message)" in turn
+    assert "prefilled_submit" in turn and "submit(message, before_click=" in turn
     assert "project_id" in thread and "source_thread_id" in thread
     assert "local-chatgpt" in thread and "thread_id" in thread
     assert "assistant" not in turn.lower().split("print(json.dumps",1)[-1]
