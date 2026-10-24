@@ -74,13 +74,20 @@ class TurnDispatcher:
             else:
                 self.queue.transition(item["id"], owner, "SENDING", "SENT", now=self.clock(), delay=self.interval, receipt="send-button-disabled")
         except Exception as exc:
+            # Durable receipts must not contain a prompt or browser expression.
+            diagnostic = ("session_identity_timeout" if "workspace.acquireIdentity" in str(exc)
+                          else type(exc).__name__)
             current = next((r for r in self.queue.rows() if r["id"] == item["id"]), None)
             if current and current["state"] == "SENDING":
-                self.queue.transition(item["id"], owner, "SENDING", "UNCERTAIN", now=self.clock(), receipt=type(exc).__name__)
+                self.queue.transition(item["id"], owner, "SENDING", "UNCERTAIN", now=self.clock(), receipt=diagnostic)
             elif current and current["state"] == "CHECKING":
                 self.queue.transition(item["id"], owner, "CHECKING", "WAITING", now=self.clock(), delay=self.interval,
-                                      receipt="probe_error_" + type(exc).__name__)
+                                      receipt="probe_error_" + diagnostic)
         finally:
+            # The Dispatcher owns only this attempt, never an external Session.
+            finish = getattr(self.driver, "finish", None)
+            if finish is not None:
+                finish(item)
             self.wakeup.set()
 
     def close(self):

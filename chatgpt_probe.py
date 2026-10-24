@@ -30,10 +30,12 @@ PROBE_JS = r"""(() => {
   });
   if (stop) return {state:'RUNNING',stop_visible:true};
   const composer=document.querySelector('#prompt-textarea, [contenteditable="true"][data-lexical-editor="true"], [role="textbox"][contenteditable="true"], textarea');
+  // innerText may synthesize extra layout newlines in Lexical editors.
+  const editable=!!composer?.getAttribute && composer.getAttribute('contenteditable')==='true';
   return {
     state:visible(composer) ? 'READY':'NOT_READY',
     stop_visible:false,
-    composer_text:composer ? (composer.innerText||composer.value||'') : ''
+    composer_text:composer ? (editable ? (composer.textContent||'') : (composer.value||composer.textContent||composer.innerText||'')) : ''
   };
 })()"""
 
