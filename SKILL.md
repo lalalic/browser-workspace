@@ -60,7 +60,22 @@ finally
   -> stop SESSION_ID
 ```
 
-`platform run` therefore requires `--session-id` by default. If omitted, the CLI returns a structured error that recommends the `session start -> platform run --session-id -> self-heal -> session stop` workflow. `--auto-session` is an explicit one-shot escape hatch: it creates and cleans up a temporary session automatically, but **does not provide orchestrator self-heal** after failure.
+`platform run` therefore requires `--session-id` by default. The exception is `chatgpt new-turn`, which uses durable asynchronous queue delivery by default and returns `status: submitted` without a browser session. Set `mode` to the exact string `"sync"` in its JSON config or pass `--mode sync` to use immediate delivery in a caller-owned session; sync also returns `status: submitted`. The only accepted values are exact strings `"async"` and `"sync"`; omission defaults to `"async"`. Invalid values, types, or the legacy boolean `sync` config key are rejected. If a normal action omits its required session, the CLI returns a structured error that recommends the `session start -> platform run --session-id -> self-heal -> session stop` workflow. `--auto-session` is an explicit one-shot escape hatch: it creates and cleans up a temporary session automatically, but **does not provide orchestrator self-heal** after failure.
+
+For ChatGPT lifecycle `new-turn`, keep one public action and select its delivery mode only when needed:
+
+```bash
+# Omitted mode defaults to async: durable queue and private dispatcher session.
+bw platform run chatgpt new-turn --config turn.json
+
+# Explicit synchronous opt-in: reuse the caller-owned session.
+bw platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config turn.json
+```
+
+Config may also select the mode with `{"mode":"async"}` or
+`{"mode":"sync"}`. Values such as `{"mode":true}` and the legacy boolean
+`{"sync":true}` key are rejected. Do not pass conflicting `--mode` and config
+values.
 
 There are no separate top-level `open`, `tabs`, `status`, or `screenshot` commands.
 

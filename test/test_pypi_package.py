@@ -19,3 +19,5 @@ def test_pypi_entrypoint_and_files():
     assert 'browser-harness==0.1.13' in metadata['project']['dependencies']
     assert not any('git+' in dep for dep in metadata['project']['dependencies'])
     assert not (root / 'src' / 'browser_harness').exists()
+    workflow = (root / '.github/workflows/pypi-publish.yml').read_text()
+    assert 'browser-workspace platform run chatgpt new-turn --help' in workflow

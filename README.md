@@ -18,6 +18,14 @@ PY
 webhelm session stop SESSION_ID
 ```
 
+For ChatGPT lifecycle `new-turn`, async durable-queue delivery is the default
+and reports `status: submitted`. Set `"mode": "sync"` in the action config, or
+use `--mode sync`, to deliver through a caller-owned `--session-id`; its public
+status is also `submitted`. The only accepted mode values are the exact strings
+`"async"` and `"sync"`; omitted mode defaults to `"async"`. Other values and the
+legacy `sync` config key are rejected (for example, `{"mode": true}` and
+`{"sync": true}` are invalid).
+
 `--workspace` is hidden from normal CLI help. Normal sessions use `Harness`; product integrations may set an explicit workspace internally when they require isolation.
 
 `session stop` closes all tabs created/owned by that session while leaving unrelated browser tabs untouched. Raw session CDP cannot create targets: `Target.createTarget` is rejected and callers must use `new_tab()` so workspace/session ownership is preserved.

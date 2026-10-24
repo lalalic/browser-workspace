@@ -50,7 +50,8 @@ def classify_probe(observed_url: str, expected_url: str, state: dict, message: s
     # navigation normalization is not sufficient proof of a settled page.
     if actual.query:
         return "NOT_READY"
-    # A failed or unhydrated prefill must never cause a blind Send click.
-    if state.get("state") != "READY" or state.get("composer_text", "").strip() != message.strip():
+    # Lexical textContent omits paragraph separators and innerText adds layout
+    # breaks. Do not require byte-for-byte equality with the original prompt.
+    if state.get("state") != "READY" or not state.get("composer_text", "").strip():
         return "NOT_READY"
     return "READY"

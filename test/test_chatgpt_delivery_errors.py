@@ -41,7 +41,7 @@ def test_platform_runner_failure_uses_compact_json(monkeypatch, tmp_path):
         'ok': False, 'stdout': '',
         'stderr': 'Traceback (most recent call last):\nRuntimeError: Could not load this ChatGPT conversation'
     })
-    result = platform_runner.run_platform_action('chatgpt', 'new-turn', config_path=str(cfg), session_id='s1')
+    result = platform_runner.run_platform_action('chatgpt', 'new-turn', config_path=str(cfg))
     assert result['result']['code'] == 'thread_load_failed'
     assert 'stderr' not in result['result']
     assert 'Traceback' not in json.dumps(result)

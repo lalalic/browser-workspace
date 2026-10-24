@@ -31,6 +31,11 @@ class FakeDriver:
         return response
 
 
+class ProbeFailureDriver(FakeDriver):
+    def probe(self, item):
+        raise RuntimeError("private prompt text https://example.invalid/?token=secret")
+
+
 class DispatcherTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -145,6 +150,26 @@ class DispatcherTests(unittest.TestCase):
         finally:
             runner.close()
 
+    def test_probe_exception_is_redacted_and_keeps_fifo_head_waiting(self):
+        a = self.q.enqueue("A", "private prompt", "probe-failure-a")
+        b = self.q.enqueue("A", "successor", "probe-failure-b")
+        d = ProbeFailureDriver({}, {})
+        runner = TurnDispatcher(self.q, d, interval=60)
+        runner.start()
+        try:
+            self.await_state(a["id"], "WAITING")
+            rows = {row["id"]: row for row in self.q.rows()}
+            diagnostic = rows[a["id"]]["receipt"]
+            self.assertIn("RuntimeError;message=redacted;fingerprint=", diagnostic)
+            self.assertIn("test_dispatcher_probe.py:probe:", diagnostic)
+            self.assertNotIn("private prompt", diagnostic)
+            self.assertNotIn("secret", diagnostic)
+            self.assertEqual(rows[a["id"]]["attempts"], 1)
+            self.assertEqual(rows[b["id"]]["state"], "QUEUED")
+            self.assertEqual(d.sent, [])
+        finally:
+            runner.close()
+
     def test_two_concurrent_new_turns_keep_fifo_order(self):
         from concurrent.futures import ThreadPoolExecutor
 
@@ -190,6 +215,8 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(classify_probe("https://chatgpt.com/", url, {"state":"READY", "composer_text":"hi & 你好"}, "hi & 你好"), "BLOCKED")
         self.assertEqual(classify_probe("https://chatgpt.com/c/wrong", url, {"state":"READY", "composer_text":"hi & 你好"}, "hi & 你好"), "BLOCKED")
         self.assertEqual(classify_probe(url, url, {"state":"READY", "composer_text":"other"}, "hi & 你好"), "NOT_READY")
+        self.assertEqual(classify_probe(url.split("?")[0], url, {"state":"READY", "composer_text":"other"}, "hi & 你好"), "READY")
+        self.assertEqual(classify_probe(url.split("?")[0], url, {"state":"READY", "composer_text":""}, "hi & 你好"), "NOT_READY")
 
 
 

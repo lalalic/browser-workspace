@@ -54,7 +54,23 @@ Destructive controls (`Disconnect`, `Uninstall`, `Delete app`) are intentionally
 
 Browser Workspace owns the ChatGPT UI mechanics for orchestrator lifecycle handoff.
 
-- `new-turn`: given stable `project_id`, `thread_id`, and `message`, wait until the current assistant turn is no longer generating, submit the continuation as the next user turn in the same thread, verify acceptance, and return without waiting for the new assistant answer.
+- `new-turn`: given stable `project_id`, `thread_id`, and `message`, submit a continuation in the same thread and return with public `status: submitted`. Omitted `mode` defaults to `"async"`: durable-queue delivery uses a private dispatcher session and returns as soon as queued. Set `mode` to `"sync"` or pass `--mode sync` with a caller-owned `--session-id` to deliver in that session; it waits for the current assistant turn to finish, verifies submission, and returns without waiting for the new assistant answer. The only accepted values are the exact strings `"async"` and `"sync"`. Other values and types, including the legacy boolean `sync` config key, are rejected.
 - `new-thread`: given stable `project_id` and `message` (plus optional `source_thread_id` provenance), open the same Project, submit the continuation to create a fresh thread, and return the durable new `thread_id` once ChatGPT replaces any temporary local id.
 
 These actions are control-transfer primitives. The generic Browser Workspace runner owns session start/stop and cleanup. Product code should pass stable Project/Thread IDs rather than persist ChatGPT URLs or DOM identities.
+
+```bash
+# Omitted mode defaults to durable asynchronous delivery; result status is submitted.
+webhelm platform run chatgpt new-turn --config turn.json
+
+# Opt in to synchronous delivery inside an existing caller-owned session.
+webhelm platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config turn.json
+```
+
+JSON config may select either mode with `"mode": "async"` or
+`"mode": "sync"`. A conflicting CLI `--mode` and config mode is rejected.
+Invalid values or types such as `{"mode": true}`, and the legacy boolean
+`{"sync": true}` key, are rejected; use only the exact strings `"async"` or
+`"sync"`.
+MCP callers that invoke the platform action through the Browser Workspace
+runner use the same config field and validation rules.

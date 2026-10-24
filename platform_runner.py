@@ -160,18 +160,40 @@ def run_platform_action(
     url: str | None = None,
     session_id: str | None = None,
     auto_session: bool = False,
+    mode: str | None = None,
 ) -> dict:
     path = action_path(platform, action)
+    normalized_action = action.replace("_", "-")
     config_file = Path(config_path) if config_path else None
     if config_file is not None:
         config = json.loads(config_file.read_text())
         if not isinstance(config, dict):
             raise ValueError("platform config must be a JSON object")
         validate_platform_config(platform, action, config)
-    if platform == "chatgpt" and action == "new-turn":
-        import uuid
+    is_new_turn = platform == "chatgpt" and normalized_action == "new-turn"
+    if is_new_turn:
         if config_file is None:
             raise ValueError("chatgpt/new-turn requires --config")
+        if "sync" in config:
+            raise ValueError("sync is no longer supported; use mode: 'async' or 'sync'")
+        configured_mode = config.get("mode", "async")
+        if type(configured_mode) is not str or configured_mode not in {"async", "sync"}:
+            raise ValueError("mode must be exactly 'async' or 'sync'")
+        if mode is not None:
+            if type(mode) is not str or mode not in {"async", "sync"}:
+                raise ValueError("mode must be exactly 'async' or 'sync'")
+            if "mode" in config and configured_mode != mode:
+                raise ValueError("--mode conflicts with the new-turn config mode")
+            configured_mode = mode
+        mode = configured_mode
+    elif mode is not None:
+        raise ValueError("--mode is only supported for chatgpt/new-turn")
+    if mode == "sync" and (not session_id or auto_session):
+        raise ValueError("chatgpt/new-turn mode 'sync' requires a caller-owned --session-id")
+    if is_new_turn and mode == "async":
+        if session_id or auto_session:
+            raise ValueError("chatgpt/new-turn mode 'async' cannot use browser session options")
+        import uuid
         if not config.get("thread_id") or not config.get("message"):
             raise ValueError("thread_id and message are required")
         # The durable enqueue is independent of Browser Workspace sessions.
@@ -231,6 +253,18 @@ def run_platform_action(
         result = {k: v for k, v in raw_result.items() if k not in {"session_id", "workspace", "target_id"}}
         if platform == "chatgpt" and action in {"new-turn", "new-thread"}:
             result = normalize_failure(result, action)
+        if is_new_turn and mode == "sync" and result.get("ok"):
+            try:
+                receipt = json.loads(result.get("stdout", ""))
+            except (TypeError, json.JSONDecodeError):
+                receipt = None
+            if (not isinstance(receipt, dict) or receipt.get("status") != "submitted"
+                    or receipt.get("mode") != "new-turn"
+                    or receipt.get("thread_id") != str(config["thread_id"])
+                    or not isinstance(receipt.get("verified_by"), str)
+                    or not receipt["verified_by"]):
+                raise ValueError("synchronous chatgpt/new-turn returned an invalid submission receipt")
+            result.update(receipt)
         output = {
             "platform": platform,
             "action": action,

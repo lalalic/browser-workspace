@@ -30,6 +30,7 @@ jobs:
         run: |
           uvx --from dist/*.whl browser-workspace --help
           uvx --from dist/*.whl browser-workspace platform profile wechat-channels
+          uvx --from dist/*.whl browser-workspace platform run chatgpt new-turn --help
       - uses: actions/upload-artifact@v4
         with:
           name: pypi-distribution
