@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 import yaml
 
@@ -184,6 +185,19 @@ def run_platform_action(
         })
         if not receipt.get("ok"):
             receipt = normalize_failure(receipt, action)
+        elif receipt.get("status") == "queued":
+            if not receipt.get("queue_id") or receipt.get("thread_id") != str(config["thread_id"]):
+                raise ValueError("ChatGPT queue returned an invalid acceptance receipt")
+            project_id = config.get("project_id") or None
+            thread_id = str(config["thread_id"])
+            prefix = f"/g/{quote(str(project_id), safe='')}" if project_id else ""
+            receipt = {
+                "ok": True, "status": "submitted", "mode": "new-turn", "project_id": project_id,
+                "thread_id": thread_id,
+                "thread_url": f"https://chatgpt.com{prefix}/c/{quote(thread_id, safe='')}",
+                "verified_by": "durable-queue", "user_message_id": None,
+                "queue_id": receipt["queue_id"], "state": receipt.get("state"),
+            }
         return {"platform": platform, "action": action, "session_mode": "durable_queue",
                 "self_heal_capable": False, "result": receipt}
     code = prepare_action(path, config_file)
