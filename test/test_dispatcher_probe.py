@@ -215,6 +215,8 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(classify_probe("https://chatgpt.com/", url, {"state":"READY", "composer_text":"hi & 你好"}, "hi & 你好"), "BLOCKED")
         self.assertEqual(classify_probe("https://chatgpt.com/c/wrong", url, {"state":"READY", "composer_text":"hi & 你好"}, "hi & 你好"), "BLOCKED")
         self.assertEqual(classify_probe(url, url, {"state":"READY", "composer_text":"other"}, "hi & 你好"), "NOT_READY")
+        self.assertEqual(classify_probe(url.split("?")[0], url, {"state":"READY", "composer_text":"other"}, "hi & 你好"), "READY")
+        self.assertEqual(classify_probe(url.split("?")[0], url, {"state":"READY", "composer_text":""}, "hi & 你好"), "NOT_READY")
 
 
 

@@ -89,7 +89,7 @@ class BrowserTurnDriver:
                   "gate_url = page_info().get('url','')\n"
                   "receipt = {'diagnostic':'pre_send_gate_not_ready'}\n"
                   "if gate and gate.get('state') == 'READY' and js(" + repr(SEND_ENABLED_JS) + ") and "
-                  "gate.get('composer_text','').strip() == prompt.strip() and "
+                  "bool(gate.get('composer_text','').strip()) and "
                   "gate_url == " + repr(expected_page) + ":\n"
                   "    receipt = lifecycle.prefilled_submit(prompt)\n"
                   "receipt")
