@@ -136,6 +136,8 @@ def main():
   browser-workspace session start --url https://channels.weixin.qq.com/platform/post/list
   browser-workspace platform run wechat-channels manage --session-id SESSION_ID --config status.json
   browser-workspace platform run wechat-channels post --session-id SESSION_ID --config post.json
+  browser-workspace platform run chatgpt new-turn --config turn.json
+  browser-workspace platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config turn.json
   browser-workspace session stop SESSION_ID
 
 One-shot mode (no orchestrator self-heal):
@@ -171,27 +173,25 @@ One-shot mode (no orchestrator self-heal):
     run=psp.add_parser(
         'run',
         help='Run one platform action in Browser Workspace.',
-        description='Run a declared platform action. A caller-owned --session-id is required by default so an orchestrator can inspect failures, self-heal in the same browser state, write repairs back to platform code, and close the session only after completion. --auto-session is an explicit one-shot mode without orchestrator self-heal.',
+        description='Run a declared platform action. ChatGPT new-turn accepts mode async (the default durable queue) or sync (immediate execution in a caller-owned session); both return status submitted. Other actions require a caller-owned --session-id by default so an orchestrator can inspect failures and self-heal in the same browser state. --auto-session is an explicit one-shot mode without orchestrator self-heal.',
         epilog='''Examples:
   browser-workspace session start --url https://channels.weixin.qq.com/platform/post/list
   browser-workspace platform run wechat-channels manage --session-id SESSION_ID --config status.json
   browser-workspace platform run wechat-channels post --session-id SESSION_ID --config post.json
+  browser-workspace platform run chatgpt new-turn --config turn.json
+  browser-workspace platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config turn.json
   browser-workspace session stop SESSION_ID
 
 One-shot mode (no orchestrator self-heal):
   browser-workspace platform run wechat-channels manage --auto-session --config status.json
-
-ChatGPT continuation defaults to durable asynchronous submission:
-  browser-workspace platform run chatgpt new-turn --config turn.json
-  browser-workspace platform run chatgpt new-turn --config turn.json --sync --session-id SESSION_ID
 ''',
         formatter_class=fmt,
     )
     run.add_argument('platform', metavar='PLATFORM', help='Platform name, for example "wechat-channels".')
     run.add_argument('action', metavar='ACTION', help='Declared action name, for example "post" or "manage".')
     run.add_argument('--config', metavar='PATH', help='JSON configuration file for the platform action.')
-    run.add_argument('--sync', action='store_true', help='chatgpt/new-turn only: submit synchronously in caller-owned --session-id; default is asynchronous durable queue. Both return status=submitted.')
     run.add_argument('--url', metavar='URL', help='Optional initial URL for a temporary session.')
+    run.add_argument('--mode', choices=('async', 'sync'), help='For chatgpt new-turn: async uses the durable queue (default); sync executes in the caller-owned --session-id. The config may also set mode to exactly async or sync.')
     session_mode = run.add_mutually_exclusive_group()
     session_mode.add_argument('--session-id', metavar='SESSION_ID', help='Required by default. Reuse a caller-owned session so failures can be inspected and self-healed before the session is closed.')
     session_mode.add_argument('--auto-session', action='store_true', help='Explicit one-shot mode: create and clean up a temporary session automatically. No orchestrator self-heal is available after failure.')
@@ -235,7 +235,11 @@ ChatGPT continuation defaults to durable asynchronous submission:
         from platform_runner import platform_profile
         emit(platform_profile(args.platform)); return
     if args.group=='platform' and args.pcmd=='run':
-        if not args.session_id and not args.auto_session and not (args.platform == 'chatgpt' and args.action.replace('_','-') == 'new-turn' and not args.sync):
+        if args.mode and (args.platform != 'chatgpt' or args.action.replace('_','-') != 'new-turn'):
+            p.error('--mode is only supported for chatgpt new-turn')
+        if args.mode == 'sync' and not args.session_id:
+            p.error("mode 'sync' requires a caller-owned --session-id")
+        if not args.session_id and not args.auto_session and not (args.platform == 'chatgpt' and args.action.replace('_','-') == 'new-turn'):
             emit({
                 'ok': False,
                 'error': 'session_id_required',
@@ -249,5 +253,5 @@ ChatGPT continuation defaults to durable asynchronous submission:
                 'auto_session': 'Use --auto-session only for a one-shot run. It creates and closes its own session and does not provide orchestrator self-heal.',
             })
             raise SystemExit(2)
-        r=run_platform_action(args.platform,args.action,config_path=args.config,url=args.url,session_id=args.session_id,auto_session=args.auto_session,sync=args.sync); emit(r); raise SystemExit(0 if (r.get('result') or {}).get('ok',False) else 1)
+        r=run_platform_action(args.platform,args.action,config_path=args.config,url=args.url,session_id=args.session_id,auto_session=args.auto_session,mode=args.mode); emit(r); raise SystemExit(0 if (r.get('result') or {}).get('ok',False) else 1)
 if __name__=='__main__': main()

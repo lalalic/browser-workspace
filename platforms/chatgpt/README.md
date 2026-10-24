@@ -54,42 +54,23 @@ Destructive controls (`Disconnect`, `Uninstall`, `Delete app`) are intentionally
 
 Browser Workspace owns the ChatGPT UI mechanics for orchestrator lifecycle handoff.
 
-- `new-turn`: given stable `project_id`, `thread_id`, and `message`, wait until the current assistant turn is no longer generating, submit the continuation as the next user turn in the same thread, verify acceptance, and return without waiting for the new assistant answer.
+- `new-turn`: given stable `project_id`, `thread_id`, and `message`, submit a continuation in the same thread and return with public `status: submitted`. Omitted `mode` defaults to `"async"`: durable-queue delivery uses a private dispatcher session and returns as soon as queued. Set `mode` to `"sync"` or pass `--mode sync` with a caller-owned `--session-id` to deliver in that session; it waits for the current assistant turn to finish, verifies submission, and returns without waiting for the new assistant answer. The only accepted values are the exact strings `"async"` and `"sync"`. Other values and types, including the legacy boolean `sync` config key, are rejected.
 - `new-thread`: given stable `project_id` and `message` (plus optional `source_thread_id` provenance), open the same Project, submit the continuation to create a fresh thread, and return the durable new `thread_id` once ChatGPT replaces any temporary local id.
 
 These actions are control-transfer primitives. The generic Browser Workspace runner owns session start/stop and cleanup. Product code should pass stable Project/Thread IDs rather than persist ChatGPT URLs or DOM identities.
 
-### One public `chatgpt/new-turn` action: asynchronous or synchronous
-
-Use `webhelm platform run chatgpt new-turn --config turn.json` (or the same
-platform/action through the Neo MCP tool). The JSON config requires
-`thread_id` and `message`; `project_id` and `idempotency_key` are optional.
-
-- **Default asynchronous** (`sync` omitted or `false`): enqueue durably and
-  return immediately. WebHelm's private dispatcher sessions deliver later.
-  No caller session is needed. Public `result.status` is always `submitted`
-  after queue acceptance; `verified_by=durable-queue`, `queue_id` and `state`
-  describe the pending delivery. `submitted` does **not** mean ChatGPT has
-  already accepted the message. Use the queue receipt to track delivery.
-- **Explicit synchronous** (`"sync":true` in the JSON config, or CLI
-  `--sync`): require a caller-owned `--session-id`; execute the existing
-  new-turn submit and verification action in that session. Do not create or
-  stop a private session. Return only after submission is verified (or
-  failure), without waiting for ChatGPT's reply. Public `result.status` stays
-  `submitted`; `verified_by` and `user_message_id` describe UI acceptance.
-  The caller must stop its session after any necessary self-healing.
-
-For example:
-
 ```bash
+# Omitted mode defaults to durable asynchronous delivery; result status is submitted.
 webhelm platform run chatgpt new-turn --config turn.json
-webhelm session start --url https://chatgpt.com
-webhelm platform run chatgpt new-turn --config turn.json --sync --session-id SESSION_ID
-webhelm session stop SESSION_ID
+
+# Opt in to synchronous delivery inside an existing caller-owned session.
+webhelm platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config turn.json
 ```
 
-The MCP action uses the same JSON config: set `sync:true` and provide a
-caller-owned session ID through the runner for synchronous delivery. The
-asynchronous mode rejects session options to avoid ambiguous ownership.
-Both modes retain the public `status=submitted`; do not use `queued` as the
-public status (the internal daemon receipt may be `queued`).
+JSON config may select either mode with `"mode": "async"` or
+`"mode": "sync"`. A conflicting CLI `--mode` and config mode is rejected.
+Invalid values or types such as `{"mode": true}`, and the legacy boolean
+`{"sync": true}` key, are rejected; use only the exact strings `"async"` or
+`"sync"`.
+MCP callers that invoke the platform action through the Browser Workspace
+runner use the same config field and validation rules.

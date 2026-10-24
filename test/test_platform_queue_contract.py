@@ -1,8 +1,11 @@
 import json
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
 import platform_runner
+import chatgpt_delivery_errors
 
 
 def test_new_turn_is_persisted_via_daemon_without_browser_session(monkeypatch, tmp_path):
@@ -37,6 +40,149 @@ def test_new_turn_rejects_invalid_queue_receipt(monkeypatch, tmp_path):
         platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config))
 
 
+def test_new_turn_preserves_queue_delivery_error(monkeypatch, tmp_path):
+    config = tmp_path / "turn.json"
+    config.write_text(json.dumps({"thread_id": "t", "message": "hello"}))
+    monkeypatch.setattr(chatgpt_delivery_errors, "LOG", tmp_path / "errors.jsonl")
+    monkeypatch.setattr(platform_runner, "request", lambda _: {"ok": False, "error": "queue unavailable"})
+    result = platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config))
+    assert result["result"]["ok"] is False
+    assert result["result"]["code"] == "delivery_failed"
+    assert "error" not in result["result"]
+    assert result["result"].get("status") != "submitted"
+
+
+def test_sync_new_turn_uses_caller_session_and_keeps_submitted_status(monkeypatch, tmp_path):
+    config = tmp_path / "turn.json"
+    config.write_text(json.dumps({"project_id": "p", "thread_id": "t", "message": "hello", "mode": "sync"}))
+    calls = []
+
+    def fake_request(payload):
+        calls.append(payload)
+        return {"ok": True, "stdout": json.dumps({
+            "status": "submitted", "mode": "new-turn", "project_id": "p", "thread_id": "t",
+            "thread_url": "https://chatgpt.com/g/p/c/t", "verified_by": "send-button",
+            "user_message_id": "message-1",
+        })}
+
+    monkeypatch.setattr(platform_runner, "request", fake_request)
+    result = platform_runner.run_platform_action(
+        "chatgpt", "new-turn", config_path=str(config), session_id="caller-session", mode="sync"
+    )
+    assert result["session_mode"] == "caller_owned_self_heal_capable"
+    assert result["result"]["status"] == "submitted"
+    assert result["result"]["mode"] == "new-turn"
+    assert result["result"]["project_id"] == "p"
+    assert result["result"]["thread_url"] == "https://chatgpt.com/g/p/c/t"
+    assert result["result"]["verified_by"] == "send-button"
+    assert result["result"]["user_message_id"] == "message-1"
+    assert [call["op"] for call in calls] == ["exec"]
+    assert calls[0]["session_id"] == "caller-session"
+
+
+def test_sync_new_turn_rejects_invalid_submission_receipt(monkeypatch, tmp_path):
+    import pytest
+
+    config = tmp_path / "turn.json"
+    config.write_text(json.dumps({"thread_id": "t", "message": "hello", "mode": "sync"}))
+    monkeypatch.setattr(platform_runner, "request", lambda _: {"ok": True, "stdout": '{"status":"queued"}'})
+    with pytest.raises(ValueError, match="invalid submission receipt"):
+        platform_runner.run_platform_action(
+            "chatgpt", "new-turn", config_path=str(config), session_id="caller-session"
+        )
+
+
+def test_sync_new_turn_rejects_wrong_thread_or_unverified_receipt(monkeypatch, tmp_path):
+    import pytest
+
+    config = tmp_path / "turn.json"
+    config.write_text(json.dumps({"thread_id": "target", "message": "hello", "mode": "sync"}))
+    for receipt in (
+        {"status": "submitted", "mode": "new-turn", "thread_id": "another", "verified_by": "send-button"},
+        {"status": "submitted", "mode": "new-turn", "thread_id": "target"},
+        {"status": "submitted", "mode": "unexpected", "thread_id": "target", "verified_by": "send-button"},
+    ):
+        monkeypatch.setattr(platform_runner, "request",
+                            lambda _, receipt=receipt: {"ok": True, "stdout": json.dumps(receipt)})
+        with pytest.raises(ValueError, match="invalid submission receipt"):
+            platform_runner.run_platform_action(
+                "chatgpt", "new-turn", config_path=str(config), session_id="caller-session"
+            )
+
+
+def test_async_new_turn_rejects_external_session_options(tmp_path):
+    import pytest
+
+    config = tmp_path / "turn.json"
+    config.write_text(json.dumps({"thread_id": "t", "message": "hello"}))
+    with pytest.raises(ValueError, match="cannot use browser session options"):
+        platform_runner.run_platform_action(
+            "chatgpt", "new-turn", config_path=str(config), session_id="caller-session"
+        )
+    with pytest.raises(ValueError, match="cannot use browser session options"):
+        platform_runner.run_platform_action(
+            "chatgpt", "new-turn", config_path=str(config), auto_session=True
+        )
+
+
+def test_sync_new_turn_preserves_delivery_error(monkeypatch, tmp_path):
+    config = tmp_path / "turn.json"
+    config.write_text(json.dumps({"thread_id": "t", "message": "hello", "mode": "sync"}))
+    monkeypatch.setattr(chatgpt_delivery_errors, "LOG", tmp_path / "errors.jsonl")
+    monkeypatch.setattr(platform_runner, "request", lambda _: {"ok": False, "error": "send blocked"})
+    result = platform_runner.run_platform_action(
+        "chatgpt", "new-turn", config_path=str(config), session_id="caller-session"
+    )
+    assert result["result"]["ok"] is False
+    assert result["result"]["code"] == "delivery_failed"
+    assert "error" not in result["result"]
+    assert result["result"].get("status") != "submitted"
+
+
+def test_sync_new_turn_requires_caller_owned_session(tmp_path):
+    config = tmp_path / "turn.json"
+    config.write_text(json.dumps({"thread_id": "t", "message": "hello"}))
+    import pytest
+
+    with pytest.raises(ValueError, match="caller-owned --session-id"):
+        platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config), mode="sync")
+
+
+def test_new_turn_accepts_only_exact_mode_strings_and_rejects_legacy_sync(monkeypatch, tmp_path):
+    import pytest
+
+    for value in (None, True, False, 1, [], {}, "ASYNC", "async ", "sync ", "other"):
+        config = tmp_path / "turn.json"
+        payload = {"thread_id": "t", "message": "hello", "mode": value}
+        config.write_text(json.dumps(payload))
+        with pytest.raises(ValueError, match="mode must be exactly"):
+            platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config))
+
+    config = tmp_path / "turn.json"
+    config.write_text(json.dumps({"thread_id": "t", "message": "hello", "sync": False}))
+    with pytest.raises(ValueError, match="sync is no longer supported"):
+        platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config))
+
+
+def test_cli_documents_string_mode_contract():
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, str(root / "bin/browser-workspace"), "platform", "run", "--help"],
+        capture_output=True, text=True, check=True,
+    )
+    assert "--mode {async,sync}" in result.stdout
+    assert "--sync" not in result.stdout
+    assert "caller-owned --session-id" in result.stdout
+    assert "mode async" in result.stdout
+    assert "mode sync" in result.stdout
+    invalid = subprocess.run(
+        [sys.executable, str(root / "bin/browser-workspace"), "platform", "run", "chatgpt", "new-turn", "--mode", "SYNC"],
+        capture_output=True, text=True,
+    )
+    assert invalid.returncode == 2
+    assert "choose from 'async', 'sync'" in invalid.stderr
+
+
 def test_distribution_versions_match_daemon_version_source():
     root = Path(__file__).resolve().parents[1]
     versions = [
@@ -46,44 +192,3 @@ def test_distribution_versions_match_daemon_version_source():
         tomllib.loads((root / "src/browser_workspace_app/pyproject.toml").read_text())["project"]["version"],
     ]
     assert len(set(versions)) == 1, versions
-
-
-def test_new_turn_sync_uses_caller_session_without_private_session(monkeypatch, tmp_path):
-    config = tmp_path / "turn.json"
-    config.write_text(json.dumps({"thread_id": "t", "message": "hello", "sync": True}))
-    calls = []
-    def fake_request(payload):
-        calls.append(payload)
-        return {"ok": True, "stdout": json.dumps({"status": "submitted", "mode": "new-turn", "thread_id": "t", "verified_by": "user-turn", "user_message_id": "m1"}) + "\n"}
-    monkeypatch.setattr(platform_runner, "request", fake_request)
-    result = platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config), session_id="existing")
-    assert result["session_mode"] == "caller_owned_self_heal_capable"
-    assert result["result"]["status"] == "submitted"
-    assert result["result"]["user_message_id"] == "m1"
-    assert result["result"]["cleanup"] == {"caller_owned_session": True}
-    assert len(calls) == 1 and calls[0]["op"] == "exec" and calls[0]["session_id"] == "existing"
-
-
-def test_new_turn_sync_invalid_receipts_and_arguments(monkeypatch, tmp_path):
-    import pytest
-    config = tmp_path / "turn.json"
-    config.write_text(json.dumps({"thread_id": "t", "message": "hello"}))
-    with pytest.raises(ValueError, match="requires caller-owned"):
-        platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config), sync=True)
-    with pytest.raises(ValueError, match="does not accept browser session"):
-        platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config), session_id="existing")
-    monkeypatch.setattr(platform_runner, "request", lambda _: {"ok": True, "stdout": json.dumps({"status": "queued", "thread_id": "t"})})
-    with pytest.raises(ValueError, match="invalid submission receipt"):
-        platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config), session_id="existing", sync=True)
-    config.write_text(json.dumps({"thread_id": "t", "message": "hello", "sync": "true"}))
-    with pytest.raises(ValueError, match="must be a boolean"):
-        platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config))
-
-
-def test_new_turn_queue_rejects_unknown_success_status(monkeypatch, tmp_path):
-    import pytest
-    config = tmp_path / "turn.json"
-    config.write_text(json.dumps({"thread_id": "t", "message": "hello"}))
-    monkeypatch.setattr(platform_runner, "request", lambda _: {"ok": True, "status": "submitted"})
-    with pytest.raises(ValueError, match="invalid acceptance receipt"):
-        platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config))
