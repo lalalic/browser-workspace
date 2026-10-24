@@ -3,9 +3,31 @@ from __future__ import annotations
 
 import threading
 import time
+import hashlib
+import re
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 
 from fifo_queue import TurnQueue
+
+
+_SAFE_DIAGNOSTIC = re.compile(
+    r"^(?:workspace\.acquireIdentity|session_identity_timeout|"
+    r"chatgpt_queue_unavailable|daemon_retiring)(?::[A-Za-z0-9_.-]{1,32})?$"
+)
+
+
+def _exception_diagnostic(exc):
+    """Bounded exception context safe for durable queue receipts."""
+    raw = str(exc)
+    message = raw if _SAFE_DIAGNOSTIC.fullmatch(raw) else "redacted"
+    fingerprint = hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()[:16]
+    frames = traceback.extract_tb(exc.__traceback__)[-4:]
+    callsite = ",".join(
+        f"{frame.filename.rsplit('/', 1)[-1]}:{frame.name}:{frame.lineno}"
+        for frame in frames
+    )
+    return f"{type(exc).__name__};message={message};fingerprint={fingerprint};frames={callsite}"[:480]
 
 
 class TurnDispatcher:
@@ -75,8 +97,7 @@ class TurnDispatcher:
                 self.queue.transition(item["id"], owner, "SENDING", "SENT", now=self.clock(), delay=self.interval, receipt="send-button-disabled")
         except Exception as exc:
             # Durable receipts must not contain a prompt or browser expression.
-            diagnostic = ("session_identity_timeout" if "workspace.acquireIdentity" in str(exc)
-                          else type(exc).__name__)
+            diagnostic = _exception_diagnostic(exc)
             current = next((r for r in self.queue.rows() if r["id"] == item["id"]), None)
             if current and current["state"] == "SENDING":
                 self.queue.transition(item["id"], owner, "SENDING", "UNCERTAIN", now=self.clock(), receipt=diagnostic)
