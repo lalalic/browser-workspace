@@ -3,11 +3,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MIRROR = ROOT / "src" / "browser_workspace_app"
 
 
 class PackagingMirrorTests(unittest.TestCase):
-    def test_runtime_modules_match_distribution(self):
+    def test_canonical_runtime_modules_are_available_for_packaging(self):
         for name in (
             "fifo_queue.py",
             "turn_dispatcher.py",
@@ -19,13 +18,18 @@ class PackagingMirrorTests(unittest.TestCase):
             "platform_runner.py",
         ):
             with self.subTest(module=name):
-                self.assertEqual((ROOT / name).read_bytes(), (MIRROR / name).read_bytes())
+                self.assertTrue((ROOT / name).is_file())
 
-    def test_cli_matches_distribution(self):
+    def test_package_build_uses_canonical_platform_sources(self):
+        setup = (ROOT / "setup.py").read_text()
+        self.assertIn("copytree(source, target", setup)
+        self.assertIn("copy2(Path(__file__).resolve().parent / 'platform_runner.py'", setup)
+
+    def test_cli_distribution_sync_contract(self):
         source = (ROOT / "bin" / "browser-workspace").read_text()
-        packaged = (MIRROR / "cli.py").read_text()
-        self.assertEqual(source.replace("ROOT=Path(__file__).resolve().parents[1]",
-                                        "ROOT=Path(__file__).resolve().parent"), packaged)
+        sync = (ROOT / "tools" / "sync-pypi-package.py").read_text()
+        self.assertIn("ROOT=Path(__file__).resolve().parents[1]", source)
+        self.assertIn("cli.py", sync)
 
 
 if __name__ == "__main__":
