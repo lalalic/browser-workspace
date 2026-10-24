@@ -96,17 +96,17 @@ class BrowserAdapterTests(unittest.TestCase):
                     "url": "https://chatgpt.com/c/t",
                     "state": {"state": "READY", "composer_text": "hello"}}}
             if len(commands) == 2:
-                return {"ok": True, "value": {"clicked": True}}
+                return {"ok": True, "value": {"verified_by": "send-button-disabled"}}
             return {"ok": True, "value": True}
 
         driver = BrowserTurnDriver(lambda url: {"session_id": "s"}, execute, stopped.append)
         item = {"id": "i", "project_id": None, "thread_id": "t", "message": "hello"}
         self.assertEqual(driver.probe(item), "READY")
         self.assertEqual(driver.send_and_verify(item)["verified_by"], "send-button-disabled")
-        self.assertEqual(len(commands), 4)
+        self.assertEqual(len(commands), 2)
         self.assertNotIn("wait_for_load()", commands[0])
         self.assertIn("gate = js", commands[1])
-        self.assertIn("not js(", commands[2])
+        self.assertIn("lifecycle.prefilled_submit(prompt)", commands[1])
         self.assertNotIn("user-message-bubble", "".join(commands))
         self.assertEqual(stopped, ["s"])
 
@@ -119,16 +119,13 @@ class BrowserAdapterTests(unittest.TestCase):
                     "url": "https://chatgpt.com/c/t",
                     "state": {"state": "READY", "composer_text": "hello"}}}
             if len(calls) == 2:
-                return {"ok": True, "value": {"clicked": True}}
+                return {"ok": True, "value": {"diagnostic": "post_submit_send_state_unverified"}}
             return {"ok": True, "value": False}
 
         driver = BrowserTurnDriver(lambda url: {"session_id": "s"}, execute, lambda sid: None)
         item = {"id": "i", "project_id": None, "thread_id": "t", "message": "hello"}
         self.assertEqual(driver.probe(item), "READY")
-        counter = iter(range(100))
-        with patch("chatgpt_queue_runtime.time.monotonic", side_effect=lambda: next(counter)), patch("chatgpt_queue_runtime.time.sleep"):
-            result = driver.send_and_verify(item)
-        self.assertTrue(result["clicked"])
+        result = driver.send_and_verify(item)
         self.assertEqual(result["diagnostic"], "post_submit_send_state_unverified")
 
     def test_no_click_is_not_server_acceptance(self):
@@ -139,7 +136,7 @@ class BrowserAdapterTests(unittest.TestCase):
                 return {"ok": True, "value": {"url": "https://chatgpt.com/c/t",
                     "state": {"state": "READY",
                               "composer_text": "hello"}}}
-            return {"ok": True, "value": {"clicked": False, "before": {}}}
+            return {"ok": True, "value": {"diagnostic": "pre_send_gate_not_ready"}}
         driver = BrowserTurnDriver(lambda url: {"session_id": "s"}, execute, lambda sid: None)
         item = {"id": "i", "project_id": None, "thread_id": "t", "message": "hello"}
         self.assertEqual(driver.probe(item), "READY")

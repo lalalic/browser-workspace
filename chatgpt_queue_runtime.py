@@ -15,7 +15,7 @@ from turn_dispatcher import TurnDispatcher
 
 # Both direct new-turn/validate and FIFO use the same site Send selectors.
 sys.path.insert(0, str(Path(__file__).resolve().parent / "platforms" / "chatgpt" / "actions"))
-from _lifecycle_common import CLICK_SEND_JS, SEND_ENABLED_JS
+from _lifecycle_common import SEND_ENABLED_JS
 
 
 def _result(response):
@@ -40,6 +40,10 @@ class BrowserTurnDriver:
                 self.stop_session(sid)
             except Exception:
                 pass
+
+    def finish(self, item):
+        """Release this attempt's private Session on every exit path."""
+        self._close(item["id"])
 
     def probe(self, item):
         url = target_url(item["project_id"], item["thread_id"], item["message"])
@@ -76,31 +80,21 @@ class BrowserTurnDriver:
             sid = self.active.get(item["id"])
         if not sid:
             raise RuntimeError("missing prepared browser session")
-        # Same acceptance gate as the existing new-turn action: click Send,
-        # then observe Send disabled twice. Never wait for a message or ID.
+        # Use the synchronous new-turn Send/verification implementation.
         expected_page = target_url(item["project_id"], item["thread_id"], item["message"]).split("?", 1)[0]
         source = ("prompt = " + repr(item["message"]) + "\n"
+                  "import _lifecycle_common as lifecycle\n"
+                  "lifecycle.js = js\n"
                   "gate = js(" + repr(PROBE_JS) + ")\n"
                   "gate_url = page_info().get('url','')\n"
-                  "clicked = False\n"
+                  "receipt = {'diagnostic':'pre_send_gate_not_ready'}\n"
                   "if gate and gate.get('state') == 'READY' and js(" + repr(SEND_ENABLED_JS) + ") and "
                   "gate.get('composer_text','').strip() == prompt.strip() and "
                   "gate_url == " + repr(expected_page) + ":\n"
-                  "    clicked = js(" + repr(CLICK_SEND_JS) + ")\n"
-                  "{'clicked': bool(clicked)}")
+                  "    receipt = lifecycle.prefilled_submit(prompt)\n"
+                  "receipt")
         try:
-            initial = _result(self.exec_session(sid, source))
-            if not initial.get("clicked"):
-                return {"clicked": False, "diagnostic": "pre_send_gate_not_ready"}
-            deadline = time.monotonic() + 18
-            stable = 0
-            while time.monotonic() < deadline:
-                disabled = _result(self.exec_session(sid, "not js(" + repr(SEND_ENABLED_JS) + ")"))
-                stable = stable + 1 if disabled else 0
-                if stable >= 2:
-                    return {"clicked": True, "verified_by": "send-button-disabled"}
-                time.sleep(.2)
-            return {"clicked": True, "diagnostic": "post_submit_send_state_unverified"}
+            return _result(self.exec_session(sid, source))
         finally:
             self._close(item["id"])
 

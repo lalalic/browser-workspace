@@ -64,7 +64,7 @@ class TurnQueue:
                        (item_id, idem_key, project_id, thread_id, message, "QUEUED", now, now))
             return dict(db.execute("SELECT * FROM turns WHERE id=?", (item_id,)).fetchone())
 
-    def claim(self, owner, now=None, lease_seconds=30):
+    def claim(self, owner, now=None, lease_seconds=120):
         """Atomically claim an eligible head from each thread, one at a time."""
         now = time.time() if now is None else now
         with self.db() as db:
@@ -118,7 +118,7 @@ class TurnQueue:
             release = target in ("WAITING", "SENT", "UNCERTAIN", "BLOCKED")
             db.execute("UPDATE turns SET state=?, lease_owner=?, lease_until=?, next_check_at=?, receipt=? WHERE id=?",
                        (target, None if release else owner,
-                        None if release else now+30,
+                        None if release else now+120,
                         now + delay if target in ("WAITING", "SENT") else now,
                         receipt, item_id))
 

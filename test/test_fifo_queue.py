@@ -44,9 +44,8 @@ class FIFOTests(unittest.TestCase):
         self.q.claim("w1", now=100)
         self.q.transition(a["id"], "w1", "CHECKING", "WAITING", now=100, delay=60)
         self.assertEqual(self.q.claim("w2", now=100)["id"], b["id"])
-        # B's expired CHECKING lease can be reclaimed independently; A
-        # remains delayed until its 60-second Stop recheck becomes due.
-        self.assertEqual(self.q.claim("w3", now=159)["id"], b["id"])
+        # A slow probe must not expire B's lease after 30 seconds.
+        self.assertIsNone(self.q.claim("w3", now=159))
         self.assertEqual(self.q.rows()[0]["state"], "WAITING")
 
     def test_sending_crash_requires_explicit_reconciliation(self):
@@ -54,7 +53,7 @@ class FIFOTests(unittest.TestCase):
         self.q.enqueue("A", "two", "a2", now=100)
         self.q.claim("w1", now=100, lease_seconds=10)
         self.q.transition(first["id"], "w1", "CHECKING", "SENDING", now=100)
-        self.assertIsNone(TurnQueue(self.path).claim("w2", now=131))
+        self.assertIsNone(TurnQueue(self.path).claim("w2", now=221))
         self.assertEqual(self.q.rows()[0]["state"], "UNCERTAIN")
         with self.assertRaises(ValueError):
             self.q.transition(first["id"], "w2", "UNCERTAIN", "WAITING", now=132)

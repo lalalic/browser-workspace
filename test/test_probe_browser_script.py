@@ -26,7 +26,9 @@ const btn={disabled:!sendEnabled,
 const stopBtn={
  getAttribute:(k)=>k===stopAttribute?(k==='data-testid'?'stop-button':'Stop generating'):null,
  getClientRects:()=>[1]};
-const editor={innerText:'test',getClientRects:()=>[1]};
+const editor={innerText:'te\nst',textContent:'test',
+ getAttribute:(k)=>k==='contenteditable'?'true':null,
+ getClientRects:()=>[1]};
 globalThis.location={pathname:'/c/test'};
 globalThis.document={body:{innerText:bodyText},
  querySelectorAll:(q)=>q==='button'?(stop?[stopBtn]:[]):[btn],
@@ -51,6 +53,11 @@ process.stdout.write(JSON.stringify(result));
         state=self.run_probe()
         self.assertEqual(state["state"],"READY")
         self.assertFalse(state["stop_visible"])
+
+    def test_lexical_layout_newline_does_not_change_exact_composer_text(self):
+        state=self.run_probe()
+        self.assertEqual(state["composer_text"], "test")
+        self.assertIn("composer.textContent", PROBE_JS)
 
     def test_role_contenteditable_composer_selector(self):
         self.assertIn('[role="textbox"][contenteditable="true"]', PROBE_JS)
