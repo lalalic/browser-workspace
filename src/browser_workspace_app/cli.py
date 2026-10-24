@@ -180,12 +180,17 @@ One-shot mode (no orchestrator self-heal):
 
 One-shot mode (no orchestrator self-heal):
   browser-workspace platform run wechat-channels manage --auto-session --config status.json
+
+ChatGPT continuation defaults to durable asynchronous submission:
+  browser-workspace platform run chatgpt new-turn --config turn.json
+  browser-workspace platform run chatgpt new-turn --config turn.json --sync --session-id SESSION_ID
 ''',
         formatter_class=fmt,
     )
     run.add_argument('platform', metavar='PLATFORM', help='Platform name, for example "wechat-channels".')
     run.add_argument('action', metavar='ACTION', help='Declared action name, for example "post" or "manage".')
     run.add_argument('--config', metavar='PATH', help='JSON configuration file for the platform action.')
+    run.add_argument('--sync', action='store_true', help='chatgpt/new-turn only: submit synchronously in caller-owned --session-id; default is asynchronous durable queue. Both return status=submitted.')
     run.add_argument('--url', metavar='URL', help='Optional initial URL for a temporary session.')
     session_mode = run.add_mutually_exclusive_group()
     session_mode.add_argument('--session-id', metavar='SESSION_ID', help='Required by default. Reuse a caller-owned session so failures can be inspected and self-healed before the session is closed.')
@@ -230,7 +235,7 @@ One-shot mode (no orchestrator self-heal):
         from platform_runner import platform_profile
         emit(platform_profile(args.platform)); return
     if args.group=='platform' and args.pcmd=='run':
-        if not args.session_id and not args.auto_session and not (args.platform == 'chatgpt' and args.action.replace('_','-') == 'new-turn'):
+        if not args.session_id and not args.auto_session and not (args.platform == 'chatgpt' and args.action.replace('_','-') == 'new-turn' and not args.sync):
             emit({
                 'ok': False,
                 'error': 'session_id_required',
@@ -244,5 +249,5 @@ One-shot mode (no orchestrator self-heal):
                 'auto_session': 'Use --auto-session only for a one-shot run. It creates and closes its own session and does not provide orchestrator self-heal.',
             })
             raise SystemExit(2)
-        r=run_platform_action(args.platform,args.action,config_path=args.config,url=args.url,session_id=args.session_id,auto_session=args.auto_session); emit(r); raise SystemExit(0 if (r.get('result') or {}).get('ok',False) else 1)
+        r=run_platform_action(args.platform,args.action,config_path=args.config,url=args.url,session_id=args.session_id,auto_session=args.auto_session,sync=args.sync); emit(r); raise SystemExit(0 if (r.get('result') or {}).get('ok',False) else 1)
 if __name__=='__main__': main()

@@ -358,3 +358,20 @@ kgbghhigmbpefppgkocgjgnnnbhjchic
 ## Internal provenance
 
 The low-level browser runtime is the separately maintained `browser-harness` Python dependency. Browser Workspace owns the session/workspace/platform product layer and pins the exact Harness runtime revision it was tested with; Harness source is not vendored into this repository. Upstream licensing remains documented under `licenses/`.
+
+## ChatGPT new-turn MCP / CLI execution modes
+
+The public `chatgpt/new-turn` action defaults to **asynchronous** durable-queue
+submission. Config fields: `thread_id`, `message`, optional `project_id`,
+`idempotency_key`, and boolean `sync`. Without `sync:true`, do not provide a
+session; the dispatcher owns its private browser sessions. Response
+`status=submitted` means the durable queue accepted the request, not that the
+message reached ChatGPT. Preserve `queue_id` for delivery reconciliation.
+
+For synchronous delivery, set `"sync":true` in the config (or pass CLI
+`--sync`) and supply an existing caller-owned `--session-id`. The action
+runs in that same session, verifies the user turn, and returns without waiting
+for the assistant answer. The caller retains session ownership and can inspect
+or repair failures before closing it. Both modes use public `status=submitted`
+and never expose internal `queued` as the public status. See
+`platforms/chatgpt/README.md` for examples and receipt differences.

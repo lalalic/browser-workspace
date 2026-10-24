@@ -160,6 +160,7 @@ def run_platform_action(
     url: str | None = None,
     session_id: str | None = None,
     auto_session: bool = False,
+    sync: bool = False,
 ) -> dict:
     path = action_path(platform, action)
     config_file = Path(config_path) if config_path else None
@@ -168,7 +169,20 @@ def run_platform_action(
         if not isinstance(config, dict):
             raise ValueError("platform config must be a JSON object")
         validate_platform_config(platform, action, config)
+    if sync and (platform != "chatgpt" or action != "new-turn"):
+        raise ValueError("--sync is supported only for chatgpt/new-turn")
     if platform == "chatgpt" and action == "new-turn":
+        if config_file is None:
+            raise ValueError("chatgpt/new-turn requires --config")
+        configured_sync = config.get("sync", False)
+        if type(configured_sync) is not bool:
+            raise ValueError("chatgpt/new-turn sync must be a boolean")
+        sync = sync or configured_sync
+        if sync and (not session_id or auto_session):
+            raise ValueError("synchronous chatgpt/new-turn requires caller-owned --session-id and forbids --auto-session")
+        if not sync and (session_id or auto_session):
+            raise ValueError("asynchronous chatgpt/new-turn does not accept browser session options; use --sync")
+    if platform == "chatgpt" and action == "new-turn" and not sync:
         import uuid
         if config_file is None:
             raise ValueError("chatgpt/new-turn requires --config")
@@ -198,6 +212,8 @@ def run_platform_action(
                 "verified_by": "durable-queue", "user_message_id": None,
                 "queue_id": receipt["queue_id"], "state": receipt.get("state"),
             }
+        else:
+            raise ValueError("ChatGPT queue returned an invalid acceptance receipt")
         return {"platform": platform, "action": action, "session_mode": "durable_queue",
                 "self_heal_capable": False, "result": receipt}
     code = prepare_action(path, config_file)
@@ -231,6 +247,17 @@ def run_platform_action(
         result = {k: v for k, v in raw_result.items() if k not in {"session_id", "workspace", "target_id"}}
         if platform == "chatgpt" and action in {"new-turn", "new-thread"}:
             result = normalize_failure(result, action)
+            if result.get("ok") and action == "new-turn":
+                try:
+                    receipt = json.loads(result.get("stdout", "").strip().splitlines()[-1])
+                except (ValueError, IndexError, TypeError):
+                    raise ValueError("ChatGPT synchronous new-turn returned an invalid submission receipt") from None
+                if (not isinstance(receipt, dict) or receipt.get("status") != "submitted"
+                        or receipt.get("mode") != "new-turn"
+                        or receipt.get("thread_id") != str(config["thread_id"])
+                        or not receipt.get("verified_by")):
+                    raise ValueError("ChatGPT synchronous new-turn returned an invalid submission receipt")
+                result = {"ok": True, **receipt}
         output = {
             "platform": platform,
             "action": action,
