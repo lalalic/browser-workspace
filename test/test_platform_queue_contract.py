@@ -1,4 +1,6 @@
 import json
+import tomllib
+from pathlib import Path
 
 import platform_runner
 
@@ -33,3 +35,14 @@ def test_new_turn_rejects_invalid_queue_receipt(monkeypatch, tmp_path):
     import pytest
     with pytest.raises(ValueError, match="invalid acceptance receipt"):
         platform_runner.run_platform_action("chatgpt", "new-turn", config_path=str(config))
+
+
+def test_distribution_versions_match_daemon_version_source():
+    root = Path(__file__).resolve().parents[1]
+    versions = [
+        json.loads((root / "package.json").read_text())["version"],
+        json.loads((root / "src/browser_workspace_app/package.json").read_text())["version"],
+        tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"],
+        tomllib.loads((root / "src/browser_workspace_app/pyproject.toml").read_text())["project"]["version"],
+    ]
+    assert len(set(versions)) == 1, versions
