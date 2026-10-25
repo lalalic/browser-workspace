@@ -33,7 +33,17 @@ class TurnQueue:
                     receipt TEXT
                 );
                 CREATE INDEX IF NOT EXISTS turns_thread_order ON turns(thread_id, seq);
+                CREATE TABLE IF NOT EXISTS merged_requests (
+                    idem_key TEXT PRIMARY KEY,
+                    project_id TEXT,
+                    thread_id TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    queue_id TEXT NOT NULL
+                );
             """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(turns)")}
+            if "mergeable" not in columns:
+                db.execute("ALTER TABLE turns ADD COLUMN mergeable INTEGER NOT NULL DEFAULT 0")
 
     @contextmanager
     def db(self):
@@ -48,20 +58,37 @@ class TurnQueue:
         finally:
             db.close()
 
-    def enqueue(self, thread_id, message, idem_key, project_id=None, now=None):
+    def enqueue(self, thread_id, message, idem_key, project_id=None, now=None, mergeable=False):
         if not thread_id or not message or not idem_key:
             raise ValueError("thread_id, message, idem_key required")
+        if type(mergeable) is not bool:
+            raise ValueError("mergeable must be a boolean")
         now = time.time() if now is None else now
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
+            merged = db.execute("SELECT * FROM merged_requests WHERE idem_key=?", (idem_key,)).fetchone()
+            if merged:
+                if (merged["thread_id"], merged["message"], merged["project_id"]) != (thread_id, message, project_id):
+                    raise ValueError("idempotency key reused with different payload")
+                return dict(db.execute("SELECT * FROM turns WHERE id=?", (merged["queue_id"],)).fetchone())
             row = db.execute("SELECT * FROM turns WHERE idem_key=?", (idem_key,)).fetchone()
             if row:
                 if (row["thread_id"], row["message"], row["project_id"]) != (thread_id, message, project_id):
                     raise ValueError("idempotency key reused with different payload")
                 return dict(row)
+            if mergeable:
+                tail = db.execute("SELECT * FROM turns WHERE thread_id=? ORDER BY seq DESC LIMIT 1", (thread_id,)).fetchone()
+                if (tail and tail["mergeable"] and tail["project_id"] == project_id
+                        and tail["state"] in ("QUEUED", "WAITING")):
+                    db.execute("INSERT OR IGNORE INTO merged_requests VALUES(?,?,?,?,?)",
+                               (tail["idem_key"], tail["project_id"], thread_id, tail["message"], tail["id"]))
+                    db.execute("INSERT INTO merged_requests VALUES(?,?,?,?,?)",
+                               (idem_key, project_id, thread_id, message, tail["id"]))
+                    db.execute("UPDATE turns SET message=message || ? WHERE id=?", ("\n" + message, tail["id"]))
+                    return dict(db.execute("SELECT * FROM turns WHERE id=?", (tail["id"],)).fetchone())
             item_id = str(uuid.uuid4())
-            db.execute("INSERT INTO turns(id, idem_key, project_id, thread_id, message, state, next_check_at, created_at) VALUES(?,?,?,?,?,?,?,?)",
-                       (item_id, idem_key, project_id, thread_id, message, "QUEUED", now, now))
+            db.execute("INSERT INTO turns(id, idem_key, project_id, thread_id, message, state, next_check_at, created_at, mergeable) VALUES(?,?,?,?,?,?,?,?,?)",
+                       (item_id, idem_key, project_id, thread_id, message, "QUEUED", now, now, int(mergeable)))
             return dict(db.execute("SELECT * FROM turns WHERE id=?", (item_id,)).fetchone())
 
     def claim(self, owner, now=None, lease_seconds=120):

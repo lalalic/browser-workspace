@@ -186,6 +186,8 @@ def run_platform_action(
                 raise ValueError("--mode conflicts with the new-turn config mode")
             configured_mode = mode
         mode = configured_mode
+        if mode == "sync" and config.get("mergeable", False) is not False:
+            raise ValueError("mergeable is only supported in async mode")
     elif mode is not None:
         raise ValueError("--mode is only supported for chatgpt/new-turn")
     if mode == "sync" and (not session_id or auto_session):
@@ -196,6 +198,9 @@ def run_platform_action(
         import uuid
         if not config.get("thread_id") or not config.get("message"):
             raise ValueError("thread_id and message are required")
+        mergeable = config.get("mergeable", False)
+        if type(mergeable) is not bool:
+            raise ValueError("mergeable must be a boolean")
         # The durable enqueue is independent of Browser Workspace sessions.
         # Callers receive a queue ID immediately; the daemon owns delivery.
         receipt = request({
@@ -203,6 +208,7 @@ def run_platform_action(
             "thread_id": str(config["thread_id"]),
             "project_id": config.get("project_id"),
             "message": str(config["message"]),
+            "mergeable": mergeable,
             "idempotency_key": str(config.get("idempotency_key") or uuid.uuid4()),
         })
         if not receipt.get("ok"):

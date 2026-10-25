@@ -27,7 +27,7 @@ def test_new_turn_is_persisted_via_daemon_without_browser_session(monkeypatch, t
         "queue_id": "msg-1", "state": "WAITING",
     }
     assert calls == [{"op": "chatgpt-new-turn-enqueue", "thread_id": "t", "project_id": "p",
-                      "message": "hello", "idempotency_key": "key-1"}]
+                      "message": "hello", "mergeable": False, "idempotency_key": "key-1"}]
 
 
 def test_new_turn_rejects_invalid_queue_receipt(monkeypatch, tmp_path):

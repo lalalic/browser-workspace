@@ -112,6 +112,7 @@ class DaemonTurnQueue:
             str(request.get("message") or ""),
             str(request.get("idempotency_key") or "").strip(),
             str(request.get("project_id") or "").strip() or None,
+            mergeable=request.get("mergeable", False),
         )
         self.dispatcher.notify_enqueued()
         return {"ok": True, "status": "queued", "queue_id": item["id"],

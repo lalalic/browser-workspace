@@ -112,6 +112,35 @@ class FIFOTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.q.transition(first["id"], "old", "CHECKING", "SENDING", now=112)
 
+    def test_mergeable_coalesces_only_same_thread_pending_messages(self):
+        first = self.q.enqueue("A", "one", "one", now=100, mergeable=True)
+        second = self.q.enqueue("A", "two", "two", now=101, mergeable=True)
+        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(self.q.rows()[0]["message"], "one\ntwo")
+        self.assertEqual(self.q.enqueue("A", "one", "one", now=102)["id"], first["id"])
+        self.assertEqual(self.q.enqueue("A", "two", "two", now=103)["id"], first["id"])
+        self.assertEqual(self.q.rows()[0]["message"], "one\ntwo")
+        with self.assertRaises(ValueError):
+            self.q.enqueue("A", "changed", "two", mergeable=True)
+        self.q.enqueue("B", "other", "other", now=104, mergeable=True)
+        self.assertEqual(len(self.q.rows()), 2)
+
+    def test_mergeable_never_overwrites_nonmergeable_or_claimed_turn(self):
+        plain = self.q.enqueue("A", "plain", "a", now=100)
+        first = self.q.enqueue("A", "voice", "b", now=100, mergeable=True)
+        self.assertNotEqual(plain["id"], first["id"])
+        self.q.claim("worker", now=100)
+        self.assertEqual(self.q.enqueue("A", "more", "c", now=101, mergeable=True)["id"], first["id"])
+        self.q.transition(plain["id"], "worker", "CHECKING", "SENDING", now=101)
+        self.q.transition(plain["id"], "worker", "SENDING", "SENT", now=102, delay=0)
+        self.assertEqual(self.q.claim("next", now=102)["id"], first["id"])
+        self.assertNotEqual(self.q.enqueue("A", "late", "d", now=103, mergeable=True)["id"], first["id"])
+        self.assertEqual([row["message"] for row in self.q.rows()], ["plain", "voice\nmore", "late"])
+
+    def test_mergeable_rejects_non_boolean(self):
+        with self.assertRaises(ValueError):
+            self.q.enqueue("A", "x", "x", mergeable="true")
+
 
 if __name__ == "__main__":
     unittest.main()
