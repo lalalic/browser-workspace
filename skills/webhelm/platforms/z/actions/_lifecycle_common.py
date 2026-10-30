@@ -92,7 +92,8 @@ def run(cfg, mode, browser):
         raise RuntimeError("Z.ai did not open a new chat; nothing was submitted")
 
     before_count = message_count(browser, message)
-    browser["fill_input"](COMPOSER, message)
+    browser["click"](COMPOSER)
+    browser["cdp"]("Input.insertText", text=message)
     browser["wait_for_element"](f"{SEND_BUTTON}:not(:disabled)", timeout=15, visible=True)
     browser["click"](SEND_BUTTON)
 
