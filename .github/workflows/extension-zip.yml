@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "extension/**"
+      - "skills/webhelm/extension/**"
       - "scripts/package-extension.sh"
       - ".github/workflows/extension-zip.yml"
   workflow_dispatch:
@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           zip_path="$(scripts/package-extension.sh)"
-          version="$(node -p "require('./extension/manifest.json').version")"
+          version="$(node -p "require('./skills/webhelm/extension/manifest.json').version")"
           echo "zip_path=$zip_path" >> "$GITHUB_OUTPUT"
           echo "zip_name=$(basename "$zip_path")" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"

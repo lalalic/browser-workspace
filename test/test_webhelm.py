@@ -78,10 +78,10 @@ def test_global_symlink_launcher_resolves_skill_platforms(tmp_path):
 
 def test_only_official_published_extension_is_documented_and_detected():
     import json
-    manifest = json.loads((ROOT / "extension/manifest.json").read_text())
+    manifest = json.loads((ROOT / "skills/webhelm/extension/manifest.json").read_text())
     assert manifest["version"] == "0.3.1"
-    assert "key" not in manifest, "developer extension key must not masquerade as Web Store identity"
-    assert manifest["update_url"] == "https://clients2.google.com/service/update2/crx"
+    assert "key" in manifest, "bundled offline extension must retain the published public key"
+    assert "update_url" not in manifest
     published_id = "kkkpgmhpoeceojalkpfdidffdfnlgdog"
     obsolete_id = "kgbghhigmbpefppgkocgjgnnnbhjchic"
     for path in (ROOT / "README.md", ROOT / "skills/webhelm/SKILL.md",
@@ -114,5 +114,19 @@ def test_extension_package_uses_store_manifest_and_preserves_code(tmp_path):
         assert manifest["version"] == "0.3.1"
         assert "key" not in manifest
         assert manifest["update_url"] == "https://clients2.google.com/service/update2/crx"
+        source = ROOT / "skills/webhelm/extension"
+        expected_manifest = json.loads((source / "manifest.json").read_text())
+        expected_manifest.pop("key")
+        expected_manifest["update_url"] = "https://clients2.google.com/service/update2/crx"
+        assert manifest == expected_manifest
+        assert set(archive.namelist()) == {file.name for file in source.iterdir()}
         for name in ("service-worker.mjs", "workspace-manager.mjs", "workspace-page.mjs", "workspace.html"):
-            assert archive.read(name) == (ROOT / "extension" / name).read_bytes()
+            assert archive.read(name) == (source / name).read_bytes()
+
+
+def test_extension_release_workflow_uses_only_canonical_skill_source():
+    workflow = (ROOT / ".github/workflows/extension-zip.yml").read_text()
+    assert '"skills/webhelm/extension/**"' in workflow
+    assert "require('./skills/webhelm/extension/manifest.json')" in workflow
+    assert '"extension/**"' not in workflow
+    assert not (ROOT / "extension").exists()

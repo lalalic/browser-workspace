@@ -397,7 +397,7 @@ extension ID `kkkpgmhpoeceojalkpfdidffdfnlgdog` and version `0.3.1`
 receives automatic updates from Chrome Web Store.
 
 **B. Offline/local (when Chrome Web Store is blocked):** This Skill includes
-a trusted, source-matched `extension/` directory with the **same extension ID**
+the canonical `extension/` source directory with the **same extension ID**
 and version as the published build. It contains the public signing key
 extracted from the published Google CRX; this is a **public key, not a secret**.
 Use the installed Skill's actual directory (never assume an Agent-specific path):
@@ -406,6 +406,10 @@ Use the installed Skill's actual directory (never assume an Agent-specific path)
 SKILL_DIR="<absolute directory containing this SKILL.md>"
 sh "$SKILL_DIR/scripts/prepare-local-extension.sh"
 ```
+
+The Skill contains the single authoritative extension source. GitHub releases
+and Chrome Web Store upload ZIPs are generated from it, never stored as a
+second source tree.
 
 The command copies the files into a stable, user-owned folder under
 `~/.local/share/webhelm/offline-extensions/browser-workspace-0.3.1` and
@@ -416,8 +420,8 @@ directory. Verify the extension ID and version afterward.
 
 Offline installation does not require access to Google and does not auto-update.
 When a later version ships, use the new bundled version and manually load it.
-Do not install both Store and offline copies simultaneously. Previous unpacked development identities are obsolete and must not be used
-by the Browser Workspace runtime.
+Do not install both Store and offline copies simultaneously. Previous unpacked
+development identities are obsolete and must not be used by Browser Workspace.
 
 **Chrome Stable restriction:** Chrome 137+ rejects automatic local extension
 loading through `--load-extension`. Do not promise automatic injection by

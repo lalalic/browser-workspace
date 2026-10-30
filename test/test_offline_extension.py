@@ -10,7 +10,7 @@ import shutil
 import subprocess
 
 SKILL = Path(__file__).resolve().parents[1] / "skills/webhelm"
-EXTENSION = Path(__file__).resolve().parents[1] / "extension"
+EXTENSION = SKILL / "extension"
 OFFICIAL_ID = "kkkpgmhpoeceojalkpfdidffdfnlgdog"
 OFFICIAL_URL = (
     "https://chromewebstore.google.com/detail/"
@@ -35,22 +35,16 @@ def run_installer(skill: Path, home: Path, root: Path | None = None):
 
 
 def test_offline_extension_matches_published_identity_and_source():
-    official = json.loads((EXTENSION / "manifest.json").read_text())
-    offline = json.loads((SKILL / "extension/manifest.json").read_text())
-    assert official["version"] == offline["version"] == "0.3.1"
-    assert "key" not in official
-    assert "update_url" not in offline  # unpacked installs do not auto-update
-    assert "key" in offline
-    key = base64.b64decode(offline["key"], validate=True)
+    assert not (SKILL.parent.parent / "extension").exists(), "the extension must have one source tree"
+    manifest = json.loads((EXTENSION / "manifest.json").read_text())
+    assert manifest["version"] == "0.3.1"
+    assert "update_url" not in manifest  # local unpacked installs do not auto-update
+    assert "key" in manifest
+    key = base64.b64decode(manifest["key"], validate=True)
     sha = hashlib.sha256(key).hexdigest()[:32]
     extension_id = "".join(chr(ord("a") + int(nibble, 16)) for nibble in sha)
     assert extension_id == OFFICIAL_ID
-    del offline["key"]
-    del official["update_url"]
-    assert offline == official
-    assert {f.name for f in (SKILL / "extension").iterdir()} == set(FILES)
-    for name in FILES[1:]:
-        assert (SKILL / "extension" / name).read_bytes() == (EXTENSION / name).read_bytes()
+    assert {f.name for f in EXTENSION.iterdir()} == set(FILES)
 
 
 def test_skill_prefers_exact_webstore_url_and_documents_offline_approval():

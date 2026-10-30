@@ -53,9 +53,9 @@ browser-workspace
 ├── src/                         CLI, session daemon, platform runner, managed Chrome (package browser_workspace_app)
 │   ├── browser-harness/         helper overlay loaded by browser-harness (BH_AGENT_WORKSPACE)
 │   └── admin.mjs                Node API for products to create/delete persistent workspaces
-├── extension/                   Chrome workspace/tab manager extension
-├── scripts/package-extension.sh extension release zip (used by CI)
-├── skills/webhelm/              WebHelm skill: SKILL.md, interaction-skills/, platforms/, scripts/
+├── skills/webhelm/              WebHelm skill: SKILL.md, extension/, interaction-skills/, platforms/, scripts/
+│   └── extension/               single authoritative Chrome extension source (offline + Store)
+├── scripts/package-extension.sh generates Web Store ZIP from skills/webhelm/extension/ (used by CI)
 ├── test/                        CLI, daemon, packaging, and extension tests
 └── site/                        GitHub Pages (privacy policy)
 ```
