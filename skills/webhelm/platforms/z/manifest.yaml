@@ -1,7 +1,7 @@
 platform: z
 display_name: Z.ai
 status: partially_verified
-last_verified: 2026-10-29
+last_verified: 2026-10-30
 actions:
   new-thread: actions/_new_thread.py
   new-turn: actions/_new_turn.py
@@ -9,11 +9,11 @@ verification:
   status: partially_verified
   last_verified: 2026-10-29
   evidence: >-
-    Read-only live inspection confirmed the composer and send-button controls;
-    the public frontend bundle uses /c/{id} for chat routes. Lifecycle submission
-    actions have not been exercised against the live account.
+    A real live new-thread action submitted a message, verified the cleared
+    composer and durable /c/{id} URL, and returned a submitted receipt.
+    Existing-thread new-turn still requires live verification.
 flows:
-  lifecycle-new-thread: partially_verified
+  lifecycle-new-thread: verified
   lifecycle-new-turn: partially_verified
 capabilities:
   - persistent-thread

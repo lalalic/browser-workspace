@@ -15,4 +15,5 @@ retrying because the action never resends automatically.
 
 Actions use the semantic textarea and send button, and verify acceptance using
 the matching user message, cleared composer, and durable `/c/{id}` URL. The
-lifecycle actions have not yet been live-verified by submitting a message.
+new-thread action has been live-verified by submitting a real message. The
+new-turn action is still pending live verification.
