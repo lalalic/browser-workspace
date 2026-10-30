@@ -77,6 +77,21 @@ class WorkspaceMappingTest(unittest.TestCase):
         self.assertEqual(module["activate_tab"]("abc"), "raw-activate:abc")
         self.assertEqual(module["goto_url"]("https://next.test"), "https://next.test")
 
+    def test_default_extension_is_published_store_id_even_if_old_override_is_present(self):
+        import os
+        old = os.environ.get("BH_WORKSPACE_MANAGER_EXTENSION_ID")
+        os.environ["BH_WORKSPACE_MANAGER_EXTENSION_ID"] = "kgbghhigmbpefppgkocgjgnnnbhjchic"
+        try:
+            module = load_helper()
+            status = module["workspace_extension_status"]()
+            self.assertEqual(status["extensionId"], "kkkpgmhpoeceojalkpfdidffdfnlgdog")
+            self.assertTrue(status["extensionUrl"].endswith("kkkpgmhpoeceojalkpfdidffdfnlgdog"))
+        finally:
+            if old is None:
+                os.environ.pop("BH_WORKSPACE_MANAGER_EXTENSION_ID", None)
+            else:
+                os.environ["BH_WORKSPACE_MANAGER_EXTENSION_ID"] = old
+
     def test_no_extension_workspace_status_is_soft(self):
         module = load_helper()
         module["workspace_set_supported"](False)
@@ -189,7 +204,7 @@ class WorkspaceMappingTest(unittest.TestCase):
                         "targetInfos": [{
                             "targetId": "worker",
                             "type": "service_worker",
-                            "url": "chrome-extension://kgbghhigmbpefppgkocgjgnnnbhjchic/service-worker.mjs",
+                            "url": "chrome-extension://kkkpgmhpoeceojalkpfdidffdfnlgdog/service-worker.mjs",
                         }]
                     }
                 return {}

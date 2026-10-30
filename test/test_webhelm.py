@@ -74,3 +74,21 @@ def test_global_symlink_launcher_resolves_skill_platforms(tmp_path):
     result = subprocess.run([str(bindir / 'webhelm'), 'platform', 'list'], env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == f"{(skill / 'platforms').resolve()}|--from browser-workspace@latest webhelm platform list"
+
+
+def test_only_official_published_extension_is_documented_and_detected():
+    import json
+    manifest = json.loads((ROOT / "extension/manifest.json").read_text())
+    assert manifest["version"] == "0.3.1"
+    assert "key" not in manifest, "developer extension key must not masquerade as Web Store identity"
+    assert manifest["update_url"] == "https://clients2.google.com/service/update2/crx"
+    published_id = "kkkpgmhpoeceojalkpfdidffdfnlgdog"
+    obsolete_id = "kgbghhigmbpefppgkocgjgnnnbhjchic"
+    for path in (ROOT / "README.md", ROOT / "skills/webhelm/SKILL.md",
+                 ROOT / "src/browser-harness/agent_helpers.py"):
+        content = path.read_text()
+        assert published_id in content, str(path)
+        assert obsolete_id not in content, str(path)
+    skill = (ROOT / "skills/webhelm/SKILL.md").read_text()
+    assert "user approval" in skill
+    assert "published Chrome Web Store extension" in skill

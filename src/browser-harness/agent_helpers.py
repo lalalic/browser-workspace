@@ -12,10 +12,9 @@ import time as _time
 
 from browser_harness import helpers as _bh
 
-_EXTENSION_ID = _os.environ.get(
-    "BH_WORKSPACE_MANAGER_EXTENSION_ID",
-    "kgbghhigmbpefppgkocgjgnnnbhjchic",
-)
+# The Chrome Web Store owns production extension identity. A local/unpacked
+# extension with a developer key uses a different ID and is not a fallback.
+_EXTENSION_ID = "kkkpgmhpoeceojalkpfdidffdfnlgdog"
 _DEFAULT_WORKSPACE_NAME = _os.environ.get(
     "BH_WORKSPACE_NAME",
     "Harness",

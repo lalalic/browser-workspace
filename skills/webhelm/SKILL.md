@@ -383,13 +383,13 @@ There is no required separate Browser Harness installation.
 The Chrome extension is recommended but not required. Without it Browser Workspace runs in plain-browser mode and `session start` provides the installation link. The public Web Store URL is:
 
 ```text
-https://chromewebstore.google.com/detail/kgbghhigmbpefppgkocgjgnnnbhjchic
+https://chromewebstore.google.com/detail/kkkpgmhpoeceojalkpfdidffdfnlgdog
 ```
 
-The extension source is maintained at `extension/` in the browser-workspace repository; it is not part of this installed skill. Use the approved Web Store installation flow for normal use. For local extension development, load the unpacked source explicitly through Chrome's extension settings. Default extension ID:
+The extension source is maintained at `extension/` in the browser-workspace repository; it is not part of this installed Skill. **Use only the published Chrome Web Store extension for ordinary sessions.** Open the official listing in the managed Browser Workspace Chrome and complete Chrome's user approval. Verify the extension ID and installed version before claiming grouping support. Do not use unpacked/developer builds for ordinary sessions. Published extension ID:
 
 ```text
-kgbghhigmbpefppgkocgjgnnnbhjchic
+kkkpgmhpoeceojalkpfdidffdfnlgdog
 ```
 
 ## Internal provenance

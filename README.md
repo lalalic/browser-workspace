@@ -85,7 +85,7 @@ By default Browser Workspace owns exactly one machine-wide persistent, visible C
 
 `BU_CDP_URL` / `BU_CDP_WS` remain advanced overrides for callers that intentionally provide their own browser endpoint. `BROWSER_WORKSPACE_CDP_PORT` changes the preferred managed port.
 
-The Web Store build remains available for ordinary interactive Chrome installs, but the managed runtime does not depend on it: `https://chromewebstore.google.com/detail/kgbghhigmbpefppgkocgjgnnnbhjchic`.
+The **official Chrome Web Store extension** is the only supported extension for ordinary browser sessions: `https://chromewebstore.google.com/detail/browser-workspace/kkkpgmhpoeceojalkpfdidffdfnlgdog` (extension ID `kkkpgmhpoeceojalkpfdidffdfnlgdog`, published version `0.3.1` as verified on 2026-10-30). Install it interactively in the managed Browser Workspace Chrome, approve Chrome's permission prompt, and verify its exact ID and version. Do not use an unpacked extension or assume an old extension ID is the published one. Without the official extension, the runtime remains in plain-browser mode.
 
 ## Snapshot model
 
