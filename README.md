@@ -85,7 +85,19 @@ By default Browser Workspace owns exactly one machine-wide persistent, visible C
 
 `BU_CDP_URL` / `BU_CDP_WS` remain advanced overrides for callers that intentionally provide their own browser endpoint. `BROWSER_WORKSPACE_CDP_PORT` changes the preferred managed port.
 
-The **official Chrome Web Store extension** is the only supported extension for ordinary browser sessions: `https://chromewebstore.google.com/detail/browser-workspace/kkkpgmhpoeceojalkpfdidffdfnlgdog` (extension ID `kkkpgmhpoeceojalkpfdidffdfnlgdog`, published version `0.3.1` as verified on 2026-10-30). Install it interactively in the managed Browser Workspace Chrome, approve Chrome's permission prompt, and verify its exact ID and version. Do not use an unpacked extension or assume an old extension ID is the published one. Without the official extension, the runtime remains in plain-browser mode.
+For grouping, the preferred extension is **Browser Workspace v0.3.1**, listed at
+`https://chromewebstore.google.com/detail/browser-workspace/kkkpgmhpoeceojalkpfdidffdfnlgdog`.
+Install it in **the managed Chrome profile** and approve Chrome's request.
+
+For users without Chrome Web Store access, the `webhelm` Skill also bundles
+a source-matched offline extension with the **same published extension ID**.
+Follow its `SKILL.md` and run
+`sh "$SKILL_DIR/scripts/prepare-local-extension.sh"` with `SKILL_DIR` set to
+the **actual installed Skill directory**, then select the printed stable folder
+using Chrome's `chrome://extensions` → Developer mode → Load unpacked.
+This is a local user-approved install, not a silent or automatically updated
+Store install. Chrome Stable 137+ no longer accepts automatic unpacked loading
+through command-line flags. The CLI can run without the extension in plain mode.
 
 ## Snapshot model
 

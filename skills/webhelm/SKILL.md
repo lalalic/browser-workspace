@@ -50,11 +50,11 @@ webhelm platform list
 webhelm platform profile chatgpt
 ```
 
-The Chrome Web Store extension is optional for basic browser control;
-when needed for workspace grouping, the skill must open the official listing
-in the managed profile, request user approval for installation, and verify
-the extension bridge before claiming it is ready. Never silently alter the
-user's default Chrome profile or bypass Chrome Store approval.
+The extension is optional for basic browser control. For workspace grouping,
+prefer the published Chrome Web Store extension in **the managed Chrome profile**.
+When Google services are unavailable, use the offline files bundled with this
+Skill. Both paths require user approval in Chrome before installation.
+Never alter the user's default Chrome profile or silently install an extension.
 
 Use one session-owned execution path for orchestrated browser work:
 
@@ -380,17 +380,50 @@ The installed CLI reuses the Browser Workspace Chrome profile and Session Daemon
 
 There is no required separate Browser Harness installation.
 
-The Chrome extension is recommended but not required. Without it Browser Workspace runs in plain-browser mode and `session start` provides the installation link. The public Web Store URL is:
+The Chrome extension is recommended for named tab groups but is not required
+for basic browser control. Without it, Browser Workspace works in plain-browser
+mode. Select one of these **two installation paths**:
+
+**A. Chrome Web Store (preferred):** In the Browser Workspace-managed Chrome
+window, open the verified published listing:
 
 ```text
-https://chromewebstore.google.com/detail/kkkpgmhpoeceojalkpfdidffdfnlgdog
+https://chromewebstore.google.com/detail/browser-workspace/kkkpgmhpoeceojalkpfdidffdfnlgdog
 ```
 
-The extension source is maintained at `extension/` in the browser-workspace repository; it is not part of this installed Skill. **Use only the published Chrome Web Store extension for ordinary sessions.** Open the official listing in the managed Browser Workspace Chrome and complete Chrome's user approval. Verify the extension ID and installed version before claiming grouping support. Do not use unpacked/developer builds for ordinary sessions. Published extension ID:
+Approve **Add to Chrome** in that managed profile, then verify the installed
+extension ID `kkkpgmhpoeceojalkpfdidffdfnlgdog` and version `0.3.1`
+(the version published and verified on 2026-10-30). The official store install
+receives automatic updates from Chrome Web Store.
 
-```text
-kkkpgmhpoeceojalkpfdidffdfnlgdog
+**B. Offline/local (when Chrome Web Store is blocked):** This Skill includes
+a trusted, source-matched `extension/` directory with the **same extension ID**
+and version as the published build. It contains the public signing key
+extracted from the published Google CRX; this is a **public key, not a secret**.
+Use the installed Skill's actual directory (never assume an Agent-specific path):
+
+```bash
+SKILL_DIR="<absolute directory containing this SKILL.md>"
+sh "$SKILL_DIR/scripts/prepare-local-extension.sh"
 ```
+
+The command copies the files into a stable, user-owned folder under
+`~/.local/share/webhelm/offline-extensions/browser-workspace-0.3.1` and
+prints the exact directory. It does **not** install an extension or modify
+Chrome. In the **managed Chrome window**, open `chrome://extensions`, enable
+**Developer mode**, select **Load unpacked**, then select that printed
+directory. Verify the extension ID and version afterward.
+
+Offline installation does not require access to Google and does not auto-update.
+When a later version ships, use the new bundled version and manually load it.
+Do not install both Store and offline copies simultaneously. Previous unpacked development identities are obsolete and must not be used
+by the Browser Workspace runtime.
+
+**Chrome Stable restriction:** Chrome 137+ rejects automatic local extension
+loading through `--load-extension`. Do not promise automatic injection by
+Managed Chrome, alter enterprise policy, or replace the normal Chrome binary.
+A deliberate **Load unpacked** approval is required. After either install,
+verify workspace support; absence of the extension is not proof of success.
 
 ## Internal provenance
 

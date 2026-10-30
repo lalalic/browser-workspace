@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Browser Workspace",
+  "version": "0.3.1",
+  "description": "Own named Chrome tab-group workspaces and lazy reusable tab pools for browser agents.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "tabGroups",
+    "alarms",
+    "webNavigation",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.mjs",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Browser Workspace"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtovrqHYRxYDBSofmlykO8RDtsePhg8KV1fmq07nnhtbmYiNXAnIKrgRyLHeZv+cwm9DSgP5Ig7FDJ7Q6XrSi+Z1FpU6Y/SJkX5Rozo0oAJcX1ggoGD3vxpfHZThSSG/vRSnD8pH3XFf2nDUD7QP6GXc8dX9lN5pslRUNh1J4UCAOcu2UpPSsvpA+wPPTZr2JYzm3AevFXkQM6y0B+4exgw/Hy21ULST4nLWZihuCSu+gfWnftiTNzUPHtseRJcrpd0zT0R46d+OC+JRwXMVBpYSksDDtOXgERwMBSZf+vvskrEqYoXKN8Z9+Rrr7y9PTOvlwQioVLEDEjr9e7RIegQIDAQAB"
+}
