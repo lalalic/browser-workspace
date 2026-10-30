@@ -66,10 +66,48 @@ class WorkspaceMappingTest(unittest.TestCase):
 
 
 
-    def test_no_extension_falls_back_to_core_tab_helpers(self):
+    def test_no_extension_creates_fresh_owned_tab(self):
         module = load_helper()
         module["workspace_set_supported"](False)
-        self.assertEqual(module["new_tab"]("https://example.com"), "raw-new:https://example.com")
+        calls = []
+        def fake_cdp(method, **kwargs):
+            calls.append((method, kwargs))
+            return {"targetId": "new-owned-target"} if method == "Target.createTarget" else {}
+        module["_bh"].cdp = fake_cdp
+        globals_ = module["new_tab"].__globals__
+        globals_["_original_switch_tab"] = lambda tid: calls.append(("switch", tid))
+        globals_["_original_goto_url"] = lambda url: calls.append(("navigate", url))
+        # Unlike the original Harness helper, never reuse a pre-existing blank tab.
+        globals_["_original_new_tab"] = lambda url: self.fail("must not reuse old tab")
+        self.assertEqual(module["new_tab"]("https://example.com"), "new-owned-target")
+        self.assertEqual(calls, [
+            ("Target.createTarget", {"url": "about:blank", "background": True}),
+            ("switch", "new-owned-target"),
+            ("navigate", "https://example.com"),
+        ])
+        self.assertEqual(module["current_tab"](), {"targetId": "current"})
+
+    def test_no_extension_failed_navigation_closes_only_new_target(self):
+        module = load_helper()
+        module["workspace_set_supported"](False)
+        calls = []
+        def fake_cdp(method, **kwargs):
+            calls.append((method, kwargs))
+            return {"targetId": "new-owned-target"} if method == "Target.createTarget" else {}
+        module["_bh"].cdp = fake_cdp
+        globals_ = module["new_tab"].__globals__
+        globals_["_original_switch_tab"] = lambda tid: None
+        globals_["_original_goto_url"] = lambda url: (_ for _ in ()).throw(RuntimeError("navigation failed"))
+        with self.assertRaisesRegex(RuntimeError, "navigation failed"):
+            module["new_tab"]("https://example.com")
+        self.assertEqual(calls, [
+            ("Target.createTarget", {"url": "about:blank", "background": True}),
+            ("Target.closeTarget", {"targetId": "new-owned-target"}),
+        ])
+
+    def test_no_extension_falls_back_to_other_core_tab_helpers(self):
+        module = load_helper()
+        module["workspace_set_supported"](False)
         self.assertEqual(module["current_tab"](), {"targetId": "current"})
         self.assertEqual(module["list_tabs"](), [{"targetId": "raw", "url": "https://raw.test"}])
         self.assertEqual(module["switch_tab"]("abc"), None)

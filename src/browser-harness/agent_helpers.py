@@ -376,7 +376,22 @@ def switch_tab(target, activate=False):
 
 def new_tab(url="about:blank"):
     if not workspace_supported():
-        return _original_new_tab(url)
+        # The upstream helper may silently reuse a pre-existing about:blank.
+        # A Browser Workspace Session always owns its tab and closes it at
+        # Session stop. Therefore it must allocate a fresh Target, even when
+        # no grouping extension is installed.
+        tid = _bh.cdp("Target.createTarget", url="about:blank", background=True)["targetId"]
+        try:
+            _original_switch_tab(tid)
+            if url != "about:blank":
+                _original_goto_url(url)
+        except BaseException:
+            try:
+                _bh.cdp("Target.closeTarget", targetId=tid)
+            except Exception:
+                pass
+            raise
+        return tid
     if not (
         url == "about:blank"
         or url.startswith("http://")
