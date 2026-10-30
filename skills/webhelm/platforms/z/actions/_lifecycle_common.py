@@ -38,7 +38,7 @@ def message_count(browser, message):
     expression = """(() => {
       const expected = %s;
       return [...document.querySelectorAll('.user-message')].filter(element =>
-        element.innerText.trim() === expected).length;
+        (element.innerText.trim() === expected || (element.innerText.trim().startsWith(expected) && /^\\s*Show full message\\s*$/.test(element.innerText.trim().slice(expected.length))))).length;
     })()""" % json.dumps(message)
     return browser["js"](expression)
 
