@@ -21,7 +21,7 @@ class FakeBrowser:
     def api(self):
         return {name: getattr(self, name) for name in (
             "page_info", "goto_url", "wait_for_load", "wait_for_element",
-            "js", "fill_input", "click",
+            "js", "fill_input", "click", "cdp",
         )}
 
     def page_info(self):
@@ -46,7 +46,13 @@ class FakeBrowser:
     def fill_input(self, selector, text):
         self.text = text
 
+    def cdp(self, method, text):
+        assert method == "Input.insertText"
+        self.text = text
+
     def click(self, selector):
+        if selector == lifecycle.COMPOSER:
+            return
         self.clicks += 1
         self.messages += 1
         self.text = ""
