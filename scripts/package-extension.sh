@@ -3,7 +3,7 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 EXTENSION_DIR="$ROOT/extension"
-DIST_DIR="$ROOT/dist"
+DIST_DIR="${BROWSER_WORKSPACE_EXTENSION_DIST_DIR:-$ROOT/dist}"
 
 VERSION=$(python3 - "$EXTENSION_DIR/manifest.json" <<'PY'
 import json
@@ -21,17 +21,6 @@ TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/browser-workspace-package.XXXXXX")
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
 cp -R "$EXTENSION_DIR/." "$TMP_DIR/"
 
-python3 - "$TMP_DIR/manifest.json" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-manifest = json.loads(path.read_text())
-manifest.pop("key", None)
-path.write_text(json.dumps(manifest, indent=2) + "\n")
-PY
-
 (
   cd "$TMP_DIR"
   zip -qr "$ZIP" .
@@ -44,8 +33,10 @@ import zipfile
 from pathlib import Path
 
 source = json.loads(Path(sys.argv[1]).read_text())
-if not source.get("key"):
-    raise SystemExit("source manifest must retain the development key")
+if "key" in source:
+    raise SystemExit("extension source must use the official Web Store identity, not a development key")
+if source.get("update_url") != "https://clients2.google.com/service/update2/crx":
+    raise SystemExit("source manifest must have the Chrome Web Store update URL")
 
 with zipfile.ZipFile(sys.argv[2]) as archive:
     names = archive.namelist()
@@ -56,7 +47,9 @@ with zipfile.ZipFile(sys.argv[2]) as archive:
 if packaged.get("version") != source.get("version"):
     raise SystemExit("packaged manifest version does not match source manifest")
 if "key" in packaged:
-    raise SystemExit("release zip manifest must not contain the development key")
+    raise SystemExit("release zip manifest must not contain a development key")
+if packaged.get("update_url") != source.get("update_url"):
+    raise SystemExit("release zip must preserve the official Web Store update URL")
 PY
 
 echo "$ZIP"

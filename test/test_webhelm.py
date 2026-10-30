@@ -92,3 +92,25 @@ def test_only_official_published_extension_is_documented_and_detected():
     skill = (ROOT / "skills/webhelm/SKILL.md").read_text()
     assert "user approval" in skill
     assert "published Chrome Web Store extension" in skill
+
+
+def test_extension_package_uses_store_manifest_and_preserves_code(tmp_path):
+    import json
+    import os
+    import zipfile
+    script = ROOT / "scripts/package-extension.sh"
+    run = subprocess.run(
+        ["/bin/sh", str(script)],
+        env={**os.environ, "BROWSER_WORKSPACE_EXTENSION_DIST_DIR": str(tmp_path)},
+        capture_output=True, text=True,
+    )
+    assert run.returncode == 0, run.stderr
+    archive_path = Path(run.stdout.strip())
+    assert archive_path == tmp_path / "browser-workspace-v0.3.1.zip"
+    with zipfile.ZipFile(archive_path) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["version"] == "0.3.1"
+        assert "key" not in manifest
+        assert manifest["update_url"] == "https://clients2.google.com/service/update2/crx"
+        for name in ("service-worker.mjs", "workspace-manager.mjs", "workspace-page.mjs", "workspace.html"):
+            assert archive.read(name) == (ROOT / "extension" / name).read_bytes()
