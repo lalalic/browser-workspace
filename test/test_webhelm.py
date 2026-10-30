@@ -108,6 +108,8 @@ def test_extension_package_uses_store_manifest_and_preserves_code(tmp_path):
     archive_path = Path(run.stdout.strip())
     assert archive_path == tmp_path / "browser-workspace-v0.3.1.zip"
     with zipfile.ZipFile(archive_path) as archive:
+        assert archive.namelist()[0] == "manifest.json"
+        assert archive.namelist() == sorted(archive.namelist(), key=lambda n: (n != "manifest.json", n))
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["version"] == "0.3.1"
         assert "key" not in manifest

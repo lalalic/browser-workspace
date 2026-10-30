@@ -23,7 +23,14 @@ cp -R "$EXTENSION_DIR/." "$TMP_DIR/"
 
 (
   cd "$TMP_DIR"
-  zip -qr "$ZIP" .
+  # The publication workflow requires manifest.json to be the first entry.
+  # Do not add the root "." directory as the first zip member.
+  zip -q "$ZIP" manifest.json
+  find . -type f ! -name manifest.json -print | LC_ALL=C sort |
+    while IFS= read -r relative; do
+      clean=$(printf '%s' "$relative" | sed 's|^\\./||')
+      zip -q "$ZIP" "$clean"
+    done
 )
 
 python3 - "$EXTENSION_DIR/manifest.json" "$ZIP" <<'PY'
