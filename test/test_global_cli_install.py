@@ -43,3 +43,14 @@ def test_refuses_unmanaged_webhelm(tmp_path):
     result = run(home)
     assert result.returncode == 3
     assert (bindir / "webhelm").read_text() == "unrelated"
+
+
+def test_install_migrates_known_checkout_shim(tmp_path):
+    home, bindir, _ = setup(tmp_path)
+    checkout = home / "Workspace/browser-workspace/bin"
+    checkout.mkdir(parents=True)
+    (bindir / "browser-workspace").symlink_to(checkout / "browser-workspace")
+    result = run(home)
+    assert result.returncode == 0, result.stderr
+    assert not (bindir / "browser-workspace").exists()
+    assert (bindir / "browser-workspace.previous-uv-tool").is_symlink()
