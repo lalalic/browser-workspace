@@ -34,7 +34,7 @@ def workspace_reset_name(token):
     _WORKSPACE_CONTEXT.reset(token)
 _POOL_SIZE = int(_os.environ.get("BH_WORKSPACE_POOL_SIZE", "5"))
 _TIMEOUT_SECONDS = 5.0
-_EXTENSION_WEBSTORE_URL = f"https://chromewebstore.google.com/detail/{_EXTENSION_ID}"
+_EXTENSION_WEBSTORE_URL = f"https://chromewebstore.google.com/detail/browser-workspace/{_EXTENSION_ID}"
 _WORKSPACE_SUPPORTED_CONTEXT = _contextvars.ContextVar("browser_workspace_supported", default=None)
 
 _original_switch_tab = _bh.switch_tab

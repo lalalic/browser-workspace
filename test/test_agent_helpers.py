@@ -98,7 +98,7 @@ class WorkspaceMappingTest(unittest.TestCase):
         status = module["workspace_status"]()
         self.assertFalse(status["supported"])
         self.assertFalse(status["initialized"])
-        self.assertIn("chromewebstore.google.com/detail/", status["extensionUrl"])
+        self.assertEqual(status["extensionUrl"], "https://chromewebstore.google.com/detail/browser-workspace/kkkpgmhpoeceojalkpfdidffdfnlgdog")
 
     def test_snapshot_formats_dom_ref(self):
         module = load_helper()
