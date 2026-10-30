@@ -1,35 +1,84 @@
 #!/bin/sh
+# Called from the installed WebHelm skill, wherever that skill lives.
 set -eu
-skill="$HOME/.agents/skills/webhelm"
+
+script=$0
+while [ -L "$script" ]; do
+  parent=$(CDPATH= cd -- "$(dirname -- "$script")" && pwd -P)
+  linked=$(readlink "$script")
+  case "$linked" in
+    /*) script=$linked ;;
+    *) script="$parent/$linked" ;;
+  esac
+done
+skill=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd -P)
+source="$skill/bin/webhelm"
 bin="$HOME/.local/bin"
 cli="$bin/webhelm"
-source="$skill/bin/webhelm"
-[ -f "$skill/SKILL.md" ] && [ -x "$source" ] || { echo "Install global webhelm skill first: npx skills add lalalic/browser-workspace -g -y -s webhelm" >&2; exit 2; }
+
+if [ ! -f "$skill/SKILL.md" ] || ! grep -q '^name: webhelm$' "$skill/SKILL.md" || [ ! -x "$source" ]; then
+  echo "This script must be called from an installed WebHelm skill containing an executable bin/webhelm." >&2
+  exit 2
+fi
+
 mkdir -p "$bin"
+
 if [ -L "$cli" ]; then
-  current=$(readlink "$cli")
-  if [ "$current" != "$source" ]; then
-    case "$current" in
+  previous=$(readlink "$cli")
+  if [ "$previous" != "$source" ]; then
+    case "$previous" in
       "$HOME/.local/share/uv/tools/browser-workspace/bin/webhelm")
-        [ ! -e "$bin/webhelm.previous-uv-tool" ] && [ ! -L "$bin/webhelm.previous-uv-tool" ] || { echo "Old CLI backup already exists" >&2; exit 3; }
-        mv "$cli" "$bin/webhelm.previous-uv-tool"
-        ln -s "$source" "$cli"
+        backup="$bin/webhelm.previous-uv-tool"
         ;;
-      *) echo "Unmanaged CLI at $cli; refusing replacement" >&2; exit 3 ;;
+      *)
+        # Migrate a previous install of this exact skill, not an arbitrary command.
+        case "$previous" in
+          /*) old_source="$previous" ;;
+          *) old_source="$bin/$previous" ;;
+        esac
+        old_skill=$(CDPATH= cd -- "$(dirname -- "$old_source")/.." 2>/dev/null && pwd -P) || {
+          echo "Cannot verify existing webhelm symlink: $previous" >&2
+          exit 3
+        }
+        if [ ! -f "$old_skill/SKILL.md" ] || ! grep -q '^name: webhelm$' "$old_skill/SKILL.md"; then
+          echo "Refusing to replace unmanaged webhelm: $cli -> $previous" >&2
+          exit 3
+        fi
+        backup="$bin/webhelm.previous-skill-cli"
+        ;;
     esac
+    if [ -e "$backup" ] || [ -L "$backup" ]; then
+      echo "Previous WebHelm CLI backup already exists: $backup" >&2
+      exit 3
+    fi
+    mv "$cli" "$backup"
+    ln -s "$source" "$cli"
   fi
 elif [ -e "$cli" ]; then
-  echo "Unmanaged CLI at $cli; refusing replacement" >&2
+  echo "Refusing to replace unmanaged webhelm: $cli" >&2
   exit 3
 else
   ln -s "$source" "$cli"
 fi
-if [ -L "$bin/browser-workspace" ]; then
-  old=$(readlink "$bin/browser-workspace")
-  case "$old" in
+
+# Retire only known obsolete executable links, without deleting their targets.
+legacy="$bin/browser-workspace"
+if [ -L "$legacy" ]; then
+  previous=$(readlink "$legacy")
+  case "$previous" in
     "$HOME/.local/share/uv/tools/browser-workspace/bin/browser-workspace" | "$HOME/Workspace/browser-workspace/bin/browser-workspace")
-      [ ! -e "$bin/browser-workspace.previous-uv-tool" ] && [ ! -L "$bin/browser-workspace.previous-uv-tool" ] || { echo "Old CLI backup already exists" >&2; exit 3; }
-      mv "$bin/browser-workspace" "$bin/browser-workspace.previous-uv-tool" ;;
+      backup="$bin/browser-workspace.previous-uv-tool"
+      if [ -e "$backup" ] || [ -L "$backup" ]; then
+        echo "Cannot archive obsolete CLI link: backup exists at $backup" >&2
+        exit 3
+      fi
+      mv "$legacy" "$backup"
+      ;;
   esac
 fi
-echo "Installed: $cli -> $source"
+
+echo "Global CLI: $cli -> $source"
+case ":$PATH:" in
+  *":$bin:"*) ;;
+  *) echo "Add $bin to PATH for the agent process." >&2 ;;
+esac

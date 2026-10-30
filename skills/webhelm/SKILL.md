@@ -16,44 +16,45 @@ Persistent services owned by this Skill require the global `daemon-service-manag
 
 ## Install and self-setup
 
-Install this standalone skill from its public repository:
+Install the `webhelm` Skill through your agent's normal Skill installation
+mechanism. The Skill may be installed in **any directory**; do not assume
+`~/.agents`, `~/.copilot`, `~/.claude`, or a project-specific location.
+
+If the Skill is not already installed, one supported source is:
 
 ```bash
 npx skills add lalalic/browser-workspace --skill webhelm
 ```
 
-The skill owns one global `webhelm` CLI for external agents and products.
-Install the standalone skill and its global launcher once:
+After loading this `SKILL.md`, resolve its actual containing directory from
+the agent's Skill catalog or loaded file path. Run the installer **relative to
+this Skill**, rather than assuming an agent-specific install location:
 
 ```bash
-npx skills add lalalic/browser-workspace -g -y -s webhelm
-~/.agents/skills/webhelm/scripts/install-global-cli.sh
+SKILL_DIR="<absolute directory containing this SKILL.md>"
+sh "$SKILL_DIR/scripts/install-global-cli.sh"
 webhelm status
 ```
 
-This links `~/.local/bin/webhelm` to the skill's `bin/webhelm` launcher.
-The installer preserves legacy uv-tool shims as backups but will not overwrite
-an unmanaged command. Ensure `~/.local/bin` is in `PATH`. Do not invoke the
-removed `browser-workspace` CLI directly, do not install another global CLI.
-The launcher selects the PyPI runtime and exports `WEBHELM_PLATFORM_DIR`
-to the skill's own platform adapters.
+The installer creates or validates the single user-wide command at
+`~/.local/bin/webhelm`, pointing to **this installed Skill's** launcher. It
+safely migrates known managed links, refuses to replace unrelated commands,
+and is idempotent. Ensure `~/.local/bin` is on the agent process's `PATH`.
+The Skill owns its runtime and platform adapters; callers must not configure
+a separate platform directory or use a different executable. Once setup
+succeeds, **all agents, products, and scripts invoke only `webhelm`**:
 
 ```bash
-bw() { webhelm "$@"; }
-bw status
-bw session start
+webhelm session start
+webhelm platform list
+webhelm platform profile chatgpt
 ```
-
-
-Set `WEBHELM_CLI_SOURCE` to pin a version (`browser-workspace==0.4.22`) or a local
-checkout path when developing the CLI itself.
 
 The Chrome Web Store extension is optional for basic browser control;
 when needed for workspace grouping, the skill must open the official listing
 in the managed profile, request user approval for installation, and verify
 the extension bridge before claiming it is ready. Never silently alter the
 user's default Chrome profile or bypass Chrome Store approval.
-The `uvx` entry point is provided by the `browser-workspace` PyPI distribution.
 
 Use one session-owned execution path for orchestrated browser work:
 
@@ -76,10 +77,10 @@ For ChatGPT lifecycle `new-turn`, keep one public action and select its delivery
 
 ```bash
 # Omitted mode defaults to async: durable queue and private dispatcher session.
-bw platform run chatgpt new-turn --config turn.json
+webhelm platform run chatgpt new-turn --config turn.json
 
 # Explicit synchronous opt-in: reuse the caller-owned session.
-bw platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config turn.json
+webhelm platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config turn.json
 ```
 
 Config may also select the mode with `{"mode":"async"}` or
@@ -123,7 +124,7 @@ After repairing site-specific platform code and verifying it against the real si
 Default workspace is `Harness`:
 
 ```bash
-bw session start
+webhelm session start
 ```
 
 Normal agents do not choose or manage workspaces. `session start` defaults to `Harness`; the `--workspace` implementation option is hidden from normal CLI help. Workspace lifecycle is not exposed through the agent CLI. Product runtimes that need persistent isolation discover the product-only Node admin helper with `webhelm status`, then call `ensureWorkspace` / `deleteWorkspace` through that helper.
@@ -131,7 +132,7 @@ Normal agents do not choose or manage workspaces. `session start` defaults to `H
 Start directly at a URL when known:
 
 ```bash
-bw session start --url https://example.com
+webhelm session start --url https://example.com
 ```
 
 The result is JSON containing `session_id`, `workspace`, `target_id`, the starting `url`, and `workspace_supported`.
@@ -143,7 +144,7 @@ Browser Workspace self-manages exactly one machine-wide persistent, visible Chro
 `session exec` reads Python from stdin. Helpers are already imported; do not import another browser package.
 
 ```bash
-bw session exec <session_id> <<'PY'
+webhelm session exec <session_id> <<'PY'
 print(page_info())
 print(snapshot())
 PY
@@ -152,7 +153,7 @@ PY
 Python state persists across later calls in the same session:
 
 ```bash
-bw session exec <session_id> <<'PY'
+webhelm session exec <session_id> <<'PY'
 meeting_name = "Demo"
 print(current_tab())
 PY
@@ -161,7 +162,7 @@ PY
 Then later:
 
 ```bash
-bw session exec <session_id> <<'PY'
+webhelm session exec <session_id> <<'PY'
 print(meeting_name)
 PY
 ```
@@ -171,7 +172,7 @@ A Python file may also be used with `--code-file`.
 ## Stop
 
 ```bash
-bw session stop <session_id>
+webhelm session stop <session_id>
 ```
 
 Stopping closes every tab owned or opened by that session—including tabs created with `new_tab()`, `bh.new_tab()`, and detected child/popup tabs—then destroys the session's Python namespace. Raw `cdp("Target.createTarget", ...)` is rejected; use `new_tab()` so Browser Workspace can own and group the tab. It does not close unrelated browser tabs. Do not reuse the ID afterward.
@@ -179,11 +180,11 @@ Stopping closes every tab owned or opened by that session—including tabs creat
 A safe shell structure is:
 
 ```bash
-SESSION_JSON=$(bw session start)
+SESSION_JSON=$(webhelm session start)
 SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
-trap 'bw session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
+trap 'webhelm session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
 
-bw session exec "$SESSION_ID" <<'PY'
+webhelm session exec "$SESSION_ID" <<'PY'
 print(snapshot())
 PY
 ```
@@ -293,23 +294,23 @@ Platform rules:
 Normal orchestrator workflow:
 
 ```bash
-SESSION_JSON=$(bw session start --url https://example.com)
+SESSION_JSON=$(webhelm session start --url https://example.com)
 SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
 
-bw platform run microsoft-teams meeting \
+webhelm platform run microsoft-teams meeting \
   --session-id "$SESSION_ID" \
   --config /path/to/config.json
 
 # If it fails: inspect/self-heal using the same SESSION_ID, write the repair
 # back to the platform implementation, then resume safely.
 
-bw session stop "$SESSION_ID"
+webhelm session stop "$SESSION_ID"
 ```
 
 One-shot mode is explicit and is not self-healing:
 
 ```bash
-bw platform run microsoft-teams meeting \
+webhelm platform run microsoft-teams meeting \
   --auto-session \
   --config /path/to/config.json
 ```
@@ -362,20 +363,20 @@ Read the matching platform `README.md` and `manifest.yaml` before invoking or mo
 List available adapters and inspect a platform with:
 
 ```bash
-bw platform list
-bw platform profile z
+webhelm platform list
+webhelm platform profile z
 ```
 
 ## Installation
 
-Requires `uv`/`uvx`. Use the global launcher to select the published wheel:
+Use the global `webhelm` command, installed from this Skill:
 
 ```bash
 webhelm status
 webhelm platform list
 ```
 
-`uvx` resolves the published Python wheel and installs the dependencies declared in `pyproject.toml`. The installed CLI reuses the same Browser Workspace Chrome profile and Session Daemon socket.
+The installed CLI reuses the Browser Workspace Chrome profile and Session Daemon socket.
 
 There is no required separate Browser Harness installation.
 

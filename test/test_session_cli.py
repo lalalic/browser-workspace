@@ -82,7 +82,7 @@ def test_skill_uses_published_uvx_cli():
     skill = (ROOT / "skills/webhelm/SKILL.md").read_text()
     launcher = (ROOT / "skills/webhelm/bin/webhelm").read_text()
     assert "browser-workspace@latest" in launcher
-    assert "~/.agents/skills/webhelm/scripts/install-global-cli.sh" in skill
+    assert 'sh "$SKILL_DIR/scripts/install-global-cli.sh"' in skill
     assert "session start" in skill
     assert "platform run" in skill
 

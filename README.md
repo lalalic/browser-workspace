@@ -4,21 +4,21 @@ Browser Workspace provides the browser runtime and generic CLI. The WebHelm skil
 
 ## Public interface
 
-External agents and products use only the global `webhelm` CLI. Install the
-WebHelm skill, then link its launcher into the user-wide executable directory:
+Agents and products invoke only the global `webhelm` command. Install the
+WebHelm Skill through any agent's normal Skill mechanism (for example,
+`npx skills add lalalic/browser-workspace --skill webhelm`). The Skill may
+live in any directory. Its `SKILL.md` tells the agent to run
+`scripts/install-global-cli.sh` **relative to that installed Skill**.
 
-```bash
-npx skills add lalalic/browser-workspace -g -y -s webhelm
-~/.agents/skills/webhelm/scripts/install-global-cli.sh
-webhelm --help
-```
+The installer points `~/.local/bin/webhelm` to the Skill's launcher, safely
+migrates known old links, and refuses to overwrite unrelated user commands.
+Ensure `~/.local/bin` is on `PATH`. No agent or product needs to know the
+Skill's installation directory, runtime package, or platform directory after
+setup. There is no supported `browser-workspace` CLI command.
 
-The installer migrates a known old uv-tool shim safely and refuses to replace
-unrelated commands. Ensure `~/.local/bin` is in `PATH`. The global launcher
-sets `WEBHELM_PLATFORM_DIR` to the installed WebHelm skill and resolves the PyPI
-runtime. The old `browser-workspace` executable is not supported.
-For local unreleased testing, set `WEBHELM_CLI_SOURCE=/path/to/browser-workspace`.\nIf a locally rebuilt wheel has the same version, set `WEBHELM_CLI_REFRESH=1` for that invocation.
-
+For a local unreleased CLI build, developers may set
+`WEBHELM_CLI_SOURCE=/absolute/path/to/browser-workspace` and
+`WEBHELM_CLI_REFRESH=1` when testing a rebuilt wheel with the same version.
 
 The CLI has two public execution paths:
 
@@ -78,7 +78,7 @@ the CLI package. The runner reads the skill-owned directory from
 `WEBHELM_PLATFORM_DIR`:
 
 ```bash
-WEBHELM_PLATFORM_DIR="$HOME/.agents/skills/webhelm/platforms" webhelm platform list
+webhelm platform list
 ```
 
 By default Browser Workspace owns exactly one machine-wide persistent, visible Chrome instance. Every session and runtime reuses that same Browser Workspace Chrome; config/runtime overrides never create another Chrome. It uses a Browser Workspace-managed user-data directory, prefers CDP port 9222, and selects the next available candidate only when starting the singleton for the first time. Users do not manage Chrome profiles or remote-debugging settings. Chrome Stable no longer permits silent `--load-extension` for local unpacked extensions, so the extension is treated as an optional workspace-grouping enhancement rather than a prerequisite for browser sessions.
@@ -124,7 +124,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const status = JSON.parse(
-  execFileSync("uvx", ["--from", "browser-workspace", "webhelm", "status"], { encoding: "utf8" })
+  execFileSync("webhelm", ["status"], { encoding: "utf8" })
 );
 const { ensureWorkspace, deleteWorkspace } =
   await import(pathToFileURL(status.admin_helper).href);
@@ -201,4 +201,4 @@ webhelm platform profile wechat-channels
 
 The package entry point is `browser_workspace_app.cli:main`, and Python dependencies are managed by `pyproject.toml`. This uses the same existing Chrome profile and Session Daemon socket as the CLI; it does **not** start a second browser or daemon when the existing one is healthy.
 
-Build with `uv build`, then validate with `uvx --from dist/browser_workspace-<version>-py3-none-any.whl webhelm --help`. Run tests with `uv run --with pytest pytest -q` (covers `test/` and `skills/`) and `node --test test/workspace-manager.test.mjs`. The PyPI publishing workflow uses GitHub OIDC trusted publishing; configure `lalalic/browser-workspace` with the `pypi` environment as the publisher on PyPI before the first tag release.
+Build with `uv build`, then validate the built CLI through the global launcher with `WEBHELM_CLI_SOURCE=/absolute/path/to/dist/package.whl webhelm --help`. Run tests with `uv run --with pytest pytest -q` (covers `test/` and `skills/`) and `node --test test/workspace-manager.test.mjs`. The PyPI publishing workflow uses GitHub OIDC trusted publishing; configure `lalalic/browser-workspace` with the `pypi` environment as the publisher on PyPI before the first tag release.

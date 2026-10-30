@@ -15,7 +15,7 @@ def test_python_webhelm_entrypoint():
     metadata=tomllib.loads((ROOT/'pyproject.toml').read_text())
     assert metadata['project']['scripts']['webhelm']=='browser_workspace_app.cli:main'
     assert 'browser-workspace' not in metadata['project']['scripts']
-    assert '~/.agents/skills/webhelm/scripts/install-global-cli.sh' in (ROOT/'skills/webhelm/SKILL.md').read_text()
+    assert 'sh "$SKILL_DIR/scripts/install-global-cli.sh"' in (ROOT/'skills/webhelm/SKILL.md').read_text()
 
 
 def test_default_workspace_is_Harness():
@@ -50,7 +50,8 @@ def test_skill_launcher_uses_its_own_platforms_from_any_location(tmp_path):
 
 def test_skill_documents_webhelm_commands():
     skill=(ROOT/'skills/webhelm/SKILL.md').read_text()
-    assert 'bw() { webhelm "$@"; }' in skill
+    assert 'webhelm platform list' in skill
+    assert 'bw platform' not in skill
     readme=(ROOT/'README.md').read_text()
     assert 'npx skills add lalalic/browser-workspace --skill webhelm' in readme
     assert 'webhelm session start' in readme
