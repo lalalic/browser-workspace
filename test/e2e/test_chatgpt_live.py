@@ -1,6 +1,6 @@
 """Live ChatGPT E2E: run explicitly with BW_CHATGPT_E2E=1.
 
-Uses the repository's canonical platforms/ sources and a real browser session.
+Uses the WebHelm skill's canonical platform sources and a real browser session.
 Never accepts a cleared composer as proof for durable messages.
 """
 import json
@@ -14,12 +14,14 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-CLI = ROOT / 'bin/browser-workspace'
+CLI = ['uvx', '--from', 'browser-workspace', 'webhelm']
 pytestmark = pytest.mark.skipif(os.getenv('BW_CHATGPT_E2E') != '1', reason='requires authenticated live ChatGPT session')
 
 
 def cli(*args, input=None):
-    proc = subprocess.run([str(CLI), *args], input=input, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=150)
+    env = os.environ.copy()
+    env.setdefault('WEBHELM_PLATFORM_DIR', str(ROOT / 'skills/webhelm/platforms'))
+    proc = subprocess.run([*CLI, *args], input=input, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=150, env=env)
     data = json.loads(proc.stdout.strip().splitlines()[-1])
     assert proc.returncode == 0, f'{args}: {data!r} {proc.stderr}'
     return data

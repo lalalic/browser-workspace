@@ -1,0 +1,44 @@
+platform: deepseek
+display_name: DeepSeek
+status: verified
+last_verified: 2026-10-29
+actions:
+  validate: actions/_validate.py
+  understand-image: actions/_understand_image.py
+  new-thread: actions/_new_thread.py
+  new-turn: actions/_new_turn.py
+verification:
+  status: verified
+  last_verified: 2026-10-29
+  evidence: >-
+    Live validate returned ready=true and accepts_images=true. understand-image
+    uploaded a generated PNG, submitted once, and returned WEBHELM IMAGE CHECK
+    7429, a red square, and a blue circle. Verified conversation
+    68155317-aece-4988-83b0-e0881d33064a; screenshot /tmp/deepseek-action-verified.png.
+    Other accepted image formats remain untested.
+    new-thread and new-turn submitted exactly two messages to thread
+    c4fc7a14-d5e9-4edf-9b49-6facefbc9a91 and returned the same durable ID.
+    The continuation recalled WEBHELM-4826 from the first turn. Screenshot
+    /tmp/deepseek-lifecycle-verified.png. Draft protection, active-response
+    waiting, and redirect rejection also have focused regression coverage.
+    understand-image was reverified after delegating attachment and submission
+    to the shared new-thread lifecycle in thread
+    5a158ecc-14ac-443a-bb66-6452632440d5; the same PNG heading and shapes were
+    returned correctly. Twenty focused regression checks passed.
+flows:
+  new-thread:
+    status: implemented_unverified
+    last_verified: 2026-10-29
+    note: Submission verified live; synchronous answer return is unit-tested only.
+  new-turn:
+    status: implemented_unverified
+    last_verified: 2026-10-29
+    note: Submission verified live; synchronous answer return is unit-tested only.
+capabilities:
+  - non-mutating-readiness-validation
+  - image-question-answering
+  - assistant-completion
+  - read-only-resume
+  - persistent-thread
+  - submit-verification
+  - lifecycle-control-transfer

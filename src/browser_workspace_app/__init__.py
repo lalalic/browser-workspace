@@ -1,1 +1,0 @@
-"""Browser Workspace Python distribution."""

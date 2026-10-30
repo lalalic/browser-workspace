@@ -20,7 +20,7 @@ def load_execute(monkeypatch):
     monkeypatch.setitem(sys.modules, "browser_harness.admin", admin)
     monkeypatch.setitem(sys.modules, "browser_harness.helpers", helpers)
 
-    loader = importlib.machinery.SourceFileLoader("session_daemon_test", "session_daemon.py")
+    loader = importlib.machinery.SourceFileLoader("session_daemon_test", "src/session_daemon.py")
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

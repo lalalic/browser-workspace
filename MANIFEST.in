@@ -1,6 +1,0 @@
-recursive-include platforms *
-recursive-exclude platforms __pycache__ *.pyc *.pyo
-
-include platform_runner.py
-
-include chatgpt_delivery_errors.py

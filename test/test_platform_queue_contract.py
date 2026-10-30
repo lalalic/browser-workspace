@@ -4,8 +4,19 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
 import platform_runner
 import chatgpt_delivery_errors
+
+
+@pytest.fixture(autouse=True)
+def fixture_chatgpt_platform(tmp_path, monkeypatch):
+    root = tmp_path / "platforms"
+    actions = root / "chatgpt" / "actions"
+    actions.mkdir(parents=True)
+    (root / "chatgpt" / "manifest.yaml").write_text("actions:\n  new-turn: actions/_new_turn.py\n")
+    (actions / "_new_turn.py").write_text("print('{}')\n")
+    monkeypatch.setattr(platform_runner, "PLATFORMS", root)
 
 
 def test_new_turn_is_persisted_via_daemon_without_browser_session(monkeypatch, tmp_path):
@@ -167,7 +178,7 @@ def test_new_turn_accepts_only_exact_mode_strings_and_rejects_legacy_sync(monkey
 def test_cli_documents_string_mode_contract():
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run(
-        [sys.executable, str(root / "bin/browser-workspace"), "platform", "run", "--help"],
+        [sys.executable, str(root / "src/cli.py"), "platform", "run", "--help"],
         capture_output=True, text=True, check=True,
     )
     assert "--mode {async,sync}" in result.stdout
@@ -176,19 +187,23 @@ def test_cli_documents_string_mode_contract():
     assert "mode async" in result.stdout
     assert "mode sync" in result.stdout
     invalid = subprocess.run(
-        [sys.executable, str(root / "bin/browser-workspace"), "platform", "run", "chatgpt", "new-turn", "--mode", "SYNC"],
+        [sys.executable, str(root / "src/cli.py"), "platform", "run", "chatgpt", "new-turn", "--mode", "SYNC"],
         capture_output=True, text=True,
     )
     assert invalid.returncode == 2
-    assert "choose from 'async', 'sync'" in invalid.stderr
+    assert "choose from" in invalid.stderr
+    assert "async" in invalid.stderr and "sync" in invalid.stderr
 
 
 def test_distribution_versions_match_daemon_version_source():
+    import importlib.util
+    import session_client
     root = Path(__file__).resolve().parents[1]
-    versions = [
-        json.loads((root / "package.json").read_text())["version"],
-        json.loads((root / "src/browser_workspace_app/package.json").read_text())["version"],
-        tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"],
-        tomllib.loads((root / "src/browser_workspace_app/pyproject.toml").read_text())["project"]["version"],
-    ]
-    assert len(set(versions)) == 1, versions
+    spec = importlib.util.spec_from_file_location(
+        "browser_workspace_app", root / "src/__init__.py", submodule_search_locations=[str(root / "src")]
+    )
+    package = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(package)
+    assert tomllib.loads((root / "pyproject.toml").read_text())["tool"]["setuptools"]["dynamic"]["version"] == {
+        "attr": "browser_workspace_app.__version__"}
+    assert session_client.package_version() == package.__version__

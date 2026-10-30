@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-CLI = ROOT / "bin/browser-workspace"
-ADMIN = ROOT / "node/admin.mjs"
+CLI = ROOT / "src/cli.py"
+ADMIN = ROOT / "src/admin.mjs"
 
 
 def load_cli(monkeypatch, ensure_daemon_impl):
@@ -18,7 +18,9 @@ def load_cli(monkeypatch, ensure_daemon_impl):
     session_client = types.ModuleType("session_client")
     session_client.SOCKET_PATH = Path("/tmp/browser-workspace-test.sock")
     session_client.ensure_daemon = ensure_daemon_impl
+    session_client.package_version = lambda: "test"
     platform_runner = types.ModuleType("platform_runner")
+    platform_runner.PLATFORMS = Path("/tmp/platforms")
     platform_runner.run_platform_action = lambda *args, **kwargs: {"result": {"ok": True}}
     monkeypatch.setitem(sys.modules, "session_client", session_client)
     monkeypatch.setitem(sys.modules, "platform_runner", platform_runner)

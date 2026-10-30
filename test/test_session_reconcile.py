@@ -22,7 +22,7 @@ def load_daemon(monkeypatch):
     monkeypatch.setitem(sys.modules, 'browser_harness.admin', admin)
     monkeypatch.setitem(sys.modules, 'browser_harness.helpers', helpers)
     monkeypatch.setitem(sys.modules, 'browser_harness._ipc', ipc)
-    spec = importlib.util.spec_from_file_location('reconcile_daemon', Path(__file__).resolve().parents[1] / 'session_daemon.py')
+    spec = importlib.util.spec_from_file_location('reconcile_daemon', Path(__file__).resolve().parents[1] / 'src/session_daemon.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

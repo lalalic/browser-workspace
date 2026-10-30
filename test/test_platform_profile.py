@@ -2,6 +2,38 @@ import pytest
 import platform_runner
 
 
+@pytest.fixture(autouse=True)
+def fixture_platforms(tmp_path, monkeypatch):
+        root = tmp_path / "platforms"
+        for name, manifest in {
+                "xhs": """fields:
+    title:
+        type: string
+        max_chars: 20
+media:
+    images:
+        max_count: 18
+capabilities:
+    read_comments: true
+""",
+                "youtube": """fields:
+    title:
+        type: string
+        max_chars: 100
+    visibility:
+        default: PRIVATE
+""",
+                "chatgpt": "actions:\n  temporary-submit: actions/_temporary_submit.py\n",
+        }.items():
+                directory = root / name
+                directory.mkdir(parents=True)
+                (directory / "manifest.yaml").write_text(manifest)
+        actions = root / "chatgpt" / "actions"
+        actions.mkdir()
+        (actions / "_temporary_submit.py").write_text("print('Temporary Chat')\n")
+        monkeypatch.setattr(platform_runner, "PLATFORMS", root)
+
+
 def test_platform_profile_owns_publish_contract():
     xhs = platform_runner.platform_profile('xhs')
     assert xhs['fields']['title']['max_chars'] == 20

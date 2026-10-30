@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "browser-workspace"
-version = "0.4.21"
-description = "Agent browser workspace with persistent Python sessions, tab leasing, snapshots, and platform workflows."
+dynamic = ["version"]
+description = "Agent browser runtime with persistent sessions, tab leasing, and browser automation."
 requires-python = ">=3.11"
 dependencies = [
   "browser-harness==0.1.13",
@@ -17,18 +17,19 @@ dependencies = [
 ]
 
 [project.scripts]
-browser-workspace = "browser_workspace_app.cli:main"
 webhelm = "browser_workspace_app.cli:main"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+packages = ["browser_workspace_app"]
+package-dir = {"browser_workspace_app" = "src"}
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools.dynamic]
+version = {attr = "browser_workspace_app.__version__"}
 
 [tool.setuptools.package-data]
-browser_workspace_app = ["**/*"]
+browser_workspace_app = ["browser-harness/*.py", "admin.mjs", "licenses/*.txt"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "skills/webhelm/platforms/chatgpt/runtime"]
 addopts = "--import-mode=importlib"
+testpaths = ["test", "skills"]

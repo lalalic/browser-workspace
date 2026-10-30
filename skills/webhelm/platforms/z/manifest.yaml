@@ -1,0 +1,21 @@
+platform: z
+display_name: Z.ai
+status: partially_verified
+last_verified: 2026-10-29
+actions:
+  new-thread: actions/_new_thread.py
+  new-turn: actions/_new_turn.py
+verification:
+  status: partially_verified
+  last_verified: 2026-10-29
+  evidence: >-
+    Read-only live inspection confirmed the composer and send-button controls;
+    the public frontend bundle uses /c/{id} for chat routes. Lifecycle submission
+    actions have not been exercised against the live account.
+flows:
+  lifecycle-new-thread: partially_verified
+  lifecycle-new-turn: partially_verified
+capabilities:
+  - persistent-thread
+  - submit-verification
+  - lifecycle-control-transfer

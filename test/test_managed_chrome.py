@@ -2,7 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 
-MODULE = Path(__file__).resolve().parents[1] / "managed_chrome.py"
+MODULE = Path(__file__).resolve().parents[1] / "src/managed_chrome.py"
 
 
 def load_module(monkeypatch, tmp_path):

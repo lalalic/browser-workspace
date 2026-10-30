@@ -6,7 +6,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSION = ROOT / 'session_daemon.py'
+SESSION = ROOT / 'src/session_daemon.py'
 
 
 def session_functions(*names):
@@ -45,4 +45,4 @@ def test_cleanup_closes_owner_pipe_after_graceful_stop():
 
 def test_repository_does_not_vendor_browser_harness():
     assert not (ROOT/'src/browser_harness').exists()
-    assert not (ROOT/'src/browser_workspace_app/src/browser_harness').exists()
+    assert not (ROOT/'src/src/browser_harness').exists()

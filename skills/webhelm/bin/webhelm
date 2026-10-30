@@ -1,0 +1,18 @@
+#!/bin/sh
+# The global CLI is a symlink to this launcher. Resolve it before locating the skill.
+set -eu
+SOURCE=$0
+while [ -L "$SOURCE" ]; do
+  PARENT=$(CDPATH= cd -- "$(dirname -- "$SOURCE")" && pwd -P)
+  TARGET=$(readlink "$SOURCE")
+  case "$TARGET" in
+    /*) SOURCE=$TARGET ;;
+    *) SOURCE="$PARENT/$TARGET" ;;
+  esac
+done
+SKILL_DIR=$(CDPATH= cd -- "$(dirname -- "$SOURCE")/.." && pwd -P)
+export WEBHELM_PLATFORM_DIR="${WEBHELM_PLATFORM_DIR:-$SKILL_DIR/platforms}"
+if [ "${WEBHELM_CLI_REFRESH:-0}" = "1" ]; then
+  exec uvx --refresh --from "${WEBHELM_CLI_SOURCE:-browser-workspace@latest}" webhelm "$@"
+fi
+exec uvx --from "${WEBHELM_CLI_SOURCE:-browser-workspace@latest}" webhelm "$@"

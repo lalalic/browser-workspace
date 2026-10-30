@@ -1,14 +1,30 @@
 # WebHelm
 
-WebHelm is a standalone browser automation skill and CLI built around persistent Python sessions, workspace-owned Chrome tabs, compact snapshot refs, and built-in platform workflows.
+Browser Workspace provides the browser runtime and generic CLI. The WebHelm skill and site-specific platform adapters live under `skills/webhelm/` and are distributed separately from the CLI package.
 
 ## Public interface
+
+External agents and products use only the global `webhelm` CLI. Install the
+WebHelm skill, then link its launcher into the user-wide executable directory:
+
+```bash
+npx skills add lalalic/browser-workspace -g -y -s webhelm
+~/.agents/skills/webhelm/scripts/install-global-cli.sh
+webhelm --help
+```
+
+The installer migrates a known old uv-tool shim safely and refuses to replace
+unrelated commands. Ensure `~/.local/bin` is in `PATH`. The global launcher
+sets `WEBHELM_PLATFORM_DIR` to the installed WebHelm skill and resolves the PyPI
+runtime. The old `browser-workspace` executable is not supported.
+For local unreleased testing, set `WEBHELM_CLI_SOURCE=/path/to/browser-workspace`.\nIf a locally rebuilt wheel has the same version, set `WEBHELM_CLI_REFRESH=1` for that invocation.
+
 
 The CLI has two public execution paths:
 
 ```bash
-# Known platform action: runner owns start/stop.
-webhelm platform run PLATFORM ACTION [--config FILE] [--url URL]
+# Platform action: caller owns the browser session.
+webhelm platform run PLATFORM ACTION --session-id SESSION_ID [--config FILE]
 
 # Custom browser workflow: caller owns lifecycle.
 webhelm session start [--url URL]
@@ -30,18 +46,21 @@ legacy `sync` config key are rejected (for example, `{"mode": true}` and
 
 `session stop` closes all tabs created/owned by that session while leaving unrelated browser tabs untouched. Raw session CDP cannot create targets: `Target.createTarget` is rejected and callers must use `new_tab()` so workspace/session ownership is preserved.
 
-## Included layers
+## Repository layout
 
 ```text
 browser-workspace
-├── pyproject.toml           pins the external browser-harness runtime dependency
-├── agent-workspace/         Browser Workspace helper layer
-├── extension/               Chrome workspace/tab manager
-├── session_daemon.py        persistent Python session service
-├── platforms/               site/domain actions + verification metadata
-├── interaction-skills/      browser interaction references
-└── SKILL.md                 single agent-facing skill contract
+├── src/                         CLI, session daemon, platform runner, managed Chrome (package browser_workspace_app)
+│   ├── browser-harness/         helper overlay loaded by browser-harness (BH_AGENT_WORKSPACE)
+│   └── admin.mjs                Node API for products to create/delete persistent workspaces
+├── extension/                   Chrome workspace/tab manager extension
+├── scripts/package-extension.sh extension release zip (used by CI)
+├── skills/webhelm/              WebHelm skill: SKILL.md, interaction-skills/, platforms/, scripts/
+├── test/                        CLI, daemon, packaging, and extension tests
+└── site/                        GitHub Pages (privacy policy)
 ```
+
+Site-specific code lives only in `skills/webhelm/platforms/<name>/`, including the ChatGPT durable-queue runtime under `platforms/chatgpt/runtime/`. The CLI package ships no platform code. The version is defined once in `src/__init__.py`.
 
 Agents should load only the WebHelm skill. `browser-harness` and `browser-platforms` are no longer separate runtime/skill dependencies.
 
@@ -49,12 +68,18 @@ Agents should load only the WebHelm skill. `browser-harness` and `browser-platfo
 
 ```bash
 npx skills add lalalic/browser-workspace --skill webhelm
-uvx --from browser-workspace webhelm status
+webhelm status
 ```
 
-The `browser-workspace` PyPI distribution provides the `webhelm` command. The previous `browser-workspace` executable remains supported for compatibility. The repository installer is only for source development.
+The `browser-workspace` PyPI distribution provides the `webhelm` entry point. External callers use the global launcher.
 
-The installer creates the skill-owned `.venv` and links `browser-workspace` to `~/.local/bin` by default.
+Platform actions are supplied by the installed WebHelm skill, not embedded in
+the CLI package. The runner reads the skill-owned directory from
+`WEBHELM_PLATFORM_DIR`:
+
+```bash
+WEBHELM_PLATFORM_DIR="$HOME/.agents/skills/webhelm/platforms" webhelm platform list
+```
 
 By default Browser Workspace owns exactly one machine-wide persistent, visible Chrome instance. Every session and runtime reuses that same Browser Workspace Chrome; config/runtime overrides never create another Chrome. It uses a Browser Workspace-managed user-data directory, prefers CDP port 9222, and selects the next available candidate only when starting the singleton for the first time. Users do not manage Chrome profiles or remote-debugging settings. Chrome Stable no longer permits silent `--load-extension` for local unpacked extensions, so the extension is treated as an optional workspace-grouping enhancement rather than a prerequisite for browser sessions.
 
@@ -92,14 +117,14 @@ webhelm status
 
 The command returns machine-readable JSON including the resolved installation `root`, absolute `admin_helper` path, and daemon status. Calling `status` also ensures the existing Browser Workspace session daemon is ready; it does not create a separate service.
 
-A Node.js product can then load the product-only helper without depending on the `browser-workspace` npm package or hardcoding an install path:
+A Node.js product can then load the product-only helper without hardcoding an install path:
 
 ```js
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const status = JSON.parse(
-  execFileSync("browser-workspace", ["status"], { encoding: "utf8" })
+  execFileSync("uvx", ["--from", "browser-workspace", "webhelm", "status"], { encoding: "utf8" })
 );
 const { ensureWorkspace, deleteWorkspace } =
   await import(pathToFileURL(status.admin_helper).href);
@@ -155,14 +180,12 @@ npx skills add lalalic/browser-workspace --skill webhelm
 Run the branded CLI using the published Python/PyPI runtime:
 
 ```bash
-uvx --from browser-workspace webhelm status
-uvx --from browser-workspace webhelm session start
-uvx --from browser-workspace webhelm platform profile chatgpt
+webhelm status
+webhelm session start
+webhelm platform profile chatgpt
 ```
 
-The `webhelm` command delegates to the existing Browser Workspace runtime.
-The legacy `browser-workspace` CLI and Python entry point remain functional
-for existing integrations. WebHelm owns its managed Chrome profile and daemon;
+The `webhelm` command uses the published Browser Workspace runtime. WebHelm owns its managed Chrome profile and daemon;
 it does not modify a user's default Chrome profile. The Chrome Store extension
 may require explicit user approval.
 
@@ -171,11 +194,11 @@ may require explicit user approval.
 Browser Workspace is also packaged as a Python CLI. Once its PyPI trusted publisher is configured and a `pypi-v*` release tag is published, invoke it with:
 
 ```bash
-uvx webhelm status
-uvx webhelm session list
-uvx webhelm platform profile wechat-channels
+webhelm status
+webhelm session list
+webhelm platform profile wechat-channels
 ```
 
-The package entry point is `browser_workspace_app.cli:main`, and Python dependencies are managed by `pyproject.toml`. This uses the same existing Chrome profile and Session Daemon socket as the previous npm CLI; it does **not** start a second browser or daemon when the existing one is healthy.
+The package entry point is `browser_workspace_app.cli:main`, and Python dependencies are managed by `pyproject.toml`. This uses the same existing Chrome profile and Session Daemon socket as the CLI; it does **not** start a second browser or daemon when the existing one is healthy.
 
-Before building, run `python tools/sync-pypi-package.py` to copy canonical Python and packaged platform assets to the wheel source. Run `uv build`, then validate with `uvx --from dist/browser_workspace-<version>-py3-none-any.whl webhelm status`. The PyPI publishing workflow uses GitHub OIDC trusted publishing; configure `lalalic/browser-workspace` with the `pypi` environment as the publisher on PyPI before the first tag release.
+Build with `uv build`, then validate with `uvx --from dist/browser_workspace-<version>-py3-none-any.whl webhelm --help`. Run tests with `uv run --with pytest pytest -q` (covers `test/` and `skills/`) and `node --test test/workspace-manager.test.mjs`. The PyPI publishing workflow uses GitHub OIDC trusted publishing; configure `lalalic/browser-workspace` with the `pypi` environment as the publisher on PyPI before the first tag release.

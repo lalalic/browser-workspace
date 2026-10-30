@@ -5,21 +5,36 @@ import platform_runner
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_platform_action_resolves_from_actions_directory():
-    path = platform_runner.action_path("microsoft-teams", "meeting")
-    assert path == ROOT / "platforms" / "microsoft-teams" / "actions" / "_meeting.py"
+def create_platform(tmp_path, monkeypatch, name="demo", action="meeting"):
+    platforms = tmp_path / "platforms"
+    actions = platforms / name / "actions"
+    actions.mkdir(parents=True)
+    filename = f"_{action.replace('-', '_')}.py"
+    (actions / filename).write_text("print('ok')\n")
+    (platforms / name / "manifest.yaml").write_text(f"actions:\n  {action}: actions/{filename}\n")
+    monkeypatch.setattr(platform_runner, "PLATFORMS", platforms)
+    return platforms
+
+
+def test_platform_action_resolves_from_actions_directory(tmp_path, monkeypatch):
+    platforms = create_platform(tmp_path, monkeypatch)
+    path = platform_runner.action_path("demo", "meeting")
+    assert path == platforms / "demo" / "actions" / "_meeting.py"
 
 
 def test_platform_action_source_gets_sibling_import_path(tmp_path):
     cfg = tmp_path / "config.json"
     cfg.write_text("{}")
-    path = ROOT / "platforms" / "microsoft-teams" / "actions" / "_meeting.py"
+    path = tmp_path / "actions" / "_meeting.py"
+    path.parent.mkdir()
+    path.write_text("CONFIG_PATH = '__CFG_PATH__'\n")
     source = platform_runner.prepare_action(path, cfg)
     assert "sys.path.insert(0" in source
     assert str(cfg.resolve()) in source
 
 
 def test_platform_runner_owns_lifecycle_and_hides_session_id(monkeypatch, tmp_path):
+    create_platform(tmp_path, monkeypatch)
     cfg = tmp_path / "config.json"
     cfg.write_text('{"action":"status"}')
     calls = []
@@ -41,7 +56,7 @@ def test_platform_runner_owns_lifecycle_and_hides_session_id(monkeypatch, tmp_pa
 
     monkeypatch.setattr(platform_runner, "request", fake_request)
     result = platform_runner.run_platform_action(
-        "microsoft-teams",
+        "demo",
         "meeting",
         config_path=str(cfg),
         auto_session=True,
@@ -58,6 +73,7 @@ def test_platform_runner_owns_lifecycle_and_hides_session_id(monkeypatch, tmp_pa
 
 
 def test_platform_runner_stops_after_action_failure(monkeypatch, tmp_path):
+    create_platform(tmp_path, monkeypatch)
     cfg = tmp_path / "config.json"
     cfg.write_text('{"action":"status"}')
     calls = []
@@ -74,7 +90,7 @@ def test_platform_runner_stops_after_action_failure(monkeypatch, tmp_path):
 
     monkeypatch.setattr(platform_runner, "request", fake_request)
     result = platform_runner.run_platform_action(
-        "microsoft-teams",
+        "demo",
         "meeting",
         config_path=str(cfg),
         auto_session=True,
@@ -85,7 +101,8 @@ def test_platform_runner_stops_after_action_failure(monkeypatch, tmp_path):
     assert result["result"]["cleanup"]["closed_tabs"] == 1
 
 
-def test_helper_module_is_not_a_public_platform_action():
+def test_helper_module_is_not_a_public_platform_action(tmp_path, monkeypatch):
+    create_platform(tmp_path, monkeypatch, name="chatgpt", action="new-turn")
     try:
         platform_runner.action_path("chatgpt", "readiness")
     except FileNotFoundError as exc:
@@ -95,6 +112,7 @@ def test_helper_module_is_not_a_public_platform_action():
 
 
 def test_platform_runner_reuses_caller_owned_session(monkeypatch,tmp_path):
+    create_platform(tmp_path, monkeypatch)
     cfg=tmp_path/'config.json'; cfg.write_text('{"action":"status"}')
     calls=[]
     def fake_request(payload):
@@ -102,7 +120,7 @@ def test_platform_runner_reuses_caller_owned_session(monkeypatch,tmp_path):
         if payload['op']=='exec': return {'ok':True,'stdout':'done\n','stderr':''}
         raise AssertionError(payload)
     monkeypatch.setattr(platform_runner,'request',fake_request)
-    result=platform_runner.run_platform_action('microsoft-teams','meeting',config_path=str(cfg),session_id='owned-session')
+    result=platform_runner.run_platform_action('demo','meeting',config_path=str(cfg),session_id='owned-session')
     assert [c['op'] for c in calls]==['exec']
     assert calls[0]['session_id']=='owned-session'
     assert result['session_mode']=='caller_owned_self_heal_capable'
@@ -110,11 +128,12 @@ def test_platform_runner_reuses_caller_owned_session(monkeypatch,tmp_path):
     assert result['result']['cleanup']=={'caller_owned_session':True}
 
 
-def test_platform_runner_requires_explicit_session_mode(tmp_path):
+def test_platform_runner_requires_explicit_session_mode(tmp_path, monkeypatch):
+    create_platform(tmp_path, monkeypatch)
     cfg = tmp_path / "config.json"
     cfg.write_text('{"action":"status"}')
     try:
-        platform_runner.run_platform_action("microsoft-teams", "meeting", config_path=str(cfg))
+        platform_runner.run_platform_action("demo", "meeting", config_path=str(cfg))
     except ValueError as exc:
         message = str(exc)
         assert "requires session_id" in message
@@ -124,12 +143,13 @@ def test_platform_runner_requires_explicit_session_mode(tmp_path):
         raise AssertionError("platform runner silently created a session")
 
 
-def test_platform_runner_rejects_session_id_plus_auto_session(tmp_path):
+def test_platform_runner_rejects_session_id_plus_auto_session(tmp_path, monkeypatch):
+    create_platform(tmp_path, monkeypatch)
     cfg = tmp_path / "config.json"
     cfg.write_text('{"action":"status"}')
     try:
         platform_runner.run_platform_action(
-            "microsoft-teams", "meeting", config_path=str(cfg), session_id="s1", auto_session=True
+            "demo", "meeting", config_path=str(cfg), session_id="s1", auto_session=True
         )
     except ValueError as exc:
         assert "mutually exclusive" in str(exc)
@@ -147,3 +167,4 @@ def test_declared_actions_accept_unquoted_yaml_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(platform_runner, "PLATFORMS", platforms)
     resolved = platform_runner.declared_actions("demo")
     assert resolved["post"] == actions / "_post.py"
+    assert platform_runner.list_platforms() == ["demo"]
