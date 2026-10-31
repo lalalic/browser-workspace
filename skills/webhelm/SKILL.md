@@ -37,7 +37,7 @@ The daemon attaches to the existing visible WebHelm Chrome endpoint and keeps th
 
 The session daemon starts lazily and uses a singleton owner lock. If the socket is unreachable while its owner is alive, it refuses duplicate startup. On daemon shutdown, only session-owned tabs are closed. A daemon restart does not recover JavaScript VM namespaces; sessions must be recreated.
 
-The extension remains optional for basic browser control. Workspace CRUD uses its service-worker RPC over the same CDP connection when the published extension is installed. Workspace leasing/grouping is not yet implemented by the Node pilot; the pilot reports this migration gap rather than claiming that tabs are grouped.
+The extension remains optional for basic browser control. Workspace CRUD and root-tab lease allocation use its service-worker RPC over the same CDP connection when the published extension is installed. Root lease release and popup grouping still need live Chrome verification; the mock suite does not establish real extension grouping behavior.
 
 ## Platform support status
 
