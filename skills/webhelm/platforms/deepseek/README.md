@@ -84,3 +84,15 @@ checked before submission; DeepSeek handles remaining server-side processing.
 Actions use semantic DOM controls, not screen coordinates. Callers must explicitly
 choose which local images to disclose to DeepSeek. Never upload private project
 screenshots or documents merely to test the adapter.
+## Unverified submission safeguard (2026-10-31)
+
+The DeepSeek site can create a conversation URL and clear the composer
+without a visible user message or new assistant answer. Those two facts
+do NOT prove the prompt or attachment was accepted. After a brief
+admission window, actions return status=pending, submission_verified=false
+with the known thread ID instead of waiting the full model timeout.
+Only a newly observed matching user message or new completed assistant
+answer proves admission. A pending receipt can be resumed read-only.
+Supply the pending receipt answers_before as min_answer_count on resume
+to avoid mistaking an old answer in an existing thread for a new one.
+Never treat pending as success or generate metadata from it.

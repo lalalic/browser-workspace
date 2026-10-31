@@ -69,6 +69,10 @@ export async function run(cfg, mode, h) {
       await h.goto_url(url);
       await h.wait_for_load();
     }
+    const minCount = cfg.min_answer_count ?? 0;
+    if (!Number.isInteger(minCount) || minCount < 0) {
+      throw new TypeError("min_answer_count must be a nonnegative integer");
+    }
     return waitAnswer(
       h,
       {
@@ -80,9 +84,10 @@ export async function run(cfg, mode, h) {
         source_thread_id: cfg.source_thread_id,
         verified_by: "resumed without resubmitting",
         user_message_id: null,
+        answers_before: minCount,
       },
       cfg,
-      0,
+      minCount,
       timeout,
     );
   }
@@ -179,29 +184,76 @@ export async function run(cfg, mode, h) {
     ) throw new Error("Image preview is not ready; nothing was submitted");
   }
   await h.click(primary + ":not(.ds-button--disabled)");
+  // The new-chat SPA may create a durable thread and clear the composer
+  // without ever saving a user message. That is NOT a delivery receipt.
+  // Do not wait the full model timeout when no accepted user message appears.
+  // Return a read-only-resumable PENDING state with the thread identity.
+  let tentative = null;
   const end = Date.now() + timeout * 1000;
+  const admissionEnd = Date.now() + Math.min(timeout * 1000, 12_000);
   while (Date.now() < end) {
-    const id = threadId((await h.page_info()).url),
-      accepted = await h.js(expression) > before,
-      cleared = await h.js(
-        `document.querySelector(${JSON.stringify(COMPOSER)})?.value===''`,
-      );
-    if (id && accepted && cleared && (!expected || id === expected)) {
-      const receipt = {
-        status: "submitted",
-        mode,
-        project_id: null,
-        thread_id: id,
-        thread_url: `https://chat.deepseek.com/a/chat/s/${id}`,
-        source_thread_id: cfg.source_thread_id,
-        verified_by:
-          "new matching message, cleared composer, and durable thread URL",
-        user_message_id: null,
+    const id = threadId((await h.page_info()).url);
+    const accepted = (await h.js(expression)) > before;
+    const cleared = await h.js(
+      `document.querySelector(${JSON.stringify(COMPOSER)})?.value===''`,
+    );
+    if (id && cleared && (!expected || id === expected)) {
+      if (!tentative) {
+        tentative = {
+          status: "submitted",
+          mode,
+          project_id: null,
+          thread_id: id,
+          thread_url: `https://chat.deepseek.com/a/chat/s/${id}`,
+          source_thread_id: cfg.source_thread_id,
+          user_message_id: null,
+          answers_before: answersBefore,
+        };
+      }
+      if (accepted) {
+        const receipt = {
+          ...tentative,
+          verified_by: "new matching user message, cleared composer, and durable thread URL",
+          submission_verified: true,
+        };
+        if (cfg.wait === false) return receipt;
+        return waitAnswer(h, receipt, cfg, answersBefore, timeout);
+      }
+      // The assistant might become visible before the user-message selector
+      // hydrates. A NEW completed answer in the exact thread is independent
+      // evidence of delivery, but an empty thread is not.
+      const state = await h.js(ANSWER_STATE);
+      if (state.count > answersBefore && state.answer && state.settled) {
+        const receipt = {
+          ...tentative,
+          verified_by: "new settled assistant answer in durable thread",
+          submission_verified: true,
+        };
+        const r = { ...receipt, status: "completed", answer: state.answer };
+        if (cfg.response_format === "json") Object.assign(r, parseJson(state.answer));
+        return r;
+      }
+    }
+    if (Date.now() >= admissionEnd && tentative) {
+      return {
+        ...tentative,
+        status: "pending",
+        submission_verified: false,
+        verified_by: "thread URL and cleared composer only; user message not verified",
+        next_step:
+          "Read-only resume this thread; do not resend the text or image",
       };
-      if (cfg.wait === false) return receipt;
-      return waitAnswer(h, receipt, cfg, answersBefore, timeout);
     }
     await sleep(200);
+  }
+  if (tentative) {
+    return {
+      ...tentative,
+      status: "pending",
+      submission_verified: false,
+      verified_by: "thread URL and cleared composer only; user message not verified",
+      next_step: "Read-only resume this thread; do not resend",
+    };
   }
   throw new Error(
     "Submission may have succeeded but its receipt was not verified; inspect this session before retrying",
