@@ -1,0 +1,10 @@
+.git
+.venv
+__pycache__
+.pytest_cache
+*.pyc
+*.py
+**/*.py
+skills/webhelm/platforms/**/actions/**
+**/__pycache__
+test/

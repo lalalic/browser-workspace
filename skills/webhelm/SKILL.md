@@ -1,435 +1,64 @@
 ---
 name: webhelm
-description: Control the real browser through the WebHelm skill and Python CLI, with leased tab workspaces, persistent Python sessions, compact snapshots, and built-in platform workflows.
-requires:
-  skills:
-    - daemon-service-manage
+description: Control the shared visible Chrome through WebHelm's Node.js daemon, persistent JavaScript sessions, and site automation where a Node adapter is available.
 ---
 
 # WebHelm
 
-WebHelm is the **only browser skill agents should load**. It includes the browser-control runtime, workspace/tab leasing, persistent Python sessions, snapshot refs, and site-specific platform workflows. Do not load or invoke a separate `browser-harness` or `browser-platforms` skill.
+WebHelm is one browser skill and one Node.js product. Its target architecture uses one daemon, one visible managed Chrome instance, one CDP WebSocket, and explicit per-target CDP `sessionId`s. The bundled Chrome extension source in `extension/` is canonical and retains its published extension ID. Do not install a second extension identity or start an independent browser-harness process.
 
-## Service ownership
+## Install and commands
 
-Persistent services owned by this Skill require the global `daemon-service-manage` Skill. Register and manage each service through its CLI, using the enforced `<skillname>/<service-name>` identity; do not create new unqualified PM2 process names. Existing service names are migration inputs, not a reason to bypass namespacing.
-
-## Install and self-setup
-
-Install the `webhelm` Skill through your agent's normal Skill installation
-mechanism. The Skill may be installed in **any directory**; do not assume
-`~/.agents`, `~/.copilot`, `~/.claude`, or a project-specific location.
-
-If the Skill is not already installed, one supported source is:
-
-```bash
-npx skills add lalalic/browser-workspace --skill webhelm
-```
-
-After loading this `SKILL.md`, resolve its actual containing directory from
-the agent's Skill catalog or loaded file path. Run the installer **relative to
-this Skill**, rather than assuming an agent-specific install location:
+The runtime requires Node.js 22 or newer and uses only Node built-ins. The npm package is `webhelm`; the public executable is `webhelm`. During local development, `bin/webhelm` runs the adjacent Node source. For a standalone skill install it resolves the published npm package through `npx`.
 
 ```bash
 SKILL_DIR="<absolute directory containing this SKILL.md>"
 sh "$SKILL_DIR/scripts/install-global-cli.sh"
 webhelm status
-```
-
-The installer creates or validates the single user-wide command at
-`~/.local/bin/webhelm`, pointing to **this installed Skill's** launcher. It
-safely migrates known managed links, refuses to replace unrelated commands,
-and is idempotent. Ensure `~/.local/bin` is on the agent process's `PATH`.
-The Skill owns its runtime and platform adapters; callers must not configure
-a separate platform directory or use a different executable. Once setup
-succeeds, **all agents, products, and scripts invoke only `webhelm`**:
-
-```bash
-webhelm session start
-webhelm platform list
-webhelm platform profile chatgpt
-```
-
-The extension is optional for basic browser control. For workspace grouping,
-prefer the published Chrome Web Store extension in **the managed Chrome profile**.
-When Google services are unavailable, use the offline files bundled with this
-Skill. Both paths require user approval in Chrome before installation.
-Never alter the user's default Chrome profile or silently install an extension.
-
-Use one session-owned execution path for orchestrated browser work:
-
-```text
-start one Browser Workspace session
-  -> retain SESSION_ID for the whole workflow
-  -> platform run <platform> <action> --session-id SESSION_ID
-  -> inspect each result
-  -> on recoverable failure, diagnose and self-heal in the SAME session
-  -> write every successful site-specific repair back to the platform code
-  -> continue until the external workflow reaches a terminal outcome
-  -> verify the terminal external state
-finally
-  -> stop SESSION_ID
-```
-
-`platform run` therefore requires `--session-id` by default. The exception is `chatgpt new-turn`, which uses durable asynchronous queue delivery by default and returns `status: submitted` without a browser session. Set `mode` to the exact string `"sync"` in its JSON config or pass `--mode sync` to use immediate delivery in a caller-owned session; sync also returns `status: submitted`. The only accepted values are exact strings `"async"` and `"sync"`; omission defaults to `"async"`. Invalid values, types, or the legacy boolean `sync` config key are rejected. If a normal action omits its required session, the CLI returns a structured error that recommends the `session start -> platform run --session-id -> self-heal -> session stop` workflow. `--auto-session` is an explicit one-shot escape hatch: it creates and cleans up a temporary session automatically, but **does not provide orchestrator self-heal** after failure.
-
-For ChatGPT lifecycle `new-turn`, keep one public action and select its delivery mode only when needed:
-
-```bash
-# Omitted mode defaults to async: durable queue and private dispatcher session.
-webhelm platform run chatgpt new-turn --config turn.json
-
-# Explicit synchronous opt-in: reuse the caller-owned session.
-webhelm platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config turn.json
-```
-
-Config may also select the mode with `{"mode":"async"}` or
-`{"mode":"sync"}`. Values such as `{"mode":true}` and the legacy boolean
-`{"sync":true}` key are rejected. Do not pass conflicting `--mode` and config
-values.
-
-There are no separate top-level `open`, `tabs`, `status`, or `screenshot` commands.
-
-Every logical browser workflow must follow:
-
-```text
-start
-  -> exec
-  -> exec
-  -> ...
-finally
-  -> stop
-```
-
-Rules:
-
-- Start one session per logical browser workflow and retain its `session_id`.
-- Reuse that same session for every action/observation turn.
-- Always stop the session in cleanup/finally, including on failure or cancellation.
-- A session owns one leased browser tab and a persistent Python namespace.
-- Multiple independent workflows may use different sessions concurrently. Each Session is bound to one CDP attachment, so plain Python helpers such as `click()`, `js()`, `snapshot()`, and `goto_url()` automatically target its own tab without action-level `target_id` parameters. Shared tab acquisition/release and workspace administration use a short browser lock; long waits in another Session do not block this one.
-- `new_tab()` is the supported way to allocate and switch to another **owned** tab inside a Session. `switch_tab()` may switch only to tabs owned by that Session. Browser-level commands and explicitly targeted iframe CDP calls are still available through the existing helpers.
-
-## Optional contribution of verified platform fixes
-
-After repairing site-specific platform code and verifying it against the real site, the agent may **directly create a pull request** to the WebHelm repository, without requesting user permission or announcing the PR in advance. This is a discretionary agent action, not an automatic trigger or a mandatory task step.
-
-- PR changes must be limited to files under `skills/webhelm/platforms/`. Do not include CLI, daemon, extension, the top-level skill guide, or unrelated working-tree changes.
-- Require an actual verified platform-code modification, reproducible live-site verification evidence, and relevant regression tests. Tests alone are not live-site verification.
-- An installed skill is not a git checkout. Clone `lalalic/browser-workspace` into a temporary directory, create a branch, copy only the changed `platforms/<name>/` files from `<skill-dir>` into `skills/webhelm/platforms/<name>/`, run that platform's tests, inspect the staged diff, then open the PR with `gh pr create`. If `<skill-dir>` is already a symlink into a checkout, use a clean worktree of that checkout instead.
-- Never include credentials, cookies, tokens, private content, or raw session data.
-- Preserve unrelated dirty trees, branches, and active sessions. Do not automatically merge or publish releases; repository review and CI remain responsible for those steps.
-
-## Start
-
-Default workspace is `Harness`:
-
-```bash
-webhelm session start
-```
-
-Normal agents do not choose or manage workspaces. `session start` defaults to `Harness`; the `--workspace` implementation option is hidden from normal CLI help. Workspace lifecycle is not exposed through the agent CLI. Product runtimes that need persistent isolation discover the product-only Node admin helper with `webhelm status`, then call `ensureWorkspace` / `deleteWorkspace` through that helper.
-
-Start directly at a URL when known:
-
-```bash
 webhelm session start --url https://example.com
 ```
 
-The result is JSON containing `session_id`, `workspace`, `target_id`, the starting `url`, and `workspace_supported`.
-
-Browser Workspace self-manages exactly one machine-wide persistent, visible Chrome instance. Every session and runtime must reuse that singleton. Runtime/config overrides must never create another Chrome. Browser Workspace owns the user-data directory and local CDP endpoint, prefers port 9222, and selects another candidate only when starting the singleton for the first time. Agents do not choose a Chrome profile or enable remote debugging. The Chrome workspace extension remains optional: Chrome Stable blocks silent local unpacked-extension loading, so sessions continue in plain-browser mode when the extension is absent; grouping/lease isolation becomes available when the extension is installed.
-
-## Exec
-
-`session exec` reads Python from stdin. Helpers are already imported; do not import another browser package.
+The supported command surface is `status`, `session start|list|exec|stop`, and `platform list|profile|run`. Use JavaScript for `session exec`; scripts can come from stdin or `--code-file`:
 
 ```bash
-webhelm session exec <session_id> <<'PY'
-print(page_info())
-print(snapshot())
-PY
+webhelm session exec SESSION_ID <<'JS'
+console.log(await page_info());
+console.log(await snapshot());
+JS
 ```
 
-Python state persists across later calls in the same session:
+A JavaScript session persists simple declared bindings between exec calls. Helpers are available directly and through `helpers`: `snapshot`, `js`, `cdp`, `goto_url`, `current_tab`, `new_tab`, `close_tab`, `page_info`, `wait_for_load`, `wait_for_element`, `fill_input`, `click`, `capture_screenshot`, and workspace CRUD helpers. Use `snapshot()` for compact accessibility-oriented refs, then address elements with CSS selectors such as `[data-ref="e2"]`. Batch independent observations/actions in one exec when useful. `js(expression, target_id)` can explicitly inspect a target owned by the session; normal helpers use its current target.
+
+Every workflow follows `session start -> session exec -> ... -> session stop`. Each session owns its root tab, tabs created through `new_tab()`, and detected opener popups. Stop closes those tabs and leaves unrelated Chrome tabs open. Independent sessions use their own CDP attachment and may execute concurrently; a long wait in one session must not block another. Never use raw `Target.createTarget`; use `new_tab(url)` so ownership is tracked.
+
+## Chrome and pilot isolation
+
+The daemon attaches to the existing visible WebHelm Chrome endpoint and keeps the profile at `~/.config/browser-workspace/chrome`. It does not create a second Chrome profile or launch an independent browser. `WEBHELM_CDP_URL` may point at an already-running Chrome endpoint. For a development pilot, set `WEBHELM_RUNTIME_DIR` and `WEBHELM_SOCKET` to isolated paths; the browser profile remains the same managed profile. Do not stop, replace, or migrate a live Python deployment during a pilot.
+
+The session daemon starts lazily and uses a singleton owner lock. If the socket is unreachable while its owner is alive, it refuses duplicate startup. On daemon shutdown, only session-owned tabs are closed. A daemon restart does not recover JavaScript VM namespaces; sessions must be recreated.
+
+The extension remains optional for basic browser control. Workspace CRUD uses its service-worker RPC over the same CDP connection when the published extension is installed. Workspace leasing/grouping is not yet implemented by the Node pilot; the pilot reports this migration gap rather than claiming that tabs are grouped.
+
+## Platform support status
+
+Platform actions are executable only when they have a Node implementation and are explicitly enabled in the Node platform manifest. The current source tree contains Python actions. The Node pilot therefore reports those actions as disabled and `platform run` rejects them; do not treat the Python manifests as evidence that a Node action is available. Keep using the pre-existing Python deployment for platform workflows until their migrations have landed.
+
+The ChatGPT durable asynchronous FIFO, idempotency, queue restore, sync mode, thread/project state, and verified return semantics still require a Node migration and regression coverage. No ChatGPT lifecycle action is enabled by this pilot. Other site actions (ChatGPT, Z.ai, DeepSeek, XHS, CapCut, TikTok, YouTube, WeChat Channels, Teams, Chrome Web Store, and IYF) are likewise migration blockers unless implemented and enabled in a future release.
+
+## Product workspace API
+
+Products such as NeoY and Relay should discover the helper path from `webhelm status`, then import `ensureWorkspace(name, size)` and `deleteWorkspace(name, options)` from the returned `admin_helper`. These APIs use the same WebHelm socket and extension RPC. Workspace lifecycle is not an agent CLI command.
+
+## Extension installation
+
+Keep using the published extension ID `kkkpgmhpoeceojalkpfdidffdfnlgdog` and the existing Chrome Web Store listing or the bundled offline installation path. The offline copy is prepared by:
 
 ```bash
-webhelm session exec <session_id> <<'PY'
-meeting_name = "Demo"
-print(current_tab())
-PY
-```
-
-Then later:
-
-```bash
-webhelm session exec <session_id> <<'PY'
-print(meeting_name)
-PY
-```
-
-A Python file may also be used with `--code-file`.
-
-## Stop
-
-```bash
-webhelm session stop <session_id>
-```
-
-Stopping closes every tab owned or opened by that session—including tabs created with `new_tab()`, `bh.new_tab()`, and detected child/popup tabs—then destroys the session's Python namespace. Raw `cdp("Target.createTarget", ...)` is rejected; use `new_tab()` so Browser Workspace can own and group the tab. It does not close unrelated browser tabs. Do not reuse the ID afterward.
-
-A safe shell structure is:
-
-```bash
-SESSION_JSON=$(webhelm session start)
-SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
-trap 'webhelm session stop "$SESSION_ID" >/dev/null 2>&1 || true' EXIT
-
-webhelm session exec "$SESSION_ID" <<'PY'
-print(snapshot())
-PY
-```
-
-## Browser helpers
-
-The session exposes the browser primitives directly, including:
-
-```python
-page_info()
-goto_url(url)
-current_tab()
-new_tab(url)
-close_tab(...)
-js(expression, target_id=None)
-cdp(method, ...)
-wait_for_load()
-wait_for_element(...)
-fill_input(selector, text)
-click(selector)
-capture_screenshot(...)
-```
-
-Use the higher-level helpers first. Use raw `js(...)`/`cdp(...)` only when needed.
-
-Interaction-specific reference material is bundled under `interaction-skills/` inside this skill.
-
-## Snapshot refs
-
-`snapshot()` returns a compact accessibility-oriented view and writes each returned ref directly onto the corresponding live DOM element as `data-ref="eN"`.
-
-Example:
-
-```text
-- button "Calendar" [ref=e1]
-- button "Meet now" [ref=e2]
-- textbox "Meeting name" [ref=e3]
-```
-
-The live DOM then contains equivalent annotations such as:
-
-```html
-<button data-ref="e2">Meet now</button>
-```
-
-Refs are ordinary CSS selectors. Use normal helpers:
-
-```python
-print(snapshot())
-click('[data-ref="e2"]')
-fill_input('[data-ref="e3"]', 'Demo meeting')
-```
-
-Do **not** invent `click("e2")`, `click_ref("e2")`, or an `@e2` API. After navigation or a substantial DOM update, call `snapshot()` again and use the new refs.
-
-`snapshot(interactive_only=False)` may include named content roles in addition to interactive elements. `target_id=` may be used for target-specific inspection.
-
-## Workspaces
-
-Default configuration:
-
-```text
-BH_WORKSPACE_NAME=Harness
-BH_WORKSPACE_POOL_SIZE=5
-```
-
-When the Browser Workspace Chrome extension is installed, the pool size is the maximum concurrent capacity; tabs are created lazily. The extension owns grouping, lease/release, idle reclaim, and workspace isolation.
-
-Without the extension, browser sessions still work using the built-in browser core. Workspace names, grouping, pool capacity, lease isolation, and idle reclaim are unavailable; tab/navigation/input/snapshot/platform helpers continue to work. `workspace_status()` reports `supported: false` instead of failing.
-
-Available workspace helpers include:
-
-```python
-workspace_create("Research", 5)
-workspace_status()
-workspace_list()
-workspace_resize("Research", 6)
-workspace_delete("Research")
-```
-
-Never use URL as tab identity. Workspace ownership and leased target identity are authoritative.
-
-## Platform contract
-
-Known-site knowledge is owned by this skill under `platforms/`; the generic CLI reads it through `WEBHELM_PLATFORM_DIR`. A platform contains **site/domain behavior only**.
-
-```text
-platforms/<name>/
-├── README.md       site behavior and rules
-├── manifest.yaml   actions + verification metadata
-├── actions/        reusable browser action code
-└── flows/          optional flow documentation
-```
-
-Platform rules:
-
-- Platform actions may use semantic browser helpers such as `new_tab()`, `current_tab()`, `snapshot()`, `click(selector)`, `fill_input(selector, text)`, `js()`, `cdp()`, uploads, downloads, and screenshots. `cdp()` must not create targets; `Target.createTarget` is blocked and tab creation must use `new_tab()`.
-- Platform interaction code must be **semantic and element-based**. It must not use screen coordinates, viewport coordinates, `x/y` click targets, `click_at_xy()`, or coordinate calculations to interact with the page. Browser size, zoom, display resolution, and viewport geometry must not affect correctness.
-- Platform actions must **not** create/stop Browser Workspace sessions, choose a workspace, call workspace-management APIs, invoke the Browser Workspace CLI, or import session/workspace infrastructure.
-- The orchestrator owns the session lifecycle for normal platform execution: start once, retain the same session across execution and recovery, and stop only after terminal success, terminal failure, or an explicit human blocker.
-- On any recoverable failure, the orchestrator must inspect the live page in the same session, diagnose the failure, repair/recover, and resume from the safest point rather than restarting the whole workflow.
-- **Self-heal writeback is mandatory:** if recovery discovers a site-specific selector, flow, wait condition, validation rule, or other adapter fix that makes the action work, write that repair back to `platforms/<name>/actions/` (and update platform docs/verification metadata when applicable) before declaring the workflow complete. A repair that exists only in an ad-hoc session snippet is not complete.
-- After a possible external side effect (publish, send, payment, delete, submit, etc.), recovery must be verification-first. Never repeat the side effect until read-only evidence proves the previous attempt did not take effect.
-- Platform `README.md` and flow docs should describe site behavior, preconditions, side effects, and verification evidence—not Browser Workspace lifecycle mechanics.
-- Do not rediscover a known site's mechanics when a verified platform flow/action already exists.
-
-Normal orchestrator workflow:
-
-```bash
-SESSION_JSON=$(webhelm session start --url https://example.com)
-SESSION_ID=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["session_id"])' "$SESSION_JSON")
-
-webhelm platform run microsoft-teams meeting \
-  --session-id "$SESSION_ID" \
-  --config /path/to/config.json
-
-# If it fails: inspect/self-heal using the same SESSION_ID, write the repair
-# back to the platform implementation, then resume safely.
-
-webhelm session stop "$SESSION_ID"
-```
-
-One-shot mode is explicit and is not self-healing:
-
-```bash
-webhelm platform run microsoft-teams meeting \
-  --auto-session \
-  --config /path/to/config.json
-```
-
-Use `--auto-session` only when losing the browser state after a failure is acceptable.
-
-### Platform verification contract
-
-Every `platforms/<name>/manifest.yaml` must declare:
-
-Platform-owned publishing facts belong in the same manifest, not in caller-specific tables. When applicable, declare `media`, `fields`, `capabilities`, `content_mapping`, and platform notes there. Callers inspect them with `webhelm platform profile <name>` and must not maintain a second authoritative limits/capabilities registry.
-
-```text
-platform:
-status:
-last_verified:
-actions:
-verification:
-  status:
-  last_verified:
-  evidence:
-```
-
-Verification rules:
-
-- `verified`: exercised against the live site and supported by concrete evidence.
-- `partially_verified`: some declared flows are live-verified while others remain implemented but unverified.
-- `migrated_unverified`: code was migrated from a previously working adapter but has not yet been live-verified in the current Browser Workspace integration.
-- Never upgrade a status merely because code compiles or contract tests pass.
-- Flow-level verification in `manifest.yaml` should be more specific than the platform-wide status.
-- When live behavior changes, update `last_verified`, evidence, and affected flow status in the same change.
-
-Available platforms:
-
-```text
-platforms/capcut/
-platforms/chatgpt/
-platforms/chrome-web-store/
-platforms/deepseek/
-platforms/microsoft-teams/
-platforms/tiktok/
-platforms/wechat-channels/
-platforms/xhs/
-platforms/youtube/
-platforms/z/
-```
-
-Read the matching platform `README.md` and `manifest.yaml` before invoking or modifying a known flow. Platform READMEs are part of this WebHelm skill, not separate skills.
-
-List available adapters and inspect a platform with:
-
-```bash
-webhelm platform list
-webhelm platform profile z
-```
-
-## Installation
-
-Use the global `webhelm` command, installed from this Skill:
-
-```bash
-webhelm status
-webhelm platform list
-```
-
-The installed CLI reuses the Browser Workspace Chrome profile and Session Daemon socket.
-
-There is no required separate Browser Harness installation.
-
-The Chrome extension is recommended for named tab groups but is not required
-for basic browser control. Without it, Browser Workspace works in plain-browser
-mode. Select one of these **two installation paths**:
-
-**A. Chrome Web Store (preferred):** In the Browser Workspace-managed Chrome
-window, open the verified published listing:
-
-```text
-https://chromewebstore.google.com/detail/browser-workspace/kkkpgmhpoeceojalkpfdidffdfnlgdog
-```
-
-Approve **Add to Chrome** in that managed profile, then verify the installed
-extension ID `kkkpgmhpoeceojalkpfdidffdfnlgdog` and version `0.3.1`
-(the version published and verified on 2026-10-30). The official store install
-receives automatic updates from Chrome Web Store.
-
-**B. Offline/local (when Chrome Web Store is blocked):** This Skill includes
-the canonical `extension/` source directory with the **same extension ID**
-and version as the published build. It contains the public signing key
-extracted from the published Google CRX; this is a **public key, not a secret**.
-Use the installed Skill's actual directory (never assume an Agent-specific path):
-
-```bash
-SKILL_DIR="<absolute directory containing this SKILL.md>"
 sh "$SKILL_DIR/scripts/prepare-local-extension.sh"
 ```
 
-The Skill contains the single authoritative extension source. GitHub releases
-and Chrome Web Store upload ZIPs are generated from it, never stored as a
-second source tree.
+This prepares files only; approve extension installation in the managed Chrome profile. Never silently load it or modify the default Chrome profile.
 
-The command copies the files into a stable, user-owned folder under
-`~/.local/share/webhelm/offline-extensions/browser-workspace-0.3.1` and
-prints the exact directory. It does **not** install an extension or modify
-Chrome. In the **managed Chrome window**, open `chrome://extensions`, enable
-**Developer mode**, select **Load unpacked**, then select that printed
-directory. Verify the extension ID and version afterward.
+## Development and release
 
-Offline installation does not require access to Google and does not auto-update.
-When a later version ships, use the new bundled version and manually load it.
-Do not install both Store and offline copies simultaneously. Previous unpacked
-development identities are obsolete and must not be used by Browser Workspace.
-
-**Chrome Stable restriction:** Chrome 137+ rejects automatic local extension
-loading through `--load-extension`. Do not promise automatic injection by
-Managed Chrome, alter enterprise policy, or replace the normal Chrome binary.
-A deliberate **Load unpacked** approval is required. After either install,
-verify workspace support; absence of the extension is not proof of success.
-
-## Internal provenance
-
-The low-level browser runtime is the separately maintained `browser-harness` Python dependency. Browser Workspace owns the session/workspace/platform product layer and pins the exact Harness runtime revision it was tested with; Harness source is not vendored into this repository. Upstream licensing remains documented under `licenses/`.
+Run the Node tests with `npm test` (or `node --test`). The Node daemon is launched lazily by `webhelm`. The npm package contains the Node runtime and skill platform manifests; npm is the release path for the Node CLI. Do not publish a Python wheel for the Node runtime. The legacy Python deployment and PyPI metadata remain present only as migration inputs until platform and queue parity are complete; they are not part of the Node pilot runtime.

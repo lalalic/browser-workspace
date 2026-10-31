@@ -1,0 +1,28 @@
+{
+  "name": "webhelm",
+  "version": "1.0.0",
+  "description": "Single Node.js browser session daemon for WebHelm",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "webhelm": "src/cli.mjs"
+  },
+  "files": [
+    "src/admin.mjs",
+    "src/cli.mjs",
+    "src/node-daemon.mjs",
+    "skills/webhelm/SKILL.md",
+    "skills/webhelm/bin/webhelm",
+    "skills/webhelm/extension",
+    "skills/webhelm/interaction-skills",
+    "skills/webhelm/platforms/*/manifest.yaml",
+    "skills/webhelm/platforms/*/README.md",
+    "skills/webhelm/platforms/*/flows"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}

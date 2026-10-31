@@ -1,216 +1,64 @@
 # WebHelm
 
-Browser Workspace provides the browser runtime and generic CLI. The WebHelm skill and site-specific platform adapters live under `skills/webhelm/` and are distributed separately from the CLI package.
+WebHelm is migrating to one Node.js daemon, one visible managed Chrome instance, one CDP WebSocket, and explicit CDP session IDs per target. This branch provides an isolated Node pilot for browser sessions. The existing Python deployment remains a migration input and is not replaced by the pilot.
 
-## Public interface
+## Pilot status
 
-Agents and products invoke only the global `webhelm` command. Install the
-WebHelm Skill through any agent's normal Skill mechanism (for example,
-`npx skills add lalalic/browser-workspace --skill webhelm`). The Skill may
-live in any directory. Its `SKILL.md` tells the agent to run
-`scripts/install-global-cli.sh` **relative to that installed Skill**.
+The Node runtime uses Node.js 22+ built-ins, persistent JavaScript session helpers, per-session event queues, independent concurrent sessions, session-owned tab cleanup, and the canonical extension service-worker RPC. It attaches only to an already-running Chrome endpoint; it does not launch Chrome or create a profile. The managed profile remains `~/.config/browser-workspace/chrome`.
 
-The installer points `~/.local/bin/webhelm` to the Skill's launcher, safely
-migrates known old links, and refuses to overwrite unrelated user commands.
-Ensure `~/.local/bin` is on `PATH`. No agent or product needs to know the
-Skill's installation directory, runtime package, or platform directory after
-setup. There is no supported `browser-workspace` CLI command.
+Platform actions are reported as disabled until migrated to Node. ChatGPT’s durable asynchronous FIFO, idempotency, queue restore, sync mode, thread/project state, and verified return semantics are not yet ported. Workspace CRUD can call the extension RPC, but Node session lease/group integration still needs live verification. The Python/PyPI source and deployment files remain in the repository as migration inputs; the npm package excludes Python files and the release workflow now targets npm.
 
-For a local unreleased CLI build, developers may set
-`WEBHELM_CLI_SOURCE=/absolute/path/to/browser-workspace` and
-`WEBHELM_CLI_REFRESH=1` when testing a rebuilt wheel with the same version.
+## Pilot install and commands
 
-The CLI has two public execution paths:
-
-```bash
-# Platform action: caller owns the browser session.
-webhelm platform run PLATFORM ACTION --session-id SESSION_ID [--config FILE]
-
-# Custom browser workflow: caller owns lifecycle.
-webhelm session start [--url URL]
-webhelm session exec SESSION_ID <<'PY'
-print(snapshot())
-PY
-webhelm session stop SESSION_ID
-```
-
-For ChatGPT lifecycle `new-turn`, async durable-queue delivery is the default
-and reports `status: submitted`. Set `"mode": "sync"` in the action config, or
-use `--mode sync`, to deliver through a caller-owned `--session-id`; its public
-status is also `submitted`. The only accepted mode values are the exact strings
-`"async"` and `"sync"`; omitted mode defaults to `"async"`. Other values and the
-legacy `sync` config key are rejected (for example, `{"mode": true}` and
-`{"sync": true}` are invalid).
-
-`--workspace` is hidden from normal CLI help. Normal sessions use `Harness`; product integrations may set an explicit workspace internally when they require isolation.
-
-`session stop` closes all tabs created/owned by that session while leaving unrelated browser tabs untouched. Raw session CDP cannot create targets: `Target.createTarget` is rejected and callers must use `new_tab()` so workspace/session ownership is preserved.
-
-## Repository layout
-
-```text
-browser-workspace
-├── src/                         CLI, session daemon, platform runner, managed Chrome (package browser_workspace_app)
-│   ├── browser-harness/         helper overlay loaded by browser-harness (BH_AGENT_WORKSPACE)
-│   └── admin.mjs                Node API for products to create/delete persistent workspaces
-├── skills/webhelm/              WebHelm skill: SKILL.md, extension/, interaction-skills/, platforms/, scripts/
-│   └── extension/               single authoritative Chrome extension source (offline + Store)
-├── scripts/package-extension.sh generates Web Store ZIP from skills/webhelm/extension/ (used by CI)
-├── test/                        CLI, daemon, packaging, and extension tests
-└── site/                        GitHub Pages (privacy policy)
-```
-
-Site-specific code lives only in `skills/webhelm/platforms/<name>/`, including the ChatGPT durable-queue runtime under `platforms/chatgpt/runtime/`. The CLI package ships no platform code. The version is defined once in `src/__init__.py`.
-
-Agents should load only the WebHelm skill. `browser-harness` and `browser-platforms` are no longer separate runtime/skill dependencies.
-
-## Install
+Node package release name: `webhelm`. The skill’s `bin/webhelm` uses adjacent source in a checkout, or `npx` for a standalone skill installation. The installer manages the global `~/.local/bin/webhelm` link.
 
 ```bash
 npx skills add lalalic/browser-workspace --skill webhelm
 webhelm status
-```
-
-The `browser-workspace` PyPI distribution provides the `webhelm` entry point. External callers use the global launcher.
-
-Platform actions are supplied by the installed WebHelm skill, not embedded in
-the CLI package. The runner reads the skill-owned directory from
-`WEBHELM_PLATFORM_DIR`:
-
-```bash
 webhelm platform list
 ```
 
-By default Browser Workspace owns exactly one machine-wide persistent, visible Chrome instance. Every session and runtime reuses that same Browser Workspace Chrome; config/runtime overrides never create another Chrome. It uses a Browser Workspace-managed user-data directory, prefers CDP port 9222, and selects the next available candidate only when starting the singleton for the first time. Users do not manage Chrome profiles or remote-debugging settings. Chrome Stable no longer permits silent `--load-extension` for local unpacked extensions, so the extension is treated as an optional workspace-grouping enhancement rather than a prerequisite for browser sessions.
-
-`BU_CDP_URL` / `BU_CDP_WS` remain advanced overrides for callers that intentionally provide their own browser endpoint. `BROWSER_WORKSPACE_CDP_PORT` changes the preferred managed port.
-
-For grouping, the preferred extension is **Browser Workspace v0.3.1**, listed at
-`https://chromewebstore.google.com/detail/browser-workspace/kkkpgmhpoeceojalkpfdidffdfnlgdog`.
-Install it in **the managed Chrome profile** and approve Chrome's request.
-
-For users without Chrome Web Store access, the `webhelm` Skill also bundles
-a source-matched offline extension with the **same published extension ID**.
-Follow its `SKILL.md` and run
-`sh "$SKILL_DIR/scripts/prepare-local-extension.sh"` with `SKILL_DIR` set to
-the **actual installed Skill directory**, then select the printed stable folder
-using Chrome's `chrome://extensions` → Developer mode → Load unpacked.
-This is a local user-approved install, not a silent or automatically updated
-Store install. Chrome Stable 137+ no longer accepts automatic unpacked loading
-through command-line flags. The CLI can run without the extension in plain mode.
-
-## Snapshot model
-
-`snapshot()` uses Chrome's accessibility tree to identify useful controls/content, annotates the corresponding live DOM elements with `data-ref="eN"`, and emits a compact representation. Interact using normal CSS selectors:
-
-```python
-print(snapshot())
-click('[data-ref="e2"]')
-fill_input('[data-ref="e3"]', 'hello')
-```
-
-There is no separate ref registry.
-
-## Upstream
-
-The internal browser-control core is forked from `browser-use/browser-harness`. Its license is retained in `licenses/browser-harness-MIT.txt`.
-
-
-
-## Product-owned workspaces
-
-Normal browser automation uses the default `Harness` workspace. Ordinary agents manage browser sessions only; they do not create, resize, or delete workspaces. Workspace lifecycle belongs to product runtimes such as Agents Relay or NeoY.
-
-Products discover the installed Browser Workspace instance with:
+The public CLI surface is `status`, `session start|list|exec|stop`, and `platform list|profile|run`. Unmigrated platform actions are visible as disabled; `platform run` refuses them.
 
 ```bash
-webhelm status
+webhelm session start --url https://example.com
+webhelm session exec SESSION_ID <<'JS'
+console.log(await page_info());
+console.log(await snapshot());
+await click('[data-ref="e2"]');
+JS
+webhelm session stop SESSION_ID
 ```
 
-The command returns machine-readable JSON including the resolved installation `root`, absolute `admin_helper` path, and daemon status. Calling `status` also ensures the existing Browser Workspace session daemon is ready; it does not create a separate service.
+JavaScript helpers include `snapshot`, `js`, `cdp`, `goto_url`, `current_tab`, `new_tab`, `close_tab`, `page_info`, `wait_for_load`, `wait_for_element`, `fill_input`, `click`, `capture_screenshot`, and workspace CRUD/capacity functions. A session’s JS context and simple declared bindings persist between exec calls. Independent sessions use separate CDP attachments and can execute concurrently. Stopping a session closes its owned tabs and leaves unrelated tabs open.
 
-A Node.js product can then load the product-only helper without hardcoding an install path:
+## Isolated pilot
 
-```js
-import { execFileSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
-
-const status = JSON.parse(
-  execFileSync("webhelm", ["status"], { encoding: "utf8" })
-);
-const { ensureWorkspace, deleteWorkspace } =
-  await import(pathToFileURL(status.admin_helper).href);
-
-await ensureWorkspace("Relay", 6);
-// later, if the product owns and no longer needs it:
-await deleteWorkspace("Relay", { force: true });
-```
-
-`ensureWorkspace(name, size)` is idempotent: it creates a missing workspace, keeps one with the same capacity, and reconfigures an existing workspace when the requested size changes. The physical tab pool still grows lazily up to that capacity. `deleteWorkspace(name, { force })` removes the workspace through the existing daemon/extension RPC path.
-
-There is intentionally no `browser-workspace workspace create/delete` CLI. Workspace lifecycle is a product API, not an agent command.
-
-### Start a session in a product-owned workspace
-
-`--workspace` remains an internal integration option for product code:
+Use an isolated daemon socket/runtime while leaving the live Python daemon and its socket untouched. The browser profile is intentionally shared, so do not start overlapping user workflows during the pilot. This checkout’s `bin/webhelm` resolves the Node source directly.
 
 ```bash
-webhelm session start --workspace "Relay" --url https://example.com
+export WEBHELM_RUNTIME_DIR=/private/tmp/webhelm-node-pilot
+export WEBHELM_SOCKET=/private/tmp/webhelm-node-pilot/session.sock
+export WEBHELM_LOCK=/private/tmp/webhelm-node-pilot/session.lock
+export WEBHELM_CDP_URL=http://127.0.0.1:9222
+./skills/webhelm/bin/webhelm status
 ```
 
-It is hidden from normal CLI help. Product code owns the workspace choice; platform actions remain unaware of workspace/session policy.
+Use `node --test` for the Node test suite. The current environment did not allow a live CDP connection at port 9222, so this pilot has mock CDP coverage only; do not treat that as real-Chrome verification.
 
-Recommended product lifecycle:
+## Extension
 
-```text
-product startup
-  -> webhelm status
-  -> import status.admin_helper
-  -> ensureWorkspace("Relay", 6)
+`skills/webhelm/extension/` remains the only canonical extension source, with the published ID `kkkpgmhpoeceojalkpfdidffdfnlgdog`. Preserve both the existing Chrome Web Store path and the skill’s offline preparation script. Extension installation requires approval in the managed Chrome profile; no automatic unpacked loading is used.
 
-browser task
-  -> webhelm session start --workspace "Relay"
-  -> webhelm session exec <session_id>
-  -> webhelm session stop <session_id>
-```
+## Product integrations
 
-## Platform boundary
+After `webhelm status`, callers can import `ensureWorkspace(name, size)` and `deleteWorkspace(name, options)` from the returned `admin_helper`. These product APIs retain their names and use the Node daemon socket. The ordinary CLI does not expose workspace CRUD commands.
 
-Platform action code is infrastructure-agnostic. It may use browser helpers, but it must not create/stop Browser Workspace sessions, choose workspaces, or import session/workspace infrastructure. The generic platform runner wraps actions in a default Harness session and always cleans up. Product code may execute the same action in a product-owned browser context when longer-lived isolation is required.
+## Layout and release
 
-Each platform manifest records explicit verification status and evidence. `verified` means live-site verification; migrated code is labeled `migrated_unverified` until exercised in the current integration.
-
-
-## WebHelm skill installation
-
-Install the self-contained skill with:
-
-```bash
-npx skills add lalalic/browser-workspace --skill webhelm
-```
-
-Run the branded CLI using the published Python/PyPI runtime:
-
-```bash
-webhelm status
-webhelm session start
-webhelm platform profile chatgpt
-```
-
-The `webhelm` command uses the published Browser Workspace runtime. WebHelm owns its managed Chrome profile and daemon;
-it does not modify a user's default Chrome profile. The Chrome Store extension
-may require explicit user approval.
-
-### Python distribution (PyPI)
-
-Browser Workspace is also packaged as a Python CLI. Once its PyPI trusted publisher is configured and a `pypi-v*` release tag is published, invoke it with:
-
-```bash
-webhelm status
-webhelm session list
-webhelm platform profile wechat-channels
-```
-
-The package entry point is `browser_workspace_app.cli:main`, and Python dependencies are managed by `pyproject.toml`. This uses the same existing Chrome profile and Session Daemon socket as the CLI; it does **not** start a second browser or daemon when the existing one is healthy.
-
-Build with `uv build`, then validate the built CLI through the global launcher with `WEBHELM_CLI_SOURCE=/absolute/path/to/dist/package.whl webhelm --help`. Run tests with `uv run --with pytest pytest -q` (covers `test/` and `skills/`) and `node --test test/workspace-manager.test.mjs`. The PyPI publishing workflow uses GitHub OIDC trusted publishing; configure `lalalic/browser-workspace` with the `pypi` environment as the publisher on PyPI before the first tag release.
+- `src/node-daemon.mjs`, `src/cli.mjs`, and `src/admin.mjs`: Node pilot.
+- `skills/webhelm/extension/`: canonical Chrome extension.
+- `skills/webhelm/platforms/`: platform manifests and documentation; Python actions remain migration inputs and are disabled in Node.
+- `test/node/` and `test/workspace-manager.test.mjs`: Node tests.
+- `.github/workflows/npm-publish.yml`: npm release on `npm-v*` tags.
+- Legacy Python source, PyPI metadata, and the live Python deployment are not removed by this pilot.
