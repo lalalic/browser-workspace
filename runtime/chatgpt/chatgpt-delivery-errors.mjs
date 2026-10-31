@@ -74,7 +74,7 @@ export async function normalizeFailure(
   {
     logPath = join(
       homedir(),
-      ".config/browser-workspace/runtime/chatgpt-delivery-errors.jsonl",
+      ".config/webhelm/runtime/chatgpt-delivery-errors.jsonl",
     ),
   } = {},
 ) {

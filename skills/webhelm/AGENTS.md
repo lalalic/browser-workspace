@@ -3,7 +3,7 @@
 - The Skill lives in `lalalic/webhelm/skills/webhelm`. It includes rules, the Chrome Extension, optional supporting scripts and a thin `npx webhelm@latest` entry point. It does **not** own the Runtime or platform Actions.
 - The npm Runtime is under the repository's `runtime/` and `bin/` and is published as unscoped `webhelm`.
 - Platform Actions belong in `lalalic/webhelm-actions` and install to `~/.local/webhelm/platforms`; update them there, not inside this repo. Use `webhelm platform sync` for fast-forward-only pulls and `webhelm platform publish` for authorized, reviewed changes.
-- Preserve existing managed Chrome profile at `~/.config/browser-workspace/chrome`, extension ID, queue database and Session IPC; never silently switch to a second browser profile or start a parallel queue dispatcher.
+- Preserve existing managed Chrome profile at `~/.config/webhelm/chrome`, extension ID, queue database and Session IPC; never silently switch to a second browser profile or start a parallel queue dispatcher.
 - Browser Sessions own their tabs and CDP targets; releases must not close unrelated tabs. Use one CDP WebSocket and explicit independent Session attachments, without a global browser lock. Serialize only shared extension tab lease acquisition.
 - Chrome MV3 service workers may be asleep. Use an existing extension page or a temporary task-owned extension page and `chrome.runtime.sendMessage` to wake it; clean up temporary tabs. Do not use the obsolete browser-level CDP ServiceWorker.startWorker command.
 - Preserve `result.stdout` JSON and structured `result.value` for NeoY and Relay callers. Expose `webhelm capacity` without a Python process.

@@ -1,6 +1,6 @@
 # Chrome authentication audit and keepalive (Node.js)
 
-These optional maintenance commands use the single WebHelm Skill. They do not start another daemon, install Python, copy credentials, change Chrome Cookies, or bypass reauthentication. They use the existing managed Chrome profile and private `~/.config/browser-workspace/auth-audit/` data directory.
+These optional maintenance commands use the single WebHelm Skill. They do not start another daemon, install Python, copy credentials, change Chrome Cookies, or bypass reauthentication. They use the existing managed Chrome profile and private `~/.config/webhelm/auth-audit/` data directory.
 
 ## Cookie metadata audit (read-only)
 

@@ -17,6 +17,7 @@ Install the Skill with the trusted skill installer, e.g. `npx skills add lalalic
 ```sh
 SKILL_DIR="<absolute directory containing this SKILL.md>"
 sh "$SKILL_DIR/scripts/install-global-cli.sh"
+webhelm migrate  # when upgrading an existing Browser Workspace installation, with Chrome/daemon stopped
 webhelm setup
 webhelm status
 webhelm capacity
@@ -81,3 +82,7 @@ Updating this Skill via `npx skills add lalalic/webhelm --skill webhelm` only up
 ## Safe verification
 
 For code under development, use test-specific `WEBHELM_RUNTIME_DIR`, `WEBHELM_SOCKET`, `WEBHELM_LOCK` and optionally `WEBHELM_CDP_URL`, so you do not interrupt production Sessions. Never restart user-owned Chrome or remove another Session. Read site-specific instructions from the Actions repo. Verify real browser outcomes after mock tests; do not infer a successful submission from an accepted queue receipt.
+
+## Managed Chrome and durable data
+
+The canonical browser data root is `~/.config/webhelm/`: `chrome/` holds the existing signed-in Chrome Profile; `runtime/` holds the SQLite ChatGPT FIFO, logs, lock and socket; `auth-audit/` and any legacy auxiliary data are also preserved. On nodes previously using `~/.config/browser-workspace/`, stop the legacy Node daemon and Chrome (after closing owned Sessions), then use `webhelm migrate`. It performs an atomic same-filesystem rename and keeps a compatibility symlink at the legacy path for retired maintenance tasks. Never create a second empty Chrome Profile while the legacy profile exists. Restart using `webhelm setup` and verify Profile path, Chrome logins, queue counts and a caller-owned browser Session. Do not remove the compatibility symlink while external scheduled callers still use it.

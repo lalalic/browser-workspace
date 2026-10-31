@@ -1,12 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import net from 'node:net';
 import { spawn, execFileSync } from 'node:child_process';
 
-const HOME = os.homedir();
-const ROOT = path.join(HOME, '.config/browser-workspace');
-const PROFILE = path.join(ROOT, 'chrome');
+import { CONFIG_ROOT, PROFILE_DIR, requireMigratedConfig } from './config-paths.mjs';
+const ROOT = CONFIG_ROOT;
+const PROFILE = PROFILE_DIR;
 const STATE = path.join(ROOT, 'managed-chrome.json');
 const LOCK = path.join(ROOT, 'managed-chrome-node.lock');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -95,6 +94,7 @@ export async function ensureManagedChrome(){
   // Explicit CDP endpoints also support hermetic mock-browser tests.
   const specified=process.env.WEBHELM_CDP_URL;
   if (specified) return {mode:'override',reused:true,endpoint:specified,profile_dir:PROFILE};
+  requireMigratedConfig();
   return lockOwnership(async()=>{
     const existing=await fromState()||await discover();
     if(existing)return {...existing, mode:'managed',reused:true,endpoint:`http://127.0.0.1:${existing.port}`};

@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { ensureDaemon, request, handle, SOCKET } from './node-daemon.mjs';
 import { PLATFORMS, listPlatforms, platformProfile, actionPath, validateConfig } from './platforms.mjs';
 import { ACTIONS_DIR, ensureActions, syncActions, publishActions } from './actions-repo.mjs';
+import { migrateConfig } from './migrate.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const emit = value => console.log(JSON.stringify(value));
@@ -20,6 +21,7 @@ function help() {
   console.log(`webhelm — browser automation through one Node.js runtime
 
 Usage:
+  webhelm migrate  # after stopping Chrome and the old WebHelm daemon
   webhelm setup
   webhelm status
   webhelm capacity [--workspace NAME]
@@ -96,6 +98,7 @@ async function runPlatform(args) {
 async function main(args = process.argv.slice(2)) {
   const [group, command] = args;
   if (!group || ['--help', '-h', 'help'].includes(group) || has(args, '--help') || has(args, '-h')) return help();
+  if (group === 'migrate') return emit(await migrateConfig());
   if (group === 'setup') {
     const repo=await ensureActions();
     const chrome=await ensureDaemon();
@@ -103,7 +106,7 @@ async function main(args = process.argv.slice(2)) {
   }
   if (group === 'status') {
     const daemon = await ensureDaemon();
-    return emit({version:'1.0.0', platform_dir:PLATFORMS, root:ROOT,
+    return emit({version:'1.0.1', platform_dir:PLATFORMS, root:ROOT,
       cli:fileURLToPath(import.meta.url),
       admin_helper:process.env.WEBHELM_ADMIN_HELPER || (fs.existsSync(path.join(os.homedir(),'.agents/skills/webhelm/scripts/admin.mjs')) ? path.join(os.homedir(),'.agents/skills/webhelm/scripts/admin.mjs') : path.join(ROOT,'admin.mjs')),
       managed_chrome:daemon.managed_chrome,

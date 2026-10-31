@@ -32,7 +32,7 @@ The Actions checkout is `~/.local/webhelm`, with site modules at `~/.local/webhe
 
 ## Architecture and compatibility
 
-The Runtime's managed Chrome profile and its IPC socket remain at their existing `~/.config/browser-workspace/` locations to preserve logins, sessions and queue data. Only one daemon is permitted to own the queue. A CLI package update does not kill a running daemon or close another agent's tabs; upgrade daemons when idle.
+The Runtime stores its managed Chrome profile, persistent FIFO queue, and IPC socket under `~/.config/webhelm/`. Run `webhelm migrate` with the legacy daemon and Chrome stopped to migrate existing `~/.config/browser-workspace/` data without dropping logins or queued turns. The command leaves a compatibility symlink for legacy maintenance scripts. Only one daemon is permitted to own the queue. A CLI package update does not kill a running daemon or close another agent's tabs; upgrade daemons when idle.
 
 NeoY and Relay can continue using `webhelm` session commands, `result.stdout` JSON receipts, and `admin_helper` returned by `status`. An `admin_helper` inside the installed Skill is a stable connector to the same Node IPC socket. `webhelm capacity` replaces the legacy Python capacity probe.
 

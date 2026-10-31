@@ -71,8 +71,8 @@ export function difference(previous,current){
 function secureWrite(file,bytes){const fd=fs.openSync(file,fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_EXCL,0o600);
   try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
 export function sample({profile,dataDir,site,status='unknown',pageEvidence='unknown'}={}){
-  profile=profile||path.join(os.homedir(),'.config/browser-workspace/chrome');
-  dataDir=dataDir||path.join(os.homedir(),'.config/browser-workspace/auth-audit');
+  profile=profile||path.join(os.homedir(),'.config/webhelm/chrome');
+  dataDir=dataDir||path.join(os.homedir(),'.config/webhelm/auth-audit');
   const db=path.join(profile,'Default','Cookies');
   if(!fs.existsSync(db))throw Error('Chrome Cookie database not found; refusing to start Chrome or change profiles');
   fs.mkdirSync(dataDir,{recursive:true,mode:0o700});
