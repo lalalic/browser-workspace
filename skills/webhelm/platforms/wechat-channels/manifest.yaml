@@ -1,12 +1,12 @@
 platform: wechat-channels
-status: partially_verified
-last_verified: '2026-10-04'
+status: migrated_unverified
+last_verified: null
 actions:
-  post: actions/_post.py
-  manage: actions/_manage.py
+  post: actions/_post.mjs
+  manage: actions/_manage.mjs
 verification:
-  status: partially_verified
-  last_verified: '2026-10-04'
+  status: migrated_unverified
+  last_verified: null
   evidence: Live publish succeeded with creator confirmation 已发表 and manager list
     count increasing to 4. Exact title/description manager-row matching remains unverified
     because list rows do not expose those fields in visible text.
@@ -20,18 +20,18 @@ provenance:
   migrated_code: true
 flows:
   post:
-    status: verified
+    status: migrated_unverified
     evidence: Live publish succeeded on 2026-10-04; creator UI showed 已发表 and manager
       list gained a new 10:33 row.
   manage:
-    status: partially_verified
+    status: migrated_unverified
     evidence: Live manager list at /platform/post/list loaded and exposed video count/timestamps;
       exact title/description row matching is not yet verified.
 display_name: WeChat Channels
 aliases:
 - wechat
 - channels
-implementation_status: live_publish_verified_manager_matching_partial
+implementation_status: migrated_unverified
 media:
   modes:
   - video

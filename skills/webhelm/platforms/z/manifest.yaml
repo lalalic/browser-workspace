@@ -1,13 +1,13 @@
 platform: z
 display_name: Z.ai
-status: verified
-last_verified: 2026-10-31
+status: migrated_unverified
+last_verified: null
 actions:
-  new-thread: actions/_new_thread.py
-  new-turn: actions/_new_turn.py
+  new-thread: actions/_new_thread.mjs
+  new-turn: actions/_new_turn.mjs
 verification:
-  status: verified
-  last_verified: 2026-10-31
+  status: migrated_unverified
+  last_verified: null
   evidence: >-
     Live WebHelm test submitted new-thread once and returned status=completed,
     answer=Z-SSE-E2E-674 from webpage chat:completion with done=true.
@@ -23,14 +23,14 @@ verification:
     the site may change its response event schema in later releases.
 flows:
   lifecycle-new-thread:
-    status: verified
-    last_verified: 2026-10-31
+    status: migrated_unverified
+    last_verified: null
   lifecycle-new-turn:
-    status: verified
-    last_verified: 2026-10-31
+    status: migrated_unverified
+    last_verified: null
   lifecycle-resume:
-    status: verified
-    last_verified: 2026-10-31
+    status: migrated_unverified
+    last_verified: null
 capabilities:
   - persistent-thread
   - submit-verification

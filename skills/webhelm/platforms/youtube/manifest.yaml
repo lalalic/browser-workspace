@@ -2,7 +2,7 @@ platform: youtube
 status: migrated_unverified
 last_verified: null
 actions:
-  post: actions/_post.py
+  post: actions/_post.mjs
 verification:
   status: migrated_unverified
   last_verified: null

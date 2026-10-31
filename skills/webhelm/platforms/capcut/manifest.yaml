@@ -2,16 +2,16 @@ platform: capcut
 display_name: CapCut
 aliases:
 - cap-cut
-status: partially_verified
-last_verified: '2026-10-29'
+status: migrated_unverified
+last_verified: null
 actions:
-  open-editor: actions/_open_editor.py
-  inspect-editor: actions/_inspect_editor.py
-  models: actions/_models.py
-  generate: actions/_generate.py
+  open-editor: actions/_open_editor.mjs
+  inspect-editor: actions/_inspect_editor.mjs
+  models: actions/_models.mjs
+  generate: actions/_generate.mjs
 verification:
-  status: partially_verified
-  last_verified: '2026-10-29'
+  status: migrated_unverified
+  last_verified: null
   evidence: The live editor URL and semantic snapshot were inspected in WebHelm; adapter actions have not been exercised against the account.
 url_patterns:
 - https://www.capcut.com/editor*
@@ -20,16 +20,16 @@ authentication:
   notes: Use the caller's authenticated browser context; never store credentials.
 flows:
   open-editor:
-    status: unverified
+    status: migrated_unverified
     evidence: The editor URL was inspected live; the adapter action was not run to avoid initializing another blank project.
   inspect-editor:
-    status: unverified
+    status: migrated_unverified
     evidence: The editor snapshot was inspected live; the adapter action was not run against the account.
   models:
-    status: verified
+    status: migrated_unverified
     evidence: The CLI action listed image and video models live in the authenticated CapCut editor on 2026-10-29.
   generate:
-    status: unverified
+    status: migrated_unverified
     evidence: The prompt composer and Generate button were inspected live; generation was not submitted because it can consume account credits.
 fields:
   media_type:

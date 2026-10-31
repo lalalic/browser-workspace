@@ -1,15 +1,15 @@
 platform: deepseek
 display_name: DeepSeek
-status: verified
-last_verified: 2026-10-29
+status: migrated_unverified
+last_verified: null
 actions:
-  validate: actions/_validate.py
-  understand-image: actions/_understand_image.py
-  new-thread: actions/_new_thread.py
-  new-turn: actions/_new_turn.py
+  validate: actions/_validate.mjs
+  understand-image: actions/_understand_image.mjs
+  new-thread: actions/_new_thread.mjs
+  new-turn: actions/_new_turn.mjs
 verification:
-  status: verified
-  last_verified: 2026-10-29
+  status: migrated_unverified
+  last_verified: null
   evidence: >-
     Live validate returned ready=true and accepts_images=true. understand-image
     uploaded a generated PNG, submitted once, and returned WEBHELM IMAGE CHECK
@@ -27,12 +27,12 @@ verification:
     returned correctly. Twenty focused regression checks passed.
 flows:
   new-thread:
-    status: implemented_unverified
-    last_verified: 2026-10-29
+    status: migrated_unverified
+    last_verified: null
     note: Submission verified live; synchronous answer return is unit-tested only.
   new-turn:
-    status: implemented_unverified
-    last_verified: 2026-10-29
+    status: migrated_unverified
+    last_verified: null
     note: Submission verified live; synchronous answer return is unit-tested only.
 capabilities:
   - non-mutating-readiness-validation

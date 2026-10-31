@@ -1,11 +1,11 @@
 platform: iyf
-status: experimental
+status: migrated_unverified
 display_name: 爱壹帆
 url_patterns:
   - https://www.iyf.tv/*
 actions:
-  find: actions/_find.py
-  open: actions/_open.py
+  find: actions/_find.mjs
+  open: actions/_open.mjs
 verification:
-  status: experimental
+  status: migrated_unverified
   evidence: find verified with Spider-Man title. Chrome page verified. AirPlay action not implemented.
