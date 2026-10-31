@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { ensureDaemon, request, handle, SOCKET } from './node-daemon.mjs';
@@ -103,7 +104,8 @@ async function main(args = process.argv.slice(2)) {
   if (group === 'status') {
     const daemon = await ensureDaemon();
     return emit({version:'1.0.0', platform_dir:PLATFORMS, root:ROOT,
-      cli:fileURLToPath(import.meta.url), admin_helper:process.env.WEBHELM_ADMIN_HELPER || path.join(ROOT,'admin.mjs'),
+      cli:fileURLToPath(import.meta.url),
+      admin_helper:process.env.WEBHELM_ADMIN_HELPER || (fs.existsSync(path.join(os.homedir(),'.agents/skills/webhelm/scripts/admin.mjs')) ? path.join(os.homedir(),'.agents/skills/webhelm/scripts/admin.mjs') : path.join(ROOT,'admin.mjs')),
       managed_chrome:daemon.managed_chrome,
       daemon:{running:true, pid:daemon.pid, session_count:daemon.session_count, queue_paused:daemon.queue_paused, socket:SOCKET}});
   }
