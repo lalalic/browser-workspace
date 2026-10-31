@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {handle} from '../../skills/webhelm/runtime/node-daemon.mjs';
 
 process.env.WEBHELM_CDP_URL='http://127.0.0.1:9222';
+process.env.WEBHELM_NO_PROFILE_EXTENSION_PROBE='1';
 class MockWebSocket extends EventTarget {
   static OPEN=1;
   static instanceCount=0;

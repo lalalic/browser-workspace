@@ -74,9 +74,11 @@ async function connectBrowser() {
     const browser=new Cdp(version.webSocketDebuggerUrl);
     await browser.connect();
     browserWs=browser;
+    debuggerSession=null;
     browser.on('Target.targetCreated',info=>adoptPopup(info.targetInfo));
     browser.on('Target.targetInfoChanged',info=>adoptPopup(info.targetInfo));
     browser.on('Target.targetDestroyed',({targetId})=>{
+      if(debuggerSession?.targetId===targetId)debuggerSession=null;
       targets.delete(targetId);
       for(const s of sessions.values())if(s.targets.has(targetId)){
         const ownerSid=s.attachments.get(targetId);
@@ -139,8 +141,10 @@ function makeHelpers(s){
     const targetId=typeof target==='string'?target:(target?.targetId||target?.target_id)||s.targetId;
     if(!s.targets.has(targetId))throw Error('cannot close a tab outside the active WebHelm Session');
     const lease=s.leasedTabs.get(targetId);
-    if(lease) await extensionCall(s,'workspace.release',{name:s.workspace,tabId:lease});
-    else await connectBrowser().then(b=>b.send('Target.closeTarget',{targetId}));
+    if(lease){
+      try{await extensionCall(s,'workspace.release',{name:s.workspace,tabId:lease});}
+      catch{await connectBrowser().then(b=>b.send('Target.closeTarget',{targetId}));}
+    }else await connectBrowser().then(b=>b.send('Target.closeTarget',{targetId}));
     s.leasedTabs.delete(targetId);
     s.targets.delete(targetId);
     s.attachments.delete(targetId);
@@ -209,29 +213,74 @@ function makeHelpers(s){
  Object.defineProperty(h,'targetId',{get:()=>s.targetId});
  return h;
 }
+const EXTENSION_ID='kkkpgmhpoeceojalkpfdidffdfnlgdog';
+const EXTENSION_PREFIX=`chrome-extension://${EXTENSION_ID}/`;
+let debuggerSession=null;
+function extensionConfigured(){
+  if(process.env.WEBHELM_NO_PROFILE_EXTENSION_PROBE==='1')return false;
+  // A sleeping MV3 worker has no CDP target. Chrome records the installed
+  // extension in Secure Preferences even when no extension page is open.
+  for(const filename of ['Default/Secure Preferences','Default/Preferences']){
+    try{
+      const config=JSON.parse(fs.readFileSync(path.join(PROFILE_DIR,filename),'utf8'));
+      const extension=config.extensions?.settings?.[EXTENSION_ID];
+      if(extension)return extension.state!==0;
+    }catch{}
+  }
+  return false;
+}
+async function evaluateExtension(browser,sessionId,expression){
+  const result=await browser.send('Runtime.evaluate',{
+    expression,returnByValue:true,awaitPromise:true},sessionId);
+  if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text||'extension evaluation failed');
+  const value=result.result?.value;
+  if(!value?.ok)throw Error(value?.error?.message||'workspace extension RPC failed');
+  return value.result;
+}
 async function extensionCall(_session,method,args={}) {
   const browser=await connectBrowser();
-  const prefix='chrome-extension://kkkpgmhpoeceojalkpfdidffdfnlgdog/';
+  const request=JSON.stringify({method,args});
   const {targetInfos=[]}=await browser.send('Target.getTargets');
-  const worker=targetInfos.find(t=>t.type==='service_worker'&&t.url.startsWith(prefix));
-  // A sleeping MV3 worker is not a CDP target. Send a message from an existing
-  // extension-owned page to wake it rather than creating an ungrouped tab.
-  const page=!worker&&targetInfos.find(t=>t.type==='page'&&t.url.startsWith(prefix)&&t.url.includes('/workspace.html'));
-  const target=worker||page;
-  if(!target)throw Error('WebHelm workspace extension has no reachable worker or page');
-  const {sessionId}=await browser.send('Target.attachToTarget',{targetId:target.targetId,flatten:true});
-  try {
-    const request=JSON.stringify({method,args});
-    const expression=worker
-      ? `globalThis.browserWorkspaceManagerRpc(${request})`
-      : `chrome.runtime.sendMessage(${request})`;
-    const result=await browser.send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true},sessionId);
-    if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text||'extension evaluation failed');
-    const value=result.result?.value;
-    if(!value?.ok)throw Error(value?.error?.message||'workspace extension RPC failed');
-    return value.result;
-  } finally {
-    await browser.send('Target.detachFromTarget',{sessionId}).catch(()=>{});
+  const worker=targetInfos.find(t=>t.type==='service_worker'&&t.url.startsWith(EXTENSION_PREFIX));
+  if(worker){
+    if(debuggerSession?.targetId!==worker.targetId){
+      debuggerSession=null;
+      const {sessionId}=await browser.send('Target.attachToTarget',{targetId:worker.targetId,flatten:true});
+      debuggerSession={targetId:worker.targetId,sessionId};
+    }
+    try{return await evaluateExtension(browser,debuggerSession.sessionId,
+      `globalThis.browserWorkspaceManagerRpc(${request})`);
+    }catch(error){debuggerSession=null;throw error;}
+  }
+  const page=targetInfos.find(t=>t.type==='page'&&t.url.startsWith(EXTENSION_PREFIX)&&t.url.includes('/workspace.html'));
+  if(page){
+    const {sessionId}=await browser.send('Target.attachToTarget',{targetId:page.targetId,flatten:true});
+    try{return await evaluateExtension(browser,sessionId,`chrome.runtime.sendMessage(${request})`);}
+    finally{await browser.send('Target.detachFromTarget',{sessionId}).catch(()=>{});}
+  }
+  if(!extensionConfigured())throw Error('WebHelm workspace extension is not installed or enabled');
+  // Wake a suspended MV3 worker from a temporary background extension page.
+  // Only this temporary target is closed; no user tab is reused or modified.
+  const {targetId}=await browser.send('Target.createTarget',{
+    url:`${EXTENSION_PREFIX}workspace.html?webhelm_wakeup=1`,background:true});
+  let sessionId;
+  try{
+    ({sessionId}=await browser.send('Target.attachToTarget',{targetId,flatten:true}));
+    let ready=false;
+    for(let attempt=0;attempt<20;attempt++){
+      try{
+        const reply=await browser.send('Runtime.evaluate',{
+          expression:`typeof chrome!=='undefined'&&chrome.runtime?.id===${JSON.stringify(EXTENSION_ID)}`,
+          returnByValue:true},sessionId);
+        if(reply.result?.value===true){ready=true;break;}
+      }catch{}
+      await delay(100);
+    }
+    if(!ready)throw Error('WebHelm installed extension did not initialize its background page');
+    return await evaluateExtension(browser,sessionId,`chrome.runtime.sendMessage(${request})`);
+  }finally{
+    if(sessionId)await browser.send('Target.detachFromTarget',{sessionId}).catch(()=>{});
+    await browser.send('Target.closeTarget',{targetId}).catch(()=>{});
   }
 }
 
@@ -263,23 +312,23 @@ async function createSession(req={}) {
     return {session_id:sid,workspace:s.workspace,target_id:targetId,
       url:req.url||'about:blank',workspace_supported:!!lease};
   }catch(error){
-    if(lease)await extensionCall(s,'workspace.release',{name:s.workspace,tabId:lease.tabId}).catch(()=>{});
-    else if(targetId)await browser.send('Target.closeTarget',{targetId}).catch(()=>{});
+    if(lease){
+      try{await extensionCall(s,'workspace.release',{name:s.workspace,tabId:lease.tabId});}
+      catch{if(targetId)await browser.send('Target.closeTarget',{targetId}).catch(()=>{});}
+    }else if(targetId)await browser.send('Target.closeTarget',{targetId}).catch(()=>{});
     throw error;
   }
 }
 
 async function targetForUrl(url){for(let i=0;i<100;i++){const {targetInfos=[]}=await connectBrowser().then(b=>b.send('Target.getTargets'));const match=targetInfos.find(t=>t.type==='page'&&t.url===url);if(match)return match.targetId;await delay(50)}return null}
 async function extensionSupported() {
-  // Treat a missing extension differently from a temporarily unreachable one.
   const browser=await connectBrowser();
-  const prefix='chrome-extension://kkkpgmhpoeceojalkpfdidffdfnlgdog/';
   const {targetInfos=[]}=await browser.send('Target.getTargets');
-  const installed=targetInfos.some(t=>t.url?.startsWith(prefix));
+  const installed=targetInfos.some(t=>t.url?.startsWith(EXTENSION_PREFIX))||extensionConfigured();
   if(!installed)return false;
   let error;
   for(let attempt=0;attempt<3;attempt++){
-    try {await extensionCall({workspace:'Harness'},'workspace.list');return true;}
+    try{await extensionCall({workspace:'Harness'},'workspace.list');return true;}
     catch(e){error=e;if(attempt<2)await delay(150);}
   }
   throw Error(`Browser Workspace extension installed but RPC unavailable: ${error?.message||'unknown'}`);
@@ -290,14 +339,21 @@ async function stopSession(sid){
   const s=sessions.get(sid);
   if(!s)throw Error(`unknown session_id: ${sid}`);
   const count=s.targets.size;
-  let release_error=null;
+  let release_error=null, recovered_tab_closes=0;
   await s.mutex.run(async()=>{
     const browser=await connectBrowser();
     for(const tid of [...s.targets]){
       try{
         const leasedTabId=s.leasedTabs.get(tid);
-        if(leasedTabId) await extensionCall(s,'workspace.release',{name:s.workspace,tabId:leasedTabId});
-        else await browser.send('Target.closeTarget',{targetId:tid});
+        if(leasedTabId) {
+          try{await extensionCall(s,'workspace.release',{name:s.workspace,tabId:leasedTabId});}
+          catch(error){
+            // If MV3 lost its transient ownership map, never leave an orphan.
+            // The CDP Target is owned exclusively by this Session.
+            await browser.send('Target.closeTarget',{targetId:tid});
+            recovered_tab_closes++;
+          }
+        }else await browser.send('Target.closeTarget',{targetId:tid});
       }catch(error){release_error=release_error||String(error);}
       s.leasedTabs.delete(tid);targets.delete(tid);
       for(const dispose of s.eventDisposers.get(tid)||[])dispose();
@@ -306,7 +362,7 @@ async function stopSession(sid){
     for(const [,attachment] of s.attachments)await browser.send('Target.detachFromTarget',{sessionId:attachment}).catch(()=>{});
     sessions.delete(sid);
   });
-  return {session_id:sid,workspace:s.workspace,target_id:s.rootTargetId,closed_tabs:count,release_error};
+  return {session_id:sid,workspace:s.workspace,target_id:s.rootTargetId,closed_tabs:count,recovered_tab_closes,release_error};
 }
 
 async function workspaceOp(req){const h=makeHelpers({workspace:req.name||'Harness',targetId:'',targets:new Set(),attachments:new Map()});if(req.op==='workspace-create')return h.workspace_create(req.name,req.pool_size);if(req.op==='workspace-delete')return h.workspace_delete(req.name,req.force);throw Error(`unknown op: ${req.op}`)}
