@@ -1,16 +1,10 @@
-name: WebHelm Skill Node CI
+name: WebHelm Runtime and Skill
 on:
   push:
     branches: [main]
-    paths:
-      - "skills/webhelm/**"
-      - "test/**/*.mjs"
-      - ".github/workflows/webhelm-skill.yml"
+    paths: ["runtime/**", "bin/**", "skills/webhelm/**", "test/**", "package*.json", ".github/workflows/webhelm-skill.yml"]
   pull_request:
-    paths:
-      - "skills/webhelm/**"
-      - "test/**/*.mjs"
-      - ".github/workflows/webhelm-skill.yml"
+    paths: ["runtime/**", "bin/**", "skills/webhelm/**", "test/**", "package*.json", ".github/workflows/webhelm-skill.yml"]
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,11 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
           cache: npm
-          cache-dependency-path: skills/webhelm/package-lock.json
-      - run: npm ci --prefix skills/webhelm --no-audit --no-fund
-      - run: npm test --prefix skills/webhelm
-      - run: node skills/webhelm/runtime/cli.mjs platform list
-      - run: node skills/webhelm/runtime/cli.mjs platform profile chatgpt
-      - run: node --check skills/webhelm/runtime/node-daemon.mjs
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: node bin/webhelm.mjs --help
+      - run: npm pack --dry-run

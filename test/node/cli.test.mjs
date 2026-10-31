@@ -1,37 +1,46 @@
-import test from 'node:test';
+import test, {after} from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-const cli=fileURLToPath(new URL('../../skills/webhelm/runtime/cli.mjs', import.meta.url));
-const run=(...args)=>spawnSync(process.execPath,[cli,...args],{encoding:'utf8',timeout:10000});
+import {spawnSync,execFileSync} from 'node:child_process';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+const cli=fileURLToPath(new URL('../../runtime/cli.mjs',import.meta.url));
+const dir=mkdtempSync(path.join(os.tmpdir(),'webhelm-cli-actions-'));
+const platformDir=path.join(dir,'platforms');
+const run=(...args)=>spawnSync(process.execPath,[cli,...args],{encoding:'utf8',timeout:10000,env:{...process.env,WEBHELM_ACTIONS_HOME:dir,WEBHELM_PLATFORM_DIR:platformDir}});
+for(const platform of ['z','chatgpt']){
+  const site=path.join(platformDir,platform);mkdirSync(path.join(site,'actions'),{recursive:true});
+  const action=platform==='z'?'new-turn':'new-turn';
+  writeFileSync(path.join(site,'manifest.yaml'),`platform: ${platform}\nactions:\n  ${action}: "actions/_new_turn.mjs"\n`);
+  writeFileSync(path.join(site,'actions/_new_turn.mjs'),'export default async function run() { return true; }\n');
+}
+execFileSync('git',['init','-b','main'],{cwd:dir,stdio:'ignore'});
+execFileSync('git',['add','.'],{cwd:dir,stdio:'ignore'});
+execFileSync('git',['-c','user.name=Test','-c','user.email=test@invalid.local','commit','-m','test fixture'],{cwd:dir,stdio:'ignore'});
+after(()=>rmSync(dir,{recursive:true,force:true}));
 
-test('all eleven platform manifests are discoverable through the Node CLI',()=>{
-  const result=run('platform','list');
-  assert.equal(result.status,0,result.stderr);
-  const platforms=JSON.parse(result.stdout);
-  assert.equal(platforms.length,11);
-  assert.ok(platforms.includes('chatgpt'));
-  assert.ok(platforms.includes('z'));
+test('independent local action repo is discoverable without bundled platform copies',()=>{
+  const result=run('platform','list');assert.equal(result.status,0,result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout),['chatgpt','z']);
 });
 
-test('platform profiles and source are native JS with previous public JSON contract',()=>{
-  const profile=run('platform','profile','z');
-  assert.equal(profile.status,0,profile.stderr);
+test('platform profile and JS source preserve CLI compatibility',()=>{
+  const profile=run('platform','profile','z');assert.equal(profile.status,0,profile.stderr);
   assert.equal(JSON.parse(profile.stdout).platform,'z');
-  const source=run('platform','source','z','new-turn');
-  assert.equal(source.status,0,source.stderr);
+  const source=run('platform','source','z','new-turn');assert.equal(source.status,0,source.stderr);
   assert.match(source.stdout,/export default async function/);
 });
 
-test('invalid ChatGPT queue requests fail before any browser action',()=>{
+test('invalid queue action fails without sending a browser request',()=>{
   const result=run('platform','run','chatgpt','new-turn');
-  assert.equal(result.status,1);
-  assert.match(result.stderr,/thread_id and message required/);
+  assert.equal(result.status,1);assert.match(result.stderr,/thread_id and message required/);
 });
 
-
-test('capacity is a documented first-class CLI operation',()=>{
-  const result=run('--help');
-  assert.equal(result.status,0,result.stderr);
+test('setup/sync/publish commands are visible',()=>{
+  const result=run('--help');assert.equal(result.status,0,result.stderr);
+  assert.match(result.stdout,/webhelm setup/);
+  assert.match(result.stdout,/webhelm platform sync/);
+  assert.match(result.stdout,/webhelm platform publish/);
   assert.match(result.stdout,/webhelm capacity/);
 });

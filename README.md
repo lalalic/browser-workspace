@@ -1,77 +1,47 @@
 # WebHelm
 
-WebHelm is one **Node.js browser-automation Skill**: one long-running daemon, one machine-wide managed Chrome instance, one CDP WebSocket, explicit independent CDP attachments per tab, and one shared Chrome extension for visible tab groups.
+[WebHelm](https://github.com/lalalic/webhelm) is a Node.js CLI and agent Skill for a visible, managed Chrome instance. One Runtime daemon controls CDP, persistent JavaScript browser Sessions, Chrome Tab Groups, and durable ChatGPT FIFO delivery.
 
-The entire deployable runtime, platform Actions, Chrome extension, Skill instructions, lockfile, and installer live together in **`skills/webhelm/`**. No independent Browser Harness installation, Python interpreter, two-layer daemon, separate WebHelm npm publication, or PyPI release is needed.
+## Two repositories, independent releases
 
-## Install
+| Repository | Contents | Updates |
+|---|---|---|
+| [`lalalic/webhelm`](https://github.com/lalalic/webhelm) | npm Runtime/CLI, Skill (`skills/webhelm`), Chrome Extension, tests | npm `webhelm@latest`; Skill source separately |
+| [`lalalic/webhelm-actions`](https://github.com/lalalic/webhelm-actions) | Site manifests, ChatGPT/Z.ai/DeepSeek/XHS/etc. Actions | Git checkout at `~/.local/webhelm` |
 
-```sh
-npx skills add lalalic/browser-workspace --skill webhelm
-SKILL_DIR="<actual WebHelm Skill directory>"
-sh "$SKILL_DIR/scripts/install-global-cli.sh"
-webhelm status
-```
+The npm package **does not include** the Skill or site Actions. The Skill's executable is a small `npx --yes webhelm@latest` launcher; its contents may update without a Runtime release.
 
-Node.js >=22.5 and npm are required. The installer uses the Skill's `package-lock.json` to install one small local JS dependency (`yaml`) and manages `~/.local/bin/webhelm`. Chrome launches automatically if missing, using the existing managed profile at `~/.config/browser-workspace/chrome`.
-
-## Operate
+## Install and use
 
 ```sh
-webhelm session start --url https://example.com
-webhelm session exec SESSION_ID <<'JS'
+npx --yes webhelm@latest setup
+npx --yes webhelm@latest status
+npx --yes webhelm@latest capacity
+npx --yes webhelm@latest platform list
+npx --yes webhelm@latest platform sync
+npx --yes webhelm@latest session start --url https://example.com
+npx --yes webhelm@latest session exec SESSION_ID <<'JS'
 console.log(await snapshot());
-await click('[data-ref="e1"]');
 JS
-webhelm session stop SESSION_ID
-
-webhelm platform list
-webhelm capacity
-webhelm platform profile chatgpt
-webhelm platform source z new-turn
-webhelm platform run chatgpt validate --auto-session
+npx --yes webhelm@latest session stop SESSION_ID
 ```
 
-Agent-facing Browser Helpers use `await`-style JavaScript in persistent Session contexts. Tabs and popups are owned by their Session, explicit CDP `sessionId` routes are used, and independent Sessions execute concurrently. Extension management remains inside the Skill; only its tab-group lease RPC travels through the extension.
+Use `npx skills add lalalic/webhelm --skill webhelm` to install agent guidance and the bundled Extension source. The Skill lives **in this repo** at `skills/webhelm/SKILL.md`.
 
-The 11 platform adapters are migrated to `.mjs`, including ChatGPT's durable FIFO SQLite runtime. Migration does not imply every live site flow is verified after the port; consult the platform's `manifest.yaml` and verify real website behavior before using actions with external side effects.
+The Actions checkout is `~/.local/webhelm`, with site modules at `~/.local/webhelm/platforms`. Setup clones if absent, then reuses that checkout without discarding local modifications. Run `platform sync` for new commits. For a verified local Action fix, `platform publish --message "..."` tests, commits and pushes only the action changes to the separate repo.
 
-## Code layout
+## Architecture and compatibility
 
-```text
-skills/webhelm/
-  SKILL.md                    single agent interface
-  bin/webhelm                 global CLI target
-  runtime/                    Node daemon, CLI, Chrome, Session, platform loader
-  platforms/                  site-specific JS actions, manifest, queue
-  extension/                  one canonical Chrome extension source
-  scripts/                    single installer and offline extension packaging
-  package.json, package-lock.json
+The Runtime's managed Chrome profile and its IPC socket remain at their existing `~/.config/browser-workspace/` locations to preserve logins, sessions and queue data. Only one daemon is permitted to own the queue. A CLI package update does not kill a running daemon or close another agent's tabs; upgrade daemons when idle.
 
-test/node/                     Node runtime and CLI tests
-test/workspace-manager.test.mjs  extension tests
-```
+NeoY and Relay can continue using `webhelm` session commands, `result.stdout` JSON receipts, and `admin_helper` returned by `status`. An `admin_helper` inside the installed Skill is a stable connector to the same Node IPC socket. `webhelm capacity` replaces the legacy Python capacity probe.
 
-## Development / deployment
+## Development
 
 ```sh
-npm ci --prefix skills/webhelm
-npm test --prefix skills/webhelm
-node skills/webhelm/runtime/cli.mjs platform list
+npm ci
+npm test
+npm pack --dry-run
 ```
 
-For live read-only Chrome testing without changing the production daemon:
-
-```sh
-export WEBHELM_RUNTIME_DIR=/private/tmp/webhelm-node-test
-export WEBHELM_SOCKET=$WEBHELM_RUNTIME_DIR/session.sock
-export WEBHELM_LOCK=$WEBHELM_RUNTIME_DIR/daemon.lock
-export WEBHELM_CDP_URL=http://127.0.0.1:9222
-./skills/webhelm/bin/webhelm status
-```
-
-Preserve the persistent ChatGPT `chatgpt-new-turn.sqlite3` queue when retiring any earlier runtime; never run two dispatchers on the same DB. Release through the Skill source and its installer, not PyPI or an external npm package. GitHub extension release assets derive only from the bundled extension source.
-
-## Compatibility
-
-NeoY and Relay can still consume the canonical machine-readable receipt in `result.stdout`. Node callers can use `result.value` directly. The `webhelm capacity` command reads the Extension workspace state without creating a browser Session or launching a Python subprocess.
+Keep platform-specific code and tests in `lalalic/webhelm-actions`. Runtime tests should use mock CDP or owned, temporary real Chrome tabs; protect other active Sessions. GitHub Actions runs Runtime/Extension CI. The Skill and Extension remain version-controlled together; npm publishing uses the standalone package at the repository root.

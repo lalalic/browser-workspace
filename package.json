@@ -1,0 +1,34 @@
+{
+  "name": "webhelm",
+  "version": "1.0.0",
+  "description": "Agent browser automation in a visible managed Chrome with persistent JavaScript sessions",
+  "type": "module",
+  "bin": {
+    "webhelm": "bin/webhelm.mjs"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "files": [
+    "bin/",
+    "runtime/",
+    "README.md",
+    "PRIVACY.md"
+  ],
+  "scripts": {
+    "test": "node --test test/node/*.test.mjs test/workspace-manager.test.mjs skills/webhelm/tests/*.test.mjs",
+    "test:package": "npm pack --dry-run --json"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lalalic/webhelm.git"
+  },
+  "homepage": "https://github.com/lalalic/webhelm",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  }
+}

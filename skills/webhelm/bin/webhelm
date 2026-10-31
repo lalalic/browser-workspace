@@ -1,11 +1,12 @@
 #!/bin/sh
+# Stable Skill entry point. Each invocation resolves the latest published CLI.
 set -eu
 SOURCE=$0
 while [ -L "$SOURCE" ]; do
   PARENT=$(CDPATH= cd -- "$(dirname -- "$SOURCE")" && pwd -P)
   TARGET=$(readlink "$SOURCE")
-  case "$TARGET" in /*) SOURCE=$TARGET ;; *) SOURCE="$PARENT/$TARGET" ;; esac
+  case "$TARGET" in /*) SOURCE="$TARGET" ;; *) SOURCE="$PARENT/$TARGET" ;; esac
 done
 SKILL_DIR=$(CDPATH= cd -- "$(dirname -- "$SOURCE")/.." && pwd -P)
-export WEBHELM_PLATFORM_DIR="${WEBHELM_PLATFORM_DIR:-$SKILL_DIR/platforms}"
-exec node "$SKILL_DIR/runtime/cli.mjs" "$@"
+export WEBHELM_ADMIN_HELPER="${WEBHELM_ADMIN_HELPER:-$SKILL_DIR/scripts/admin.mjs}"
+exec npx --yes webhelm@latest "$@"
