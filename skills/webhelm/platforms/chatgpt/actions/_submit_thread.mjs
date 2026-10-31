@@ -58,14 +58,7 @@ export async function run({ helpers, config = {} }) {
       );
     }
     const target = h.target_id || h.targetId;
-    const attached = await h.cdp("Target.attachToTarget", {
-      targetId: target,
-      flatten: true,
-    });
-    await h.cdp("Input.insertText", {
-      session_id: attached.sessionId,
-      text: "@",
-    });
+      await h.cdp("Input.insertText", { text: "@" });
     let chosen = false;
     for (let i = 0; i < 120; i++) {
       chosen = await js(

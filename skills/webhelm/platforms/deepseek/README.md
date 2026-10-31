@@ -65,7 +65,7 @@ been exercised against the live site. Site size limits and quotas still apply.
 Run the local adapter with the root skill directory as the package source:
 
 ```bash
-uvx --no-cache --from ~/.agents/skills/webhelm webhelm platform run deepseek understand-image \
+webhelm platform run deepseek understand-image \
 	--session-id SESSION_ID --config /absolute/path/config.json
 ```
 

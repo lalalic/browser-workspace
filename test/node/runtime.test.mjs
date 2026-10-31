@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {handle} from '../../src/node-daemon.mjs';
+import {handle} from '../../skills/webhelm/runtime/node-daemon.mjs';
 
+process.env.WEBHELM_CDP_URL='http://127.0.0.1:9222';
 class MockWebSocket extends EventTarget {
   static OPEN=1;
+  static instanceCount=0;
   readyState=0;
-  constructor(){super();MockWebSocket.last=this;queueMicrotask(()=>{this.readyState=1;this.dispatchEvent(new Event('open'))})}
+  constructor(){super();MockWebSocket.instanceCount++;MockWebSocket.last=this;queueMicrotask(()=>{this.readyState=1;this.dispatchEvent(new Event('open'))})}
   emit(method,params,sessionId){this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({method,params,sessionId})}))}
   send(raw){const m=JSON.parse(raw);let result={};switch(m.method){
     case'Target.setDiscoverTargets':result={};break;
@@ -27,6 +29,7 @@ test('independent sessions use explicit target attachments and stop preserves un
   globalThis.fetch=async()=>({json:async()=>({webSocketDebuggerUrl:'ws://mock'})});
   const [a,b]=await Promise.all([handle({op:'start',url:'https://a.example'}),handle({op:'start',url:'https://b.example'})]);
   assert.notEqual(a.target_id,b.target_id);
+  assert.equal(MockWebSocket.instanceCount,1,'concurrent starts must share one CDP WebSocket');
   const sessionA=[...MockWebSocket.attach.entries()].find(([,target])=>target===a.target_id)[0];
   const sessionB=[...MockWebSocket.attach.entries()].find(([,target])=>target===b.target_id)[0];
   MockWebSocket.last.emit('Network.requestWillBeSent',{requestId:'only-a'},sessionA);

@@ -181,3 +181,18 @@ test("generic submission receipts require a matching user turn; Temporary Chat o
     "u1",
   );
 });
+
+test('read-only ChatGPT validate waits for hydrated composer instead of early false', async () => {
+  const { run } = await import('../actions/_validate.mjs');
+  let stateCalls=0;
+  const helpers={
+    goto_url:async()=>{},wait_for_load:async()=>{},
+    js:async code => {
+      if(code.includes('log in to chatgpt') && !code.includes('BrowserWorkspaceValidateProbe20261020'))return false;
+      if(code.includes('BrowserWorkspaceValidateProbe20261020'))return {ready:++stateCalls>=3,login:false};
+      return null;
+    },
+  };
+  assert.equal(await run({helpers}),true);
+  assert.equal(stateCalls,3);
+});

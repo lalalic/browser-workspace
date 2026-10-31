@@ -70,14 +70,7 @@ export async function attachAppMention(
       "ChatGPT app mention requires a visible contenteditable composer",
     );
   }
-  const attached = await helpers.cdp("Target.attachToTarget", {
-    targetId,
-    flatten: true,
-  });
-  await helpers.cdp("Input.insertText", {
-    session_id: attached.sessionId,
-    text: "@",
-  });
+  await helpers.cdp("Input.insertText", { text: "@" });
   const wanted = app.toLowerCase(), end = Date.now() + timeout * 1000;
   let found = false;
   while (Date.now() < end) {

@@ -21,6 +21,23 @@ if [ ! -f "$skill/SKILL.md" ] || ! grep -q '^name: webhelm$' "$skill/SKILL.md" |
   exit 2
 fi
 
+# The Skill owns the only runtime and installs its small Node dependencies once.
+if ! command -v node >/dev/null 2>&1; then
+  echo "WebHelm requires Node.js 22.5+" >&2
+  exit 4
+fi
+if ! node -e 'process.exit(Number(process.versions.node.split(".")[0])>22 || (Number(process.versions.node.split(".")[0])===22 && Number(process.versions.node.split(".")[1])>=5) ? 0 : 1)' ; then
+  echo "WebHelm requires Node.js 22.5+" >&2
+  exit 4
+fi
+if [ ! -f "$skill/package.json" ] || [ ! -f "$skill/package-lock.json" ] || [ ! -f "$skill/runtime/cli.mjs" ]; then
+  echo "Incomplete WebHelm Skill: Node runtime or dependency lockfile missing" >&2
+  exit 4
+fi
+# npm ci uses the published dependency lock and does not change platform actions.
+if [ ! -f "$skill/node_modules/yaml/package.json" ]; then
+  npm ci --prefix "$skill" --omit=dev --no-audit --no-fund
+fi
 mkdir -p "$bin"
 
 if [ -L "$cli" ]; then

@@ -12,10 +12,10 @@ browser context; never store credentials.
 Start one session, then keep using its ID for each command:
 
 ```bash
-uvx --from browser-workspace webhelm session start --url https://www.capcut.com/editor
-uvx --from browser-workspace webhelm platform run capcut models --session-id SESSION_ID
-uvx --from browser-workspace webhelm platform run capcut generate --session-id SESSION_ID --config prompt.json
-uvx --from browser-workspace webhelm session stop SESSION_ID
+webhelm session start --url https://www.capcut.com/editor
+webhelm platform run capcut models --session-id SESSION_ID
+webhelm platform run capcut generate --session-id SESSION_ID --config prompt.json
+webhelm session stop SESSION_ID
 ```
 
 `prompt.json` must contain `media_type` (`image` or `video`), an exact `model`

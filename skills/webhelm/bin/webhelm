@@ -8,7 +8,4 @@ while [ -L "$SOURCE" ]; do
 done
 SKILL_DIR=$(CDPATH= cd -- "$(dirname -- "$SOURCE")/.." && pwd -P)
 export WEBHELM_PLATFORM_DIR="${WEBHELM_PLATFORM_DIR:-$SKILL_DIR/platforms}"
-if [ -f "$SKILL_DIR/../../src/cli.mjs" ]; then
-  exec node "$SKILL_DIR/../../src/cli.mjs" "$@"
-fi
-exec npx --yes --package webhelm webhelm "$@"
+exec node "$SKILL_DIR/runtime/cli.mjs" "$@"

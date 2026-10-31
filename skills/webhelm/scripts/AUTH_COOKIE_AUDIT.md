@@ -1,71 +1,28 @@
-# Local Chrome authentication lifecycle audit
+# Chrome authentication audit and keepalive (Node.js)
 
-This read-only collector operates on the **existing** Browser Workspace Chrome
-profile (`~/.config/browser-workspace/chrome/Default/Cookies`). It does **not**
-start Chrome, change cookies, inject JavaScript, navigate pages, or authenticate.
+These optional maintenance commands use the single WebHelm Skill. They do not start another daemon, install Python, copy credentials, change Chrome Cookies, or bypass reauthentication. They use the existing managed Chrome profile and private `~/.config/browser-workspace/auth-audit/` data directory.
 
-Installed locally as:
-
-- `~/.config/browser-workspace/tasks/auth-cookie-audit.py`
-- `~/.config/browser-workspace/tasks/auth-cookie-audit-cron.sh`
-- cron every 15 minutes, independent of the existing 2-hour page checks
-- private state and history: `~/.config/browser-workspace/auth-audit/`
-
-Read-only SQLite access includes committed WAL data. Captured fields: site,
-host, opaque per-cookie identifier, HMAC of the encrypted value, cookie
-creation/update/access times, expiry time, persistence, SameSite, Secure,
-HttpOnly, and partition state. Raw values, plaintext tokens, account IDs, and
-Cookie headers are never written to logs. The local HMAC key has mode 0600;
-losing it prevents comparison with older fingerprints. Do not upload the key
-or the private state to issue trackers or external services.
-
-`events.jsonl` contains timestamped counts, earliest future expiration, and
-added/removed/rotated/extended statistics. `latest.json` enables comparisons
-with the previous read. Both are owner-only files; `collector.log` contains
-only aggregate events. The first run is a baseline, so all current entries
-appear as newly added.
-
-Run manually:
+## Cookie metadata audit (read-only)
 
 ```sh
-/usr/bin/python3 ~/.config/browser-workspace/tasks/auth-cookie-audit.py
+node "$SKILL_DIR/scripts/auth-cookie-audit.mjs"
+node "$SKILL_DIR/scripts/auth-cookie-audit.mjs" --site wechat --status logged_in --page-evidence backend_visible
 ```
 
-To annotate a **separately verified** page check, run after it:
+`auth-cookie-audit.mjs` reads metadata from `Default/Cookies` using Node's read-only SQLite API. Each Cookie is represented by an HMAC identifier and HMAC fingerprint of the encrypted value. Neither raw encrypted values nor plaintext credential values appear in state files or logs. The per-host local `audit.key` is owner-only (0600). Logs contain per-site counts, Cookie rotation/expiry changes, and selected harmless metadata for WeChat's `sessionid` and `wxuin` names. An unchanged Cookie cannot prove the server session is valid.
+
+Output: private `events.jsonl`, `latest.json`, and `audit.key`. The CLI reports only a small JSON summary. The first run establishes a baseline. Optional site status/evidence fields must describe a separately verified page observation; Cookies alone do not establish login.
+
+## Authenticated page visits (read-only)
 
 ```sh
-/usr/bin/python3 ~/.config/browser-workspace/tasks/auth-cookie-audit.py --site wechat --status logged_in
-/usr/bin/python3 ~/.config/browser-workspace/tasks/auth-cookie-audit.py --site google_store --status login_required
+node "$SKILL_DIR/scripts/auth-keepalive-visit.mjs"
 ```
 
-These annotations record a *human/agent-observed* status, not a status inferred
-from cookies. The scheduled sampler uses `unknown`, because Cookie presence
-cannot prove server-side login. Correlate the next failed UI check with the
-preceding sampler events to distinguish missing/expired cookies, rolling
-renewals, and server-side validation or forced reauthentication. An unchanged,
-unexpired Cookie does not prove a server session is valid. Google's earliest
-Cookie expiry may belong to an unrelated cookie, not the authentication token.
+This starts an isolated WebHelm Session for each WeChat Channels, Xiaohongshu, and Chrome Web Store page, captures only a compact snapshot, classifies visible page evidence, and stops only its own sessions. A failure still attempts cleanup. It also records the Cookie audit around visits. Visits cannot guarantee indefinite login and cannot bypass MFA.
 
-To remove the sampler, delete only its crontab entry. Do **not** delete or
-restart the Chrome profile, daemon, or existing page-check schedule.
+## Local scheduled task migration
 
-The sampler serializes all state reads/updates with an OS file lock to avoid
-false Cookie changes when the 15-minute cron overlaps a page-check annotation.
-For WeChat, the `sessionid` and `wxuin` cookie names are watched explicitly:
-only their timestamps and presence are published, never their values. A page
-check may include `--page-evidence backend_visible` or `login_redirect` /
-`page_load_failed` / `feed_only`; use only when the page was just checked.
+The former optional maintenance tasks used `auth-cookie-audit.py`, `auth-keepalive-visit.py` and `uvx browser-workspace`. Before retiring their scheduled wrappers, update their commands to the `.mjs` equivalents above. Use the installed Skill's absolute path, the Node binary, and a `lockf` wrapper (macOS) to prevent overlapping runs. Do not delete the existing private history or `audit.key`.
 
-## Proactive authenticated visits
-
-Besides passive cookie sampling (minute 0/15/30/45), a separate
-auth-keepalive-visit-cron.sh executes auth_keepalive_visit.py at minutes
-7/22/37/52. It navigates the three websites sequentially in the existing
-Browser Workspace profile using session CLI, reads page state, and closes
-only sessions it started in finally blocks. The script is guarded by lockf.
-
-Each run records cookie metadata before navigating and after each visit.
-Private auth-audit/visits.jsonl stores only site status, evidence kind, retry
-count and cleanup status. Never logs cookies or page content. Website visits
-cannot guarantee indefinite login: server-side revocation and forced
-authentication may still occur.
+Do **not** enable two schedulers concurrently. Do not repoint any schedule until the installed Node Skill's `status`, `session start/stop`, and read-only validation actions have succeeded.

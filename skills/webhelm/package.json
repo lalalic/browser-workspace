@@ -1,0 +1,17 @@
+{
+  "name": "webhelm",
+  "version": "1.0.0",
+  "description": "Self-contained Node.js runtime bundled by the WebHelm skill",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "test": "cd ../.. && node --test test/node/*.test.mjs test/workspace-manager.test.mjs skills/webhelm/platforms/chatgpt/tests-js/*.test.mjs skills/webhelm/platforms/tests/*.test.mjs skills/webhelm/tests/*.test.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "private": true
+}

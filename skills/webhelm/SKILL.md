@@ -1,64 +1,103 @@
 ---
 name: webhelm
-description: Control the shared visible Chrome through WebHelm's Node.js daemon, persistent JavaScript sessions, and site automation where a Node adapter is available.
+description: Control the user's visible managed Chrome through one native Node.js WebHelm runtime, persistent JavaScript sessions, compact semantic Browser Helpers, workspace tab groups, and integrated site-specific actions.
+requires:
+  skills:
+    - daemon-service-manage
 ---
 
-# WebHelm
+# WebHelm — unified browser skill
 
-WebHelm is one browser skill and one Node.js product. Its target architecture uses one daemon, one visible managed Chrome instance, one CDP WebSocket, and explicit per-target CDP `sessionId`s. The bundled Chrome extension source in `extension/` is canonical and retains its published extension ID. Do not install a second extension identity or start an independent browser-harness process.
+**WebHelm is the only browser Skill.** It owns one Node.js daemon, the existing managed Chrome profile, one CDP WebSocket with explicit per-target CDP session attachments, one session-owned JavaScript execution environment, and the bundled Chrome tab-group extension. Do not load or launch Browser Harness, Browser Workspace, or Python daemon dependencies separately. The Node runtime is bundled in `runtime/` with the Skill; no npm publication or second runtime download is needed.
 
-## Install and commands
+## Setup and status
 
-The runtime requires Node.js 22 or newer and uses only Node built-ins. The npm package is `webhelm`; the public executable is `webhelm`. During local development, `bin/webhelm` runs the adjacent Node source. For a standalone skill install it resolves the published npm package through `npx`.
+Resolve `SKILL_DIR` from the actual installed Skill path; do not assume `~/.agents` or any other agent-specific location.
 
-```bash
+```sh
 SKILL_DIR="<absolute directory containing this SKILL.md>"
 sh "$SKILL_DIR/scripts/install-global-cli.sh"
 webhelm status
-webhelm session start --url https://example.com
+webhelm platform list
 ```
 
-The supported command surface is `status`, `session start|list|exec|stop`, and `platform list|profile|run`. Use JavaScript for `session exec`; scripts can come from stdin or `--code-file`:
+This requires Node.js **22.5 or newer** and npm. Installation installs locked, local JS dependencies, and manages one executable symlink `~/.local/bin/webhelm`. The CLI automatically starts the single Node daemon and adopts the existing Browser Workspace Chrome profile at `~/.config/browser-workspace/chrome`. If that managed Chrome is missing, WebHelm launches it. Do not restart Chrome merely to update the Skill. `webhelm status` includes the canonical `admin_helper` path for product clients.
 
-```bash
+## Sessions (JavaScript)
+
+Always create one Session per logical workflow. Retain its `session_id` across steps; stop it after success, failure, or cancellation. Stop closes/releases only that Session's tabs, including child windows/popups. Never close unrelated tabs. Sessions on separate tabs execute concurrently, with independent JS state and explicit CDP attachments rather than a global browser lock.
+
+```sh
+webhelm session start --url https://example.com
 webhelm session exec SESSION_ID <<'JS'
 console.log(await page_info());
 console.log(await snapshot());
+await click('[data-ref="e2"]');
 JS
+webhelm session stop SESSION_ID
 ```
 
-A JavaScript session persists simple declared bindings between exec calls. Helpers are available directly and through `helpers`: `snapshot`, `js`, `cdp`, `goto_url`, `current_tab`, `new_tab`, `close_tab`, `page_info`, `wait_for_load`, `wait_for_element`, `fill_input`, `click`, `capture_screenshot`, and workspace CRUD helpers. Use `snapshot()` for compact accessibility-oriented refs, then address elements with CSS selectors such as `[data-ref="e2"]`. Batch independent observations/actions in one exec when useful. `js(expression, target_id)` can explicitly inspect a target owned by the session; normal helpers use its current target.
+The commands are `webhelm session start [--url URL]`, `list`, `exec SESSION_ID [--code-file SCRIPT.mjs]`, `stop SESSION_ID` and `stop --all`. The JS runtime keeps variables and functions between calls. Use `console.log` for compact output, and batch steps within one `exec` where appropriate. Do not call `Target.createTarget` directly: use `new_tab(url)` so workspace ownership is tracked.
 
-Every workflow follows `session start -> session exec -> ... -> session stop`. Each session owns its root tab, tabs created through `new_tab()`, and detected opener popups. Stop closes those tabs and leaves unrelated Chrome tabs open. Independent sessions use their own CDP attachment and may execute concurrently; a long wait in one session must not block another. Never use raw `Target.createTarget`; use `new_tab(url)` so ownership is tracked.
+### Browser Helpers
 
-## Chrome and pilot isolation
+Helpers are preinstalled into each Session's JS environment (all async unless stated otherwise):
 
-The daemon attaches to the existing visible WebHelm Chrome endpoint and keeps the profile at `~/.config/browser-workspace/chrome`. It does not create a second Chrome profile or launch an independent browser. `WEBHELM_CDP_URL` may point at an already-running Chrome endpoint. For a development pilot, set `WEBHELM_RUNTIME_DIR` and `WEBHELM_SOCKET` to isolated paths; the browser profile remains the same managed profile. Do not stop, replace, or migrate a live Python deployment during a pilot.
-
-The session daemon starts lazily and uses a singleton owner lock. If the socket is unreachable while its owner is alive, it refuses duplicate startup. On daemon shutdown, only session-owned tabs are closed. A daemon restart does not recover JavaScript VM namespaces; sessions must be recreated.
-
-The extension remains optional for basic browser control. Workspace CRUD and root-tab lease allocation use its service-worker RPC over the same CDP connection when the published extension is installed. Root lease release and popup grouping still need live Chrome verification; the mock suite does not establish real extension grouping behavior.
-
-## Platform support status
-
-Platform actions are executable only when they have a Node implementation and are explicitly enabled in the Node platform manifest. The current source tree contains Python actions. The Node pilot therefore reports those actions as disabled and `platform run` rejects them; do not treat the Python manifests as evidence that a Node action is available. Keep using the pre-existing Python deployment for platform workflows until their migrations have landed.
-
-The ChatGPT durable asynchronous FIFO, idempotency, queue restore, sync mode, thread/project state, and verified return semantics still require a Node migration and regression coverage. No ChatGPT lifecycle action is enabled by this pilot. Other site actions (ChatGPT, Z.ai, DeepSeek, XHS, CapCut, TikTok, YouTube, WeChat Channels, Teams, Chrome Web Store, and IYF) are likewise migration blockers unless implemented and enabled in a future release.
-
-## Product workspace API
-
-Products such as NeoY and Relay should discover the helper path from `webhelm status`, then import `ensureWorkspace(name, size)` and `deleteWorkspace(name, options)` from the returned `admin_helper`. These APIs use the same WebHelm socket and extension RPC. Workspace lifecycle is not an agent CLI command.
-
-## Extension installation
-
-Keep using the published extension ID `kkkpgmhpoeceojalkpfdidffdfnlgdog` and the existing Chrome Web Store listing or the bundled offline installation path. The offline copy is prepared by:
-
-```bash
-sh "$SKILL_DIR/scripts/prepare-local-extension.sh"
+```js
+await snapshot();                   // compact roles and [data-ref="eN"] selectors
+await page_info();                  // {url,title,readyState}
+await goto_url(url);
+await wait_for_load();
+await wait_for_element(selector, {timeout:10, visible:true}); // seconds; boolean
+await click(selector);
+await fill_input(selector, text);
+await type_text(text);              // CDP Input.insertText
+await upload_file(selector, absoluteFilePath);
+await js('document.title');         // in-page JavaScript
+await cdp('Page.getNavigationHistory');
+await capture_screenshot();         // base64 PNG (optionally save to file)
+await new_tab(url);
+await current_tab();
+await list_tabs();
+await switch_tab(targetId);         // only tabs owned by this Session
+await close_tab();
+await wait(1);                      // seconds
+await workspace_status();
 ```
 
-This prepares files only; approve extension installation in the managed Chrome profile. Never silently load it or modify the default Chrome profile.
+`snapshot()` writes `data-ref` onto live controls, so interact with `[data-ref="e2"]` using the normal CSS helpers. Refresh snapshot after navigation or substantial page changes. Use raw `js()` or `cdp()` when a higher-level helper is insufficient. Never infer tab identity from URL; CDP target attachment is authoritative. Raw CDP tab creation/attachment and closing another Session's tabs are prohibited.
 
-## Development and release
+## Platform Actions
 
-Run the Node tests with `npm test` (or `node --test`). The Node daemon is launched lazily by `webhelm`. The npm package contains the Node runtime and skill platform manifests; npm is the release path for the Node CLI. Do not publish a Python wheel for the Node runtime. The legacy Python deployment and PyPI metadata remain present only as migration inputs until platform and queue parity are complete; they are not part of the Node pilot runtime.
+Site-specific actions, manifests, and verified flow documentation live under this same Skill's `platforms/`. There are adapters for ChatGPT, Z.ai, DeepSeek, XHS, CapCut, TikTok, YouTube, WeChat Channels, Teams, Chrome Web Store, and IYF. Platform code is JavaScript `.mjs` and receives the same Session's Browser Helpers. The generic agent owns the Session lifecycle; platform code must not create a second daemon or user session.
+
+```sh
+webhelm platform profile z
+webhelm platform source z new-turn
+webhelm session start --url https://chat.z.ai
+webhelm platform run z new-turn --session-id SESSION_ID --config /path/to/turn.json
+webhelm session stop SESSION_ID
+```
+
+Platform actions require `--session-id` by default. `--auto-session` creates a temporary session for a one-off action, but discards the state required for orchestrator self-heal. When a site changes, inspect the same browser Session and write any verified repair into the matching `platforms/<name>/actions/*.mjs` before declaring the workflow complete. Verify external side effects read-only before retrying an ambiguous submission. A migrated action is **not** automatically live-verified; consult the platform manifest and its flow-specific status.
+
+### ChatGPT FIFO delivery
+
+`chatgpt new-turn` defaults to `mode: "async"`: a durable SQLite per-thread FIFO owned by the same Node daemon. It returns `status:submitted` with a queue receipt, **not** proof of delivery. Idempotency and mergeable requests are supported. `mode:"sync"` is an explicit opt-in and requires a caller-owned `--session-id`.
+
+```sh
+webhelm platform run chatgpt new-turn --config /path/to/turn.json
+webhelm platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config /path/to/turn.json
+```
+
+Use exact strings `async` or `sync`; legacy boolean `sync` is invalid. An ambiguous send becomes `UNCERTAIN` and must not be automatically resent. Stop the old dispatch process and preserve `chatgpt-new-turn.sqlite3` before switching runtime versions. No second queue dispatcher may run simultaneously on the same data. Optional Cookie audit and authenticated read-only keepalive scripts in `scripts/` also use Node.js (see `scripts/AUTH_COOKIE_AUDIT.md`).
+
+## Extension / Workspace
+
+The Chrome extension **Browser Workspace** is bundled in `extension/` as the one canonical source (published ID `kkkpgmhpoeceojalkpfdidffdfnlgdog`). It owns visible Chrome Tab Groups, workspace names, leases, and idle tab pools; it is not another OS daemon. For grouping, install from the verified Chrome Web Store listing in managed Chrome, or run `sh "$SKILL_DIR/scripts/prepare-local-extension.sh"` to stage the offline version and approve **Load unpacked** in Chrome. Do not silently install or duplicate the extension. Without it, basic CDP controls still work; grouping and pool leases are unavailable.
+
+Workspace lifecycle is a product-level operation. NeoY/Relay discover `admin_helper` from `webhelm status` and import `ensureWorkspace(name,size)` / `deleteWorkspace(name,{force})`; these use the same Node daemon socket.
+
+## Development / safe deployment
+
+The Skill's single canonical source is `skills/webhelm/`. Run `npm test --prefix "$SKILL_DIR"` in its repository checkout; the tests include Node daemon, queue, platform actions, and the extension. Validate externally against real Chrome before deploying. For an isolated development daemon, use `WEBHELM_RUNTIME_DIR`, `WEBHELM_SOCKET`, `WEBHELM_LOCK`, and optionally `WEBHELM_CDP_URL` to attach to the existing Chrome without touching the production daemon socket. Never restart user-owned browsers, break active sessions, discard pending queue items, or hide incomplete platform live-verification.
