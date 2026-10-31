@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { ensureDaemon, request, SOCKET } from './node-daemon.mjs';
+import { ensureDaemon, request, handle, SOCKET } from './node-daemon.mjs';
 import { PLATFORMS, listPlatforms, platformProfile, actionPath, validateConfig } from './platforms.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -97,7 +97,17 @@ async function main(args = process.argv.slice(2)) {
       managed_chrome:daemon.managed_chrome,
       daemon:{running:true, pid:daemon.pid, session_count:daemon.session_count, queue_paused:daemon.queue_paused, socket:SOCKET}});
   }
-  if (group === 'capacity') return emit(await request({op:'capacity',workspace:arg(args,'--workspace')}));
+  if (group === 'capacity') {
+    const payload={op:'capacity',workspace:arg(args,'--workspace')};
+    try { return emit(await request(payload)); }
+    catch(error) {
+      // Rolling upgrade: query extension metadata directly until a busy old
+      // Node daemon can drain its Sessions and load the new capacity operation.
+      if (!String(error.message).includes('unknown op: capacity')) throw error;
+      emit(await handle(payload));
+      return process.exit(0); // close this CLI's one-off CDP websocket
+    }
+  }
   if (group === 'session') {
     if (command === 'start') return emit(await request({op:'start', workspace:arg(args,'--workspace'), url:arg(args,'--url')}));
     if (command === 'list') return emit(await request({op:'list'}));
@@ -118,6 +128,10 @@ async function main(args = process.argv.slice(2)) {
     if (command === 'source') return console.log(fs.readFileSync(actionPath(args[2],args[3]), 'utf8'));
     if (command === 'run') {
       const result = await runPlatform(args);
+      // Preserve the legacy caller contract even when a rolling-upgrade daemon
+      // still emits only `result.value`. Do not alter already logged stdout.
+      if(result?.result?.ok===true && result.result.value!==undefined && !String(result.result.stdout||'').trim())
+        result.result.stdout=JSON.stringify(result.result.value);
       emit(result);
       if (result?.result?.ok === false) process.exitCode = 1;
       return;
