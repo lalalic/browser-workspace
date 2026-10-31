@@ -2,15 +2,15 @@ platform: chatgpt
 status: migrated_unverified
 last_verified: null
 actions:
-  validate: "actions/_validate.py"
-  submit-thread: "actions/_submit_thread.py"
-  temporary-submit: "actions/_temporary_submit.py"
-  thread-turn: "actions/_thread_turn.py"
-  new-turn: "actions/_new_turn.py"
-  new-thread: "actions/_new_thread.py"
-  project-setup: "actions/_project_setup.py"
-  bootstrap-start: "actions/_bootstrap_start.py"
-  mcp-app: "actions/_mcp_app.py"
+  validate: "actions/_validate.mjs"
+  submit-thread: "actions/_submit_thread.mjs"
+  temporary-submit: "actions/_temporary_submit.mjs"
+  thread-turn: "actions/_thread_turn.mjs"
+  new-turn: "actions/_new_turn.mjs"
+  new-thread: "actions/_new_thread.mjs"
+  project-setup: "actions/_project_setup.mjs"
+  bootstrap-start: "actions/_bootstrap_start.mjs"
+  mcp-app: "actions/_mcp_app.mjs"
 verification:
   status: migrated_unverified
   last_verified: null
