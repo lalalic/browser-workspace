@@ -11,6 +11,8 @@ def load_execute(monkeypatch):
     ipc = types.ModuleType("browser_harness._ipc")
     ipc.connect = lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError())
     helpers = types.ModuleType("browser_harness.helpers")
+    helpers.cdp = lambda method, **kwargs: {}
+    helpers._send = lambda req, **kwargs: {}
     pkg = types.ModuleType("browser_harness")
     pkg.admin = admin
     pkg._ipc = ipc

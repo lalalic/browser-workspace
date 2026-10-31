@@ -107,7 +107,8 @@ Rules:
 - Reuse that same session for every action/observation turn.
 - Always stop the session in cleanup/finally, including on failure or cancellation.
 - A session owns one leased browser tab and a persistent Python namespace.
-- Multiple independent workflows may use different sessions concurrently.
+- Multiple independent workflows may use different sessions concurrently. Each Session is bound to one CDP attachment, so plain Python helpers such as `click()`, `js()`, `snapshot()`, and `goto_url()` automatically target its own tab without action-level `target_id` parameters. Shared tab acquisition/release and workspace administration use a short browser lock; long waits in another Session do not block this one.
+- `new_tab()` is the supported way to allocate and switch to another **owned** tab inside a Session. `switch_tab()` may switch only to tabs owned by that Session. Browser-level commands and explicitly targeted iframe CDP calls are still available through the existing helpers.
 
 ## Optional contribution of verified platform fixes
 
