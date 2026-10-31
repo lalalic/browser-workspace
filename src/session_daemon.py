@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import ast, atexit, contextlib, io, json, os, secrets, signal, socket, sys, threading, time, traceback
+import ast, atexit, contextvars, io, json, os, secrets, signal, socket, sys, threading, time, traceback
+from collections import deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -52,6 +53,125 @@ except OSError:
     from session_client import package_version
     DAEMON_VERSION = package_version()
 BROWSER_LOCK = threading.RLock()
+# A request's default CDP target is local to its executing Session, NOT the
+# Browser Harness daemon's mutable default attachment. No changes to action APIs.
+_EXECUTION_SESSION = contextvars.ContextVar('webhelm_execution_session', default=None)
+_OUTPUT_STREAM = contextvars.ContextVar('webhelm_stdout', default=None)
+_ERROR_STREAM = contextvars.ContextVar('webhelm_stderr', default=None)
+_EVENT_DRAIN_LOCK = threading.Lock()
+_RAW_CDP = bh.cdp
+_RAW_SEND = bh._send
+
+
+class _SessionOutput:
+    """Preserve process stdout/stderr while routing each worker's print output."""
+    def __init__(self, original, context):
+        self.original, self.context = original, context
+    def write(self, data):
+        return (self.context.get() or self.original).write(data)
+    def flush(self):
+        return (self.context.get() or self.original).flush()
+    def __getattr__(self, name):
+        return getattr(self.original, name)
+
+
+def install_session_output():
+    if not isinstance(sys.stdout, _SessionOutput):
+        sys.stdout = _SessionOutput(sys.stdout, _OUTPUT_STREAM)
+    if not isinstance(sys.stderr, _SessionOutput):
+        sys.stderr = _SessionOutput(sys.stderr, _ERROR_STREAM)
+
+
+def _session_cdp(method, session_id=None, _response_timeout=5.0, **params):
+    session = _EXECUTION_SESSION.get()
+    if session is not None and method == 'Target.createTarget' and not session.allow_new_target:
+        raise RuntimeError('Target.createTarget is disabled in Browser Workspace sessions; use new_tab(url)')
+    if session is not None and method == 'Target.closeTarget' and params.get('targetId') not in session.owned_target_ids:
+        raise RuntimeError('cannot close a tab outside the active WebHelm Session')
+    if session is not None and session_id is None and not method.startswith(
+        ('Target.', 'Browser.', 'ServiceWorker.', 'SystemInfo.', 'Schema.')
+    ):
+        session_id = session.cdp_session_id
+        if not session_id and not session.allow_new_target:
+            raise RuntimeError('session has no attached CDP target')
+    result = _RAW_CDP(method, session_id=session_id, _response_timeout=_response_timeout, **params)
+    if session is not None and method == 'Target.createTarget':
+        target_id = result.get('targetId')
+        if target_id:
+            session.owned_target_ids.add(target_id)
+    return result
+
+
+def _pump_session_events(response_timeout):
+    """Called with _EVENT_DRAIN_LOCK held; never discard another session's events."""
+    fresh = _RAW_SEND({'meta': 'drain_events'}, response_timeout=response_timeout).get('events', [])
+    if fresh:
+        with SESSIONS_LOCK:
+            live = list(SESSIONS.values())
+        by_cdp = {attachment: entry for entry in live for attachment in entry.attached_cdp_ids}
+        for event in fresh:
+            owner = by_cdp.get(event.get('session_id'))
+            if owner:
+                owner.events.append(event)
+                if event.get('method') == 'Page.javascriptDialogOpening':
+                    params = event.get('params') or {}
+                    owner.dialog = {'type': params.get('type'), 'message': params.get('message', '')}
+                elif event.get('method') == 'Page.javascriptDialogClosed':
+                    owner.dialog = None
+
+
+def _session_send(req, response_timeout=5.0):
+    session = _EXECUTION_SESSION.get()
+    if session is None:
+        return _RAW_SEND(req, response_timeout=response_timeout)
+    meta = req.get('meta')
+    if meta == 'session':
+        return {'session_id': session.cdp_session_id}
+    if meta in ('current_tab', 'connection_status'):
+        info = _RAW_CDP('Target.getTargetInfo', targetId=session.target_id).get('targetInfo', {})
+        result = {'targetId': session.target_id, 'url': info.get('url', ''), 'title': info.get('title', '')}
+        if meta == 'connection_status':
+            return {'target_id': session.target_id, 'session_id': session.cdp_session_id, 'page': result}
+        return result
+    if meta == 'set_session':
+        target = req.get('target_id')
+        if target not in session.owned_target_ids and not session.allow_new_target:
+            raise RuntimeError('cannot attach to a tab outside the active WebHelm Session')
+        session.owned_target_ids.add(target)
+        session.target_id = target
+        session.cdp_session_id = req.get('session_id')
+        if not session.cdp_session_id:
+            raise RuntimeError('new browser target has no CDP session')
+        session.attached_cdp_ids.add(session.cdp_session_id)
+        session.namespace['target_id'] = target
+        # Upstream set_session also enables these domains, but mutates a
+        # process-global attached target and disables the prior tab's Network.
+        # An isolated Session must enable its own domains instead.
+        for domain in ('Page', 'DOM', 'Runtime', 'Network'):
+            _RAW_CDP(domain + '.enable', session_id=session.cdp_session_id)
+        return {'session_id': session.cdp_session_id}
+    if meta == 'drain_events':
+        # The underlying daemon has a global destructive event buffer, so
+        # drain exactly once and route events to their owning Session.
+        with _EVENT_DRAIN_LOCK:
+            _pump_session_events(response_timeout)
+            result = list(session.events)
+            session.events.clear()
+        return {'events': result}
+    if meta == 'pending_dialog':
+        # Query the correct tab's dialog without consuming its queued events.
+        with _EVENT_DRAIN_LOCK:
+            _pump_session_events(response_timeout)
+            return {'dialog': session.dialog}
+    if meta is not None:
+        raise RuntimeError(f'unsupported shared Browser Harness meta during isolated execution: {meta}')
+    return _RAW_SEND(req, response_timeout=response_timeout)
+
+
+# These replacements are at the shared CDP boundary, not per helper method.
+# Upstream helpers and the Workspace overlay resolve these module globals.
+bh.cdp = _session_cdp
+bh._send = _session_send
 CHATGPT_QUEUE = None
 
 SESSION_RECONCILE_SECONDS = 30
@@ -152,6 +272,11 @@ class Session:
         self.session_id=sid; self.workspace=workspace; self.target_id=target_id; self.workspace_supported=bool(workspace_supported)
         self.created_at=time.time(); self.last_used_at=self.created_at
         self.owned_target_ids={target_id}
+        self.cdp_session_id=None
+        self.attached_cdp_ids=set()
+        self.allow_new_target=False
+        self.events=deque(maxlen=500)
+        self.dialog=None
         self.lock=threading.Lock()
         self.browser=SessionBrowserProxy(self)
         self.namespace={'__name__':'__browser_workspace_session__','bh':self.browser,'target_id':target_id}
@@ -169,7 +294,12 @@ class Session:
         return tid
 
     def _new_tab(self, url='about:blank'):
-        return self._remember_target(bh.new_tab(url))
+        with BROWSER_LOCK:
+            self.allow_new_target=True
+            try:
+                return self._remember_target(bh.new_tab(url))
+            finally:
+                self.allow_new_target=False
 
     def _close_tab(self, target=None):
         wanted=target
@@ -207,10 +337,15 @@ def execute(source, namespace):
         tree=ast.parse(source,mode='exec'); body=list(tree.body)
         tail=body.pop() if body and isinstance(body[-1],ast.Expr) else None
         body=compilable_module_body(body)
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        out_token = _OUTPUT_STREAM.set(out)
+        err_token = _ERROR_STREAM.set(err)
+        try:
             if body: exec(compile(ast.Module(body=body,type_ignores=[]),'<browser-workspace-session>','exec'),namespace,namespace)
             if tail is not None:
                 value=eval(compile(ast.Expression(tail.value),'<browser-workspace-session>','eval'),namespace,namespace); namespace['_']=value
+        finally:
+            _ERROR_STREAM.reset(err_token)
+            _OUTPUT_STREAM.reset(out_token)
         result={'ok':True,'stdout':out.getvalue(),'stderr':err.getvalue()}
         if value is not None:
             try: json.dumps(value); result['value']=value
@@ -230,9 +365,31 @@ def start_session(workspace=None, url=None):
     with BROWSER_LOCK:
         if RETIRING:
             raise RuntimeError('daemon_retiring')
-        with with_workspace(workspace, supported):
-            tid = bh.new_tab(start_url)
-        s=Session(sid,workspace,tid,supported)
+        s=Session(sid,workspace,None,supported)
+        s.allow_new_target=True
+        context=_EXECUTION_SESSION.set(s)
+        try:
+            with with_workspace(workspace, supported):
+                tid = bh.new_tab(start_url)
+            if not s.cdp_session_id or tid != s.target_id:
+                raise RuntimeError('new browser tab has no matching CDP attachment')
+            s.owned_target_ids.discard(None)
+        except BaseException:
+            for owned in list(s.owned_target_ids):
+                if owned:
+                    try:
+                        with with_workspace(workspace, supported):
+                            bh.close_tab(owned)
+                    except Exception:
+                        try: _RAW_CDP('Target.closeTarget', targetId=owned)
+                        except Exception: pass
+            for attachment in s.attached_cdp_ids:
+                try: _RAW_CDP('Target.detachFromTarget', sessionId=attachment)
+                except Exception: pass
+            raise
+        finally:
+            _EXECUTION_SESSION.reset(context)
+            s.allow_new_target=False
         with SESSIONS_LOCK: SESSIONS[sid]=s
     result={'session_id':sid,'workspace':workspace,'target_id':tid,'url':start_url,'workspace_supported':supported}
     if not supported:
@@ -307,13 +464,13 @@ def get_session(sid):
 def exec_session(sid, code):
     s=get_session(sid)
     s.last_used_at=time.time()
-    with s.lock, BROWSER_LOCK, with_workspace(s.workspace, s.workspace_supported):
-        bh.switch_tab(s.target_id,activate=False)
-        r=execute(code,s.namespace)
-        absorb_owned_children(s)
+    with s.lock, with_workspace(s.workspace, s.workspace_supported):
+        context = _EXECUTION_SESSION.set(s)
         try:
-            cur=bh.current_tab(); s.target_id=cur.get('targetId') or s.target_id; s.namespace['target_id']=s.target_id
-        except Exception: pass
+            r=execute(code,s.namespace)
+            absorb_owned_children(s)
+        finally:
+            _EXECUTION_SESSION.reset(context)
     return {'session_id':sid,'workspace':s.workspace,'target_id':s.target_id,**r}
 
 def list_sessions():
@@ -366,6 +523,9 @@ def stop_session(sid, idle_before=None):
             absorb_owned_children(s)
             closed_count=len(s.owned_target_ids)
             errors=close_owned_tabs(s)
+            for attachment in s.attached_cdp_ids:
+                try: _RAW_CDP('Target.detachFromTarget', sessionId=attachment)
+                except Exception: pass  # Chrome may detach automatically on tab close
             if errors: release_error='; '.join(errors)
         return {'session_id':sid,'workspace':s.workspace,'target_id':s.target_id,'closed_tabs':closed_count,'release_error':release_error}
     finally:
@@ -494,6 +654,7 @@ def main():
     # Lock ownership is required before changing the shared socket path.
     SOCKET_PATH.unlink(missing_ok=True)
     srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); srv.bind(str(SOCKET_PATH)); os.chmod(SOCKET_PATH,0o600); SOCKET_IDENTITY=(SOCKET_PATH.stat().st_dev, SOCKET_PATH.stat().st_ino); srv.listen(32)
+    install_session_output()
     from platform_runner import PLATFORMS
     chatgpt_runtime = PLATFORMS/'chatgpt'/'runtime'
     if chatgpt_runtime.is_dir():

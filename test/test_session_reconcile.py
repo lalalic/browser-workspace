@@ -11,6 +11,8 @@ def load_daemon(monkeypatch):
     admin.ensure_daemon = lambda **kwargs: None
     admin._process_start_time = lambda pid: 'test-generation'
     helpers = types.ModuleType('browser_harness.helpers')
+    helpers.cdp = lambda method, **kwargs: {}
+    helpers._send = lambda req, **kwargs: {}
     ipc = types.ModuleType('browser_harness._ipc')
     ipc.connect = lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError())
     ipc.request = lambda *a, **kw: {'ok': True}
