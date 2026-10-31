@@ -19,9 +19,10 @@ SKILL_DIR="<absolute directory containing this SKILL.md>"
 sh "$SKILL_DIR/scripts/install-global-cli.sh"
 webhelm status
 webhelm platform list
+webhelm capacity
 ```
 
-This requires Node.js **22.5 or newer** and npm. Installation installs locked, local JS dependencies, and manages one executable symlink `~/.local/bin/webhelm`. The CLI automatically starts the single Node daemon and adopts the existing Browser Workspace Chrome profile at `~/.config/browser-workspace/chrome`. If that managed Chrome is missing, WebHelm launches it. Do not restart Chrome merely to update the Skill. `webhelm status` includes the canonical `admin_helper` path for product clients.
+This requires Node.js **22.5 or newer** and npm. Installation installs locked, local JS dependencies, and manages one executable symlink `~/.local/bin/webhelm`. The CLI automatically starts the single Node daemon and adopts the existing Browser Workspace Chrome profile at `~/.config/browser-workspace/chrome`. If that managed Chrome is missing, WebHelm launches it. Do not restart Chrome merely to update the Skill. `webhelm status` includes the canonical `admin_helper` path for product clients. `webhelm capacity` reports the same Harness workspace capacity schema consumed by Relay, without creating a browser Session or spawning another Harness process.
 
 ## Sessions (JavaScript)
 
@@ -101,3 +102,5 @@ Workspace lifecycle is a product-level operation. NeoY/Relay discover `admin_hel
 ## Development / safe deployment
 
 The Skill's single canonical source is `skills/webhelm/`. Run `npm test --prefix "$SKILL_DIR"` in its repository checkout; the tests include Node daemon, queue, platform actions, and the extension. Validate externally against real Chrome before deploying. For an isolated development daemon, use `WEBHELM_RUNTIME_DIR`, `WEBHELM_SOCKET`, `WEBHELM_LOCK`, and optionally `WEBHELM_CDP_URL` to attach to the existing Chrome without touching the production daemon socket. Never restart user-owned browsers, break active sessions, discard pending queue items, or hide incomplete platform live-verification.
+
+Legacy platform callers (NeoY and Relay) receive the machine-readable Action receipt in `result.stdout` as JSON while new callers can read `result.value`. This compatibility does not change the browser Session lifecycle or queued delivery semantics.

@@ -19,6 +19,7 @@ function help() {
 
 Usage:
   webhelm status
+  webhelm capacity [--workspace NAME]
   webhelm session start [--url URL]
   webhelm session list
   webhelm session exec SESSION_ID [--code-file FILE]   # JavaScript
@@ -96,6 +97,7 @@ async function main(args = process.argv.slice(2)) {
       managed_chrome:daemon.managed_chrome,
       daemon:{running:true, pid:daemon.pid, session_count:daemon.session_count, queue_paused:daemon.queue_paused, socket:SOCKET}});
   }
+  if (group === 'capacity') return emit(await request({op:'capacity',workspace:arg(args,'--workspace')}));
   if (group === 'session') {
     if (command === 'start') return emit(await request({op:'start', workspace:arg(args,'--workspace'), url:arg(args,'--url')}));
     if (command === 'list') return emit(await request({op:'list'}));

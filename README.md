@@ -26,6 +26,7 @@ JS
 webhelm session stop SESSION_ID
 
 webhelm platform list
+webhelm capacity
 webhelm platform profile chatgpt
 webhelm platform source z new-turn
 webhelm platform run chatgpt validate --auto-session
@@ -70,3 +71,7 @@ export WEBHELM_CDP_URL=http://127.0.0.1:9222
 ```
 
 Preserve the persistent ChatGPT `chatgpt-new-turn.sqlite3` queue when retiring any earlier runtime; never run two dispatchers on the same DB. Release through the Skill source and its installer, not PyPI or an external npm package. GitHub extension release assets derive only from the bundled extension source.
+
+## Compatibility
+
+NeoY and Relay can still consume the canonical machine-readable receipt in `result.stdout`. Node callers can use `result.value` directly. The `webhelm capacity` command reads the Extension workspace state without creating a browser Session or launching a Python subprocess.

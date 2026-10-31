@@ -381,6 +381,33 @@ function getChatGPTQueue() {
   return chatgptQueue;
 }
 
+async function workspaceCapacity(req={}) {
+  const name=typeof req.workspace==='string'&&req.workspace.trim()?req.workspace.trim():'Harness';
+  const observedAt=new Date().toISOString();
+  try {
+    const state=await extensionCall(null,'workspace.status',{name});
+    const idle=Array.isArray(state.idleTabIds)?state.idleTabIds.length:
+      Number.isInteger(state.idle)?state.idle:null;
+    const leased=Array.isArray(state.leasedTabIds)?state.leasedTabIds.length:
+      Number.isInteger(state.leased)?state.leased:null;
+    const poolSize=Number.isInteger(state.poolSize)?state.poolSize:null;
+    const maximum=Number.isInteger(state.maxCapacity)?state.maxCapacity:poolSize;
+    const available=maximum!==null&&leased!==null?Math.max(0,maximum-leased):null;
+    return {name,poolSize,idle,leased,available,observedAt,reason:null};
+  } catch(error) {
+    return {name,poolSize:null,idle:null,leased:null,available:null,
+      observedAt,reason:`WebHelm capacity unavailable: ${error.message}`};
+  }
+}
+
+/** Emit one canonical machine-readable action receipt as the final stdout line. */
+export function actionOutput(logs, value) {
+  const entries=Array.isArray(logs)?logs:[];
+  const receipt=value===undefined?null:JSON.stringify(value);
+  const output=receipt!==null&&entries.at(-1)!==receipt?[...entries,receipt]:entries;
+  return output.join('\n').slice(-40000);
+}
+
 async function runPlatform(req) {
   const platform=req.platform, action=req.action, config=req.config || {};
   const auto=Boolean(req.auto_session);
@@ -401,7 +428,10 @@ async function runPlatform(req) {
           helpers, config,
           log:(...items)=>logs.push(items.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ')),
         });
-        return {ok:true,stdout:logs.join('\n').slice(-40000),stderr:'',value};
+        // Keep the legacy stdout JSON receipt for NeoY/Relay callers, while
+        // retaining the structured `value` for new integrations. Do not print
+        // a duplicate receipt if the Action already logged its JSON result.
+        return {ok:true,stdout:actionOutput(logs,value),stderr:'',value};
       } catch(error) {
         return {ok:false,stdout:logs.join('\n').slice(-40000),stderr:'',error:`${error.name}: ${error.message}`};
       }
@@ -420,7 +450,7 @@ async function runPlatform(req) {
     self_heal_capable:!auto,result};
 }
 
-export async function handle(req){switch(req.op){case'ping':return {ok:true,pid:process.pid,version:'1.0.0',queue_paused:process.env.WEBHELM_CHATGPT_QUEUE_PAUSED==='1',session_count:sessions.size,managed_chrome:managedChrome||{profile_dir:PROFILE_DIR, endpoint:process.env.WEBHELM_CDP_URL||'http://127.0.0.1:9222',reused:true}};case'list':return {session_count:sessions.size,sessions:[...sessions.values()].map(s=>({session_id:s.session_id,workspace:s.workspace,target_id:s.targetId,last_used_at:s.last_used_at}))};case'start':return createSession(req);case'exec':return execute(req);case'stop':return stopSession(req.session_id);case'stop-all':{const stopped=[];for(const id of [...sessions.keys()])stopped.push(await stopSession(id));return {stopped_count:stopped.length,error_count:0,stopped,errors:[]}}case'workspace-create':case'workspace-delete':return workspaceOp(req);case'chatgpt-new-turn-enqueue':return getChatGPTQueue().enqueue(req.config);case'platform-run':return runPlatform(req);default:throw Error(`unknown op: ${req.op}`)}}
+export async function handle(req){switch(req.op){case'ping':return {ok:true,pid:process.pid,version:'1.0.0',queue_paused:process.env.WEBHELM_CHATGPT_QUEUE_PAUSED==='1',session_count:sessions.size,managed_chrome:managedChrome||{profile_dir:PROFILE_DIR, endpoint:process.env.WEBHELM_CDP_URL||'http://127.0.0.1:9222',reused:true}};case'list':return {session_count:sessions.size,sessions:[...sessions.values()].map(s=>({session_id:s.session_id,workspace:s.workspace,target_id:s.targetId,last_used_at:s.last_used_at}))};case'start':return createSession(req);case'exec':return execute(req);case'stop':return stopSession(req.session_id);case'stop-all':{const stopped=[];for(const id of [...sessions.keys()])stopped.push(await stopSession(id));return {stopped_count:stopped.length,error_count:0,stopped,errors:[]}}case'capacity':return workspaceCapacity(req);case'workspace-create':case'workspace-delete':return workspaceOp(req);case'chatgpt-new-turn-enqueue':return getChatGPTQueue().enqueue(req.config);case'platform-run':return runPlatform(req);default:throw Error(`unknown op: ${req.op}`)}}
 function serve(conn) {
   let buffer = '';
   conn.setEncoding('utf8');

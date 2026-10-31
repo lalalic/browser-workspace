@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {handle} from '../../skills/webhelm/runtime/node-daemon.mjs';
+import {handle,actionOutput} from '../../skills/webhelm/runtime/node-daemon.mjs';
 
 process.env.WEBHELM_CDP_URL='http://127.0.0.1:9222';
 process.env.WEBHELM_NO_PROFILE_EXTENSION_PROBE='1';
@@ -62,4 +62,26 @@ test('same-session declarations persist and session stop is idempotency guarded'
   assert.equal(reconnected.value.url,`mock://${s.target_id}`);
   await handle({op:'stop',session_id:s.session_id});
   await assert.rejects(handle({op:'exec',session_id:s.session_id,code:'1'}),/unknown session_id/);
+});
+
+
+test('legacy ChatGPT and Z agent readers receive the canonical JSON receipt in result.stdout',()=>{
+  const result={status:'submitted',mode:'new-thread',temporary:false,
+    thread_id:'6acfc12e-c1a0-83ea-bfa3-5b5c609ec588',
+    thread_url:'https://chatgpt.com/c/6acfc12e-c1a0-83ea-bfa3-5b5c609ec588',
+    verified_by:'composer-cleared'};
+  const stdout=actionOutput([],result);
+  assert.deepEqual(JSON.parse(stdout),result);
+  assert.equal(actionOutput([JSON.stringify(result)],result),JSON.stringify(result),'do not duplicate Z.ai action logs');
+  assert.equal(actionOutput(['initial log'],result).split('\n').at(-1),JSON.stringify(result));
+  assert.equal(actionOutput([],false),'false');
+});
+
+test('capacity failure returns explicit unknown rather than a misleading zero',async()=>{
+  const reply=await handle({op:'capacity',workspace:'Harness'});
+  assert.equal(reply.name,'Harness');
+  assert.equal(typeof reply.observedAt,'string');
+  for(const field of ['poolSize','idle','leased','available']){
+    assert.ok(reply[field]===null||Number.isInteger(reply[field]));
+  }
 });

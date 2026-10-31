@@ -28,3 +28,10 @@ test('invalid ChatGPT queue requests fail before any browser action',()=>{
   assert.equal(result.status,1);
   assert.match(result.stderr,/thread_id and message required/);
 });
+
+
+test('capacity is a documented first-class CLI operation',()=>{
+  const result=run('--help');
+  assert.equal(result.status,0,result.stderr);
+  assert.match(result.stdout,/webhelm capacity/);
+});
