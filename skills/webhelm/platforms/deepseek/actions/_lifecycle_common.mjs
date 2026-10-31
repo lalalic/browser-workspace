@@ -26,6 +26,21 @@ function parseJson(answer) {
     return { data: null, parse_error: e.message };
   }
 }
+// DeepSeek may persist a new thread but leave its SPA message pane stale.
+// Re-select the already-created thread in the sidebar. This is read-only;
+// it never calls the message-send control or uploads an attachment.
+async function revealSavedThread(h, id) {
+  const selector = 'a[href="/a/chat/s/' + id + '"]';
+  const visible = await h.js(
+    '!!document.querySelector(' + JSON.stringify(selector) + ')',
+  );
+  if (visible) {
+    await h.click(selector);
+    await h.wait(0.5);
+    return true;
+  }
+  return false;
+}
 async function waitAnswer(h, receipt, cfg, minCount, timeout) {
   const end = Date.now() + timeout * 1000;
   while (Date.now() < end) {
@@ -69,6 +84,9 @@ export async function run(cfg, mode, h) {
       await h.goto_url(url);
       await h.wait_for_load();
     }
+    // Read-only page hydration: the URL can be correct while its chat pane
+    // has not loaded history. Re-selecting this thread is safe.
+    await revealSavedThread(h, id);
     const minCount = cfg.min_answer_count ?? 0;
     if (!Number.isInteger(minCount) || minCount < 0) {
       throw new TypeError("min_answer_count must be a nonnegative integer");
@@ -189,8 +207,45 @@ export async function run(cfg, mode, h) {
   // Do not wait the full model timeout when no accepted user message appears.
   // Return a read-only-resumable PENDING state with the thread identity.
   let tentative = null;
+  let revealedOnce = false;
   const end = Date.now() + timeout * 1000;
   const admissionEnd = Date.now() + Math.min(timeout * 1000, 12_000);
+  const recoverSavedThread = async () => {
+    if (!revealedOnce) {
+      revealedOnce = true;
+      await revealSavedThread(h, tentative.thread_id);
+      const accepted = (await h.js(expression)) > before;
+      const state = await h.js(ANSWER_STATE);
+      const answered = state.count > answersBefore &&
+        state.answer && state.settled;
+      if (accepted || answered) {
+        const receipt = {
+          ...tentative,
+          submission_verified: true,
+          verified_by: accepted
+            ? "matching user message after read-only thread refresh"
+            : "new completed answer after read-only thread refresh",
+        };
+        if (answered) {
+          const result = { ...receipt, status: "completed",
+            answer: state.answer };
+          if (cfg.response_format === "json") {
+            Object.assign(result, parseJson(state.answer));
+          }
+          return result;
+        }
+        if (cfg.wait === false) return receipt;
+        return waitAnswer(h, receipt, cfg, answersBefore, timeout);
+      }
+    }
+    return {
+      ...tentative,
+      status: "pending",
+      submission_verified: false,
+      verified_by: "thread URL and cleared composer only; message not verified",
+      next_step: "Read-only resume this thread; do not resend",
+    };
+  };
   while (Date.now() < end) {
     const id = threadId((await h.page_info()).url);
     const accepted = (await h.js(expression)) > before;
@@ -235,26 +290,11 @@ export async function run(cfg, mode, h) {
       }
     }
     if (Date.now() >= admissionEnd && tentative) {
-      return {
-        ...tentative,
-        status: "pending",
-        submission_verified: false,
-        verified_by: "thread URL and cleared composer only; user message not verified",
-        next_step:
-          "Read-only resume this thread; do not resend the text or image",
-      };
+      return recoverSavedThread();
     }
     await sleep(200);
   }
-  if (tentative) {
-    return {
-      ...tentative,
-      status: "pending",
-      submission_verified: false,
-      verified_by: "thread URL and cleared composer only; user message not verified",
-      next_step: "Read-only resume this thread; do not resend",
-    };
-  }
+  if (tentative) return recoverSavedThread();
   throw new Error(
     "Submission may have succeeded but its receipt was not verified; inspect this session before retrying",
   );

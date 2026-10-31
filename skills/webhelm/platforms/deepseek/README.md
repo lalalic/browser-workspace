@@ -96,3 +96,8 @@ answer proves admission. A pending receipt can be resumed read-only.
 Supply the pending receipt answers_before as min_answer_count on resume
 to avoid mistaking an old answer in an existing thread for a new one.
 Never treat pending as success or generate metadata from it.
+
+DeepSeek can preserve a submitted prompt while failing to hydrate the chat pane.
+The adapter now attempts one read-only sidebar re-selection of the current
+thread before reporting an unverified pending receipt. This action does not
+re-upload media and cannot substitute for a new message or answer receipt.
