@@ -1,4 +1,4 @@
-import { run } from "./_lifecycle_common.mjs";
+import { currentLifecycle } from "./_load_lifecycle.mjs";
 export default async function understandImage(
   { config: cfg, helpers, log = console.log },
 ) {
@@ -13,6 +13,7 @@ export default async function understandImage(
     }
     cfg = { ...cfg, message: prompt };
   }
+  const { run } = await currentLifecycle();
   const result = await run({ ...cfg, wait: true }, "new-thread", helpers);
   result.url = result.thread_url;
   if (cfg.screenshot_path) {
