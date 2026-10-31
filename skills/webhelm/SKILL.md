@@ -62,6 +62,10 @@ webhelm platform publish --message "fix(z): handle updated chat composer"
 
 This runs the independent Actions tests, stages only `platforms/`, commits and pushes without force. Use it only for reviewed and authorized changes. Never include credentials, user content, browser files or private traces. For platforms whose status says `migrated_unverified`, the source migration is not proof of live behavior.
 
+## New platforms and Action repairs — always local to Actions checkout
+
+When an agent discovers an unsupported platform or needs to repair an Action, first run `npx --yes webhelm@latest setup` and read **`NEW_PLATFORM.md`** alongside this Skill. Create and edit platform manifests, JS Actions, tests, and documentation **only under `$HOME/.local/webhelm/platforms/<slug>/`** (the `lalalic/webhelm-actions` Git checkout). Never scaffold a platform in `skills/webhelm/platforms/`, `runtime/platforms/`, `.npm/_npx/`, or another repository. Do not copy the checkout into the Skill when the Skill is reinstalled. Verify with `platform list`, `platform profile`, independent Actions tests, and a caller-owned real browser Session; then use `platform publish` to push authorized changes to the Actions Git repository. Source-only changes do not require a new npm release.
+
 ## ChatGPT FIFO
 
 `webhelm platform run chatgpt new-turn --config FILE` defaults to `mode: "async"`, returning a durable queued receipt, *not* proof of delivery. `mode: "sync"` requires a caller-owned `--session-id`. The Node Runtime keeps its SQLite queue dispatcher separately from Actions. An ambiguous send is `UNCERTAIN`, never automatically resent. Stop the old dispatcher safely and preserve the queue DB before switching its version; do not run two dispatchers on one database.

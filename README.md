@@ -45,3 +45,7 @@ npm pack --dry-run
 ```
 
 Keep platform-specific code and tests in `lalalic/webhelm-actions`. Runtime tests should use mock CDP or owned, temporary real Chrome tabs; protect other active Sessions. GitHub Actions runs Runtime/Extension CI. The Skill and Extension remain version-controlled together; npm publishing uses the standalone package at the repository root.
+
+### Adding an unsupported platform
+
+The WebHelm Skill includes [`skills/webhelm/NEW_PLATFORM.md`](skills/webhelm/NEW_PLATFORM.md). All new platform code belongs in **`~/.local/webhelm/platforms/<slug>`**, checked out from `lalalic/webhelm-actions`, including tests and docs. There is no separate `platforms/` directory in the Skill or npm package. Publishing an Action uses Git, not npm.

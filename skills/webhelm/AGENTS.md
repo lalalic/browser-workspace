@@ -9,3 +9,5 @@
 - Preserve `result.stdout` JSON and structured `result.value` for NeoY and Relay callers. Expose `webhelm capacity` without a Python process.
 - Agent startup commands and npm/Skill releases are independent. `@latest` resolves the latest CLI but must not mutate or restart a running daemon that holds Sessions or queued ChatGPT turns.
 - After changes, run tests, inspect the npm tarball for accidental bundled Actions/secrets, test real Chrome with owned temporary tabs, and only then push/release. Record verified vs unverified site behavior in the Actions repository.
+
+- For a **new** unsupported site, follow `skills/webhelm/NEW_PLATFORM.md`. All new manifests, Actions, tests, and readme files live only at `$HOME/.local/webhelm/platforms/<slug>/`, never inside this Skill or npm. Discover them through the existing runtime's local Actions checkout.
