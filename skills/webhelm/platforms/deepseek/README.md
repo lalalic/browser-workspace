@@ -101,3 +101,17 @@ DeepSeek can preserve a submitted prompt while failing to hydrate the chat pane.
 The adapter now attempts one read-only sidebar re-selection of the current
 thread before reporting an unverified pending receipt. This action does not
 re-upload media and cannot substitute for a new message or answer receipt.
+
+## Browser-native response stream (2026-10-31)
+
+Reply verification prefers DeepSeek's own webpage completion Event Stream.
+The action installs a passive browser observer before page navigation and
+observes the site's existing fetch/XHR response without issuing requests.
+A result is completed only after SSE confirms a ready event with both
+message IDs, response/status FINISHED, a close event, and nonempty
+RESPONSE fragments. Thinking fragments are not returned. DOM is a read-only
+fallback when no stream is visible.
+
+The observer uses per-request counts to avoid reusing older responses.
+An incomplete or HTTP-error stream fails closed; an ambiguous submission
+is never resent. Media is uploaded only through normal site controls.

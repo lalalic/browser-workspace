@@ -1,5 +1,6 @@
 import { sleep } from "../../_action_helpers.mjs";
 import { stat } from "node:fs/promises";
+import { STREAM_OBSERVER, STREAM_STATE, installResponseObserver, readResponseStream } from "./_response_stream.mjs";
 const COMPOSER = 'textarea[placeholder="Message DeepSeek"]';
 const ANSWER_STATE =
   `(()=>{const answers=[...document.querySelectorAll('.ds-assistant-message-main-content')];const generating=!!document.querySelector('[role=button].ds-button--primary:not(.ds-button--disabled)');const finished=document.querySelectorAll('[aria-label="Read aloud"]').length>=answers.length;return{count:answers.length,answer:answers.at(-1)?.innerText.trim()||'',settled:!generating&&finished}})()`;
@@ -41,22 +42,32 @@ async function revealSavedThread(h, id) {
   }
   return false;
 }
-async function waitAnswer(h, receipt, cfg, minCount, timeout) {
+async function waitAnswer(h, receipt, cfg, minCount, timeout, streamBefore = 0) {
   const end = Date.now() + timeout * 1000;
   while (Date.now() < end) {
+    // Browser-native SSE is authoritative; DOM is a read-only fallback.
+    const stream = await readResponseStream(h, streamBefore);
+    if (stream?.state === "completed") {
+      const r = { ...receipt, status: "completed", answer: stream.answer,
+        submission_verified: true,
+        answer_verified_by: "DeepSeek webpage SSE: ready + FINISHED + close" };
+      if (cfg.response_format === "json") Object.assign(r, parseJson(stream.answer));
+      return r;
+    }
+    if (stream?.state === "incomplete")
+      throw new Error("DeepSeek SSE ended without ready, FINISHED, close and nonempty answer");
     const s = await h.js(ANSWER_STATE);
     if (s.count > minCount && s.answer && s.settled) {
-      const r = { ...receipt, status: "completed", answer: s.answer };
+      const r = { ...receipt, status: "completed", answer: s.answer,
+        answer_verified_by: "completed assistant message in webpage" };
       if (cfg.response_format === "json") Object.assign(r, parseJson(s.answer));
       return r;
     }
     await h.wait(1);
   }
   return {
-    ...receipt,
-    status: "pending",
-    next_step:
-      "Keep this session and rerun with resume=true and this thread_id; do not resend",
+    ...receipt, status: "pending",
+    next_step: "Keep this session and resume with thread_id; do not resend",
   };
 }
 export async function run(cfg, mode, h) {
@@ -72,6 +83,7 @@ export async function run(cfg, mode, h) {
       "DeepSeek lifecycle actions support ordinary chat only, not Projects or Temporary Chat",
     );
   }
+  await installResponseObserver(h);
   if (cfg.resume) {
     const id = cfg.thread_id || threadId((await h.page_info()).url);
     if (!id || threadId(`https://chat.deepseek.com/a/chat/s/${id}`) !== id) {
@@ -87,6 +99,7 @@ export async function run(cfg, mode, h) {
     // Read-only page hydration: the URL can be correct while its chat pane
     // has not loaded history. Re-selecting this thread is safe.
     await revealSavedThread(h, id);
+    await h.js(STREAM_OBSERVER);
     const minCount = cfg.min_answer_count ?? 0;
     if (!Number.isInteger(minCount) || minCount < 0) {
       throw new TypeError("min_answer_count must be a nonnegative integer");
@@ -162,6 +175,7 @@ export async function run(cfg, mode, h) {
     `https://chat.deepseek.com/${expected ? `a/chat/s/${expected}` : ""}`,
   );
   await h.wait_for_load();
+  await h.js(STREAM_OBSERVER);
   await idle();
   const current = threadId((await h.page_info()).url);
   if (current !== expected) {
@@ -172,7 +186,8 @@ export async function run(cfg, mode, h) {
         JSON.stringify(message)
       }).length)()`,
     before = await h.js(expression),
-    answersBefore = (await h.js(ANSWER_STATE)).count;
+    answersBefore = (await h.js(ANSWER_STATE)).count,
+    streamBefore = (await h.js(STREAM_STATE))?.count || 0;
   if (image) {
     const ext = image.match(/\.([^.]+)$/)[1].toLowerCase();
     const accepted =
@@ -211,6 +226,14 @@ export async function run(cfg, mode, h) {
   const end = Date.now() + timeout * 1000;
   const admissionEnd = Date.now() + Math.min(timeout * 1000, 12_000);
   const recoverSavedThread = async () => {
+    const stream = await readResponseStream(h, streamBefore);
+    if (stream?.state === "completed" && tentative) {
+      const result = { ...tentative, status: "completed", answer: stream.answer,
+        submission_verified: true,
+        verified_by: "DeepSeek webpage SSE: ready + FINISHED + close" };
+      if (cfg.response_format === "json") Object.assign(result, parseJson(stream.answer));
+      return result;
+    }
     if (!revealedOnce) {
       revealedOnce = true;
       await revealSavedThread(h, tentative.thread_id);
@@ -235,7 +258,7 @@ export async function run(cfg, mode, h) {
           return result;
         }
         if (cfg.wait === false) return receipt;
-        return waitAnswer(h, receipt, cfg, answersBefore, timeout);
+        return waitAnswer(h, receipt, cfg, answersBefore, timeout, streamBefore);
       }
     }
     return {
@@ -248,6 +271,10 @@ export async function run(cfg, mode, h) {
   };
   while (Date.now() < end) {
     const id = threadId((await h.page_info()).url);
+    const stream = await readResponseStream(h, streamBefore);
+    if (stream?.state === "incomplete") {
+      throw new Error("DeepSeek SSE ended without verified completion");
+    }
     const accepted = (await h.js(expression)) > before;
     const cleared = await h.js(
       `document.querySelector(${JSON.stringify(COMPOSER)})?.value===''`,
@@ -265,14 +292,23 @@ export async function run(cfg, mode, h) {
           answers_before: answersBefore,
         };
       }
-      if (accepted) {
+      if (stream?.state === "completed") {
+        const result = { ...tentative, status: "completed", answer: stream.answer,
+          submission_verified: true,
+          verified_by: "DeepSeek webpage SSE: ready + FINISHED + close" };
+        if (cfg.response_format === "json") Object.assign(result, parseJson(stream.answer));
+        return result;
+      }
+      if (accepted || stream?.accepted) {
         const receipt = {
           ...tentative,
-          verified_by: "new matching user message, cleared composer, and durable thread URL",
+          verified_by: stream?.accepted
+            ? "DeepSeek webpage SSE ready with message IDs"
+            : "matching user message and durable thread URL",
           submission_verified: true,
         };
         if (cfg.wait === false) return receipt;
-        return waitAnswer(h, receipt, cfg, answersBefore, timeout);
+        return waitAnswer(h, receipt, cfg, answersBefore, timeout, streamBefore);
       }
       // The assistant might become visible before the user-message selector
       // hydrates. A NEW completed answer in the exact thread is independent
