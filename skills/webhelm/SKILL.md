@@ -90,7 +90,7 @@ webhelm platform run chatgpt new-turn --config /path/to/turn.json
 webhelm platform run chatgpt new-turn --mode sync --session-id SESSION_ID --config /path/to/turn.json
 ```
 
-Use exact strings `async` or `sync`; legacy boolean `sync` is invalid. An ambiguous send becomes `UNCERTAIN` and must not be automatically resent. Stop the old dispatch process and preserve `chatgpt-new-turn.sqlite3` before switching runtime versions. No second queue dispatcher may run simultaneously on the same data. Optional Cookie audit and authenticated read-only keepalive scripts in `scripts/` also use Node.js (see `scripts/AUTH_COOKIE_AUDIT.md`).
+Use exact strings `async` or `sync`; legacy boolean `sync` is invalid. An ambiguous send becomes `UNCERTAIN` and must not be automatically resent. Stop the old dispatch process and preserve `chatgpt-new-turn.sqlite3` before switching runtime versions. During a controlled deployment, `WEBHELM_CHATGPT_QUEUE_PAUSED=1` prevents the new dispatcher from starting while the installed Node daemon is being smoke-tested. Resume by gracefully stopping this paused daemon and starting it without the variable, only after the old dispatcher has fully stopped. No second queue dispatcher may run simultaneously on the same data. Optional Cookie audit and authenticated read-only keepalive scripts in `scripts/` also use Node.js (see `scripts/AUTH_COOKIE_AUDIT.md`).
 
 ## Extension / Workspace
 

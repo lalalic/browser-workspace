@@ -319,7 +319,9 @@ function getChatGPTQueue() {
     stopSession,
     logger: entry => console.error(JSON.stringify({component:'chatgpt-queue',...entry})),
   });
-  chatgptQueue.start();
+  // Keep the durable queue intact during a cutover smoke check. A paused
+  // daemon accepts queue writes but never starts its dispatcher.
+  if(process.env.WEBHELM_CHATGPT_QUEUE_PAUSED!=='1')chatgptQueue.start();
   return chatgptQueue;
 }
 
@@ -362,7 +364,7 @@ async function runPlatform(req) {
     self_heal_capable:!auto,result};
 }
 
-export async function handle(req){switch(req.op){case'ping':return {ok:true,pid:process.pid,version:'1.0.0-node-pilot',session_count:sessions.size,managed_chrome:managedChrome||{profile_dir:PROFILE_DIR, endpoint:process.env.WEBHELM_CDP_URL||'http://127.0.0.1:9222',reused:true}};case'list':return {session_count:sessions.size,sessions:[...sessions.values()].map(s=>({session_id:s.session_id,workspace:s.workspace,target_id:s.targetId,last_used_at:s.last_used_at}))};case'start':return createSession(req);case'exec':return execute(req);case'stop':return stopSession(req.session_id);case'stop-all':{const stopped=[];for(const id of [...sessions.keys()])stopped.push(await stopSession(id));return {stopped_count:stopped.length,error_count:0,stopped,errors:[]}}case'workspace-create':case'workspace-delete':return workspaceOp(req);case'chatgpt-new-turn-enqueue':return getChatGPTQueue().enqueue(req.config);case'platform-run':return runPlatform(req);default:throw Error(`unknown op: ${req.op}`)}}
+export async function handle(req){switch(req.op){case'ping':return {ok:true,pid:process.pid,version:'1.0.0',queue_paused:process.env.WEBHELM_CHATGPT_QUEUE_PAUSED==='1',session_count:sessions.size,managed_chrome:managedChrome||{profile_dir:PROFILE_DIR, endpoint:process.env.WEBHELM_CDP_URL||'http://127.0.0.1:9222',reused:true}};case'list':return {session_count:sessions.size,sessions:[...sessions.values()].map(s=>({session_id:s.session_id,workspace:s.workspace,target_id:s.targetId,last_used_at:s.last_used_at}))};case'start':return createSession(req);case'exec':return execute(req);case'stop':return stopSession(req.session_id);case'stop-all':{const stopped=[];for(const id of [...sessions.keys()])stopped.push(await stopSession(id));return {stopped_count:stopped.length,error_count:0,stopped,errors:[]}}case'workspace-create':case'workspace-delete':return workspaceOp(req);case'chatgpt-new-turn-enqueue':return getChatGPTQueue().enqueue(req.config);case'platform-run':return runPlatform(req);default:throw Error(`unknown op: ${req.op}`)}}
 function serve(conn) {
   let buffer = '';
   conn.setEncoding('utf8');

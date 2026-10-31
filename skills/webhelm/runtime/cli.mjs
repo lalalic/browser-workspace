@@ -94,7 +94,7 @@ async function main(args = process.argv.slice(2)) {
     return emit({version:'1.0.0', platform_dir:PLATFORMS, root:ROOT,
       cli:fileURLToPath(import.meta.url), admin_helper:path.join(ROOT, 'admin.mjs'),
       managed_chrome:daemon.managed_chrome,
-      daemon:{running:true, pid:daemon.pid, session_count:daemon.session_count, socket:SOCKET}});
+      daemon:{running:true, pid:daemon.pid, session_count:daemon.session_count, queue_paused:daemon.queue_paused, socket:SOCKET}});
   }
   if (group === 'session') {
     if (command === 'start') return emit(await request({op:'start', workspace:arg(args,'--workspace'), url:arg(args,'--url')}));
