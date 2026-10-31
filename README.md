@@ -49,3 +49,7 @@ Keep platform-specific code and tests in `lalalic/webhelm-actions`. Runtime test
 ### Adding an unsupported platform
 
 The WebHelm Skill includes [`skills/webhelm/NEW_PLATFORM.md`](skills/webhelm/NEW_PLATFORM.md). All new platform code belongs in **`~/.local/webhelm/platforms/<slug>`**, checked out from `lalalic/webhelm-actions`, including tests and docs. There is no separate `platforms/` directory in the Skill or npm package. Publishing an Action uses Git, not npm.
+
+## npm publishing
+
+`.github/workflows/publish.yml` publishes CLI/Runtime changes on `main` using GitHub Actions and npm OIDC trusted publishing. It reuses Agents Relay's bounded-test and publication-report Actions, as the other repositories do. The CI workflow never stores an npm write token or asks for a local 2FA approval. Configure the **webhelm** npm package's Trusted Publisher once: GitHub user `lalalic`, repository `webhelm`, workflow filename `publish.yml` (no environment), with **Allow npm publish** enabled. New configurations otherwise default to staged-only publishing and require individual approvals. A successful publish is verified against the npm registry and reported to Agents Relay. Skill-only and platform Action changes do not trigger npm publication.

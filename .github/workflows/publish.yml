@@ -1,0 +1,141 @@
+name: Publish WebHelm npm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/**'
+      - 'bin/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  id-token: write
+
+concurrency:
+  group: webhelm-npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Check npm OIDC requirements
+        run: |
+          npm --version
+          node -e 'const [maj,min]=process.argv[1].split(".").map(Number);if(maj<11||(maj===11&&min<5))process.exit(1)' "$(npm --version)"
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Verify with shared Agents Relay bounded-test action
+        timeout-minutes: 10
+        uses: lalalic/agents-relay/.github/actions/run-bounded-tests@main
+        with:
+          command: npm test
+
+      - name: Resolve next unused npm version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
+          test "$name" = webhelm
+          local_version="$(node -p "require('./package.json').version")"
+          latest="$(npm view "$name" version --registry=https://registry.npmjs.org)"
+          next="$(node - "$local_version" "$latest" <<'NODE'
+          const [local, remote]=process.argv.slice(2);
+          const parts=v=>v.split('-')[0].split('.').map(Number);
+          const a=parts(local),b=parts(remote);
+          if(a.length!==3||b.length!==3||a.some(x=>!Number.isInteger(x))||b.some(x=>!Number.isInteger(x)))throw Error('Invalid semver');
+          let comparison=0;
+          for(let i=0;i<3;i++){if(a[i]!==b[i]){comparison=a[i]-b[i];break;}}
+          console.log(comparison>0?local:`${b[0]}.${b[1]}.${b[2]+1}`);
+          NODE
+          )"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "Publish candidate: $name@$next"
+          npm version "$next" --no-git-tag-version --ignore-scripts --allow-same-version
+
+      - name: Verify npm package is Runtime-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json > "$RUNNER_TEMP/webhelm-pack.json"
+          node - "$RUNNER_TEMP/webhelm-pack.json" <<'NODE'
+          const fs=require('fs');const item=JSON.parse(fs.readFileSync(process.argv[2],'utf8'))[0];
+          const files=item.files.map(f=>f.path);
+          if(item.name!=='webhelm'||files.some(f=>f.includes('platforms/')||f.includes('skills/webhelm/'))||!files.includes('runtime/migrate.mjs')||!files.includes('bin/webhelm.mjs')){
+            throw Error('npm package must contain CLI/Runtime but no platform Actions or Skill');
+          }
+          console.log(`${item.name}@${item.version} — ${files.length} files, ${item.size} bytes`);
+          NODE
+
+      - name: Publish via npm Trusted Publisher (OIDC)
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          # npm OIDC must come from GitHub's id-token permission; no stored npm token.
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          for attempt in 1 2 3; do
+            : > "$error_file"
+            echo "Publishing webhelm@$version (attempt $attempt)"
+            if npm publish --provenance --access public 2> >(tee "$error_file" >&2); then
+              echo "version=$version" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ "$(npm view "webhelm@$version" version --registry=https://registry.npmjs.org 2>/dev/null || true)" = "$version" ]; then
+              echo "Already published and pullable: webhelm@$version"
+              echo "version=$version" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if grep -qi 'previously staged version' "$error_file"; then
+              version="$(node - "$version" <<'NODE'
+          const [major,minor,patch]=process.argv[2].split('.').map(Number);
+          console.log(`${major}.${minor}.${patch+1}`);
+          NODE
+              )"
+              npm version "$version" --no-git-tag-version --ignore-scripts
+              continue
+            fi
+            exit 1
+          done
+          echo 'Unable to publish after three staged-version retries' >&2
+          exit 1
+
+      - name: Report verified publication through shared Relay action
+        if: ${{ steps.publish.outcome == 'success' }}
+        continue-on-error: true
+        uses: lalalic/agents-relay/.github/actions/report-publication@publication-v1
+        with:
+          token: ${{ github.token }}
+          artifact: webhelm
+          version: ${{ steps.publish.outputs.version }}
+          channel: npm
+          sha: ${{ github.sha }}
+          repository: ${{ github.repository }}
+
+      - name: Report failure through shared Relay action
+        if: ${{ failure() }}
+        continue-on-error: true
+        uses: lalalic/agents-relay/.github/actions/report-publication-failure@publication-v1
+        with:
+          token: ${{ github.token }}
+          stage: WebHelm npm OIDC publish workflow
+          sha: ${{ github.sha }}
+          repository: ${{ github.repository }}
