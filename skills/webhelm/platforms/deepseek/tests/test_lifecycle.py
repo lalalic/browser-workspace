@@ -147,3 +147,70 @@ def test_new_turn_rejects_redirect_without_submission():
     }
     with pytest.raises(RuntimeError, match="redirect mismatch"):
         lifecycle.run({"message": "hello", "thread_id": THREAD}, "new-turn", browser)
+
+# A sanitized fixture of the actual DeepSeek webpage SSE produced by a normal
+# browser click. HTTP 200 by itself, a title, and partial tokens are not proof.
+STREAM = '''event: ready
+data: {"request_message_id":1,"response_message_id":2}
+
+data: {"v":{"response":{"status":"WIP","fragments":[{"type":"RESPONSE","content":"VER"}]}}}
+
+data: {"p":"response/fragments/-1/content","o":"APPEND","v":"IFIED"}
+
+data: {"v":"-VISION"}
+
+data: {"p":"response/status","o":"SET","v":"FINISHED"}
+
+event: close
+data: {"auto_resume":false}
+
+'''
+
+
+def test_real_webpage_stream_returns_only_completed_answer():
+    assert lifecycle.parse_site_stream(STREAM) == 'VERIFIED-VISION'
+    assert lifecycle.parse_site_stream(STREAM.replace('"FINISHED"', '"WIP"')) is None
+    assert lifecycle.parse_site_stream(STREAM.split('event: close')[0]) is None
+    assert lifecycle.parse_site_stream(STREAM.replace('event: ready', 'event: ignored')) is None
+    assert lifecycle.parse_site_stream(STREAM.replace('"RESPONSE"', '"THINK"')) is None
+    assert lifecycle.parse_site_stream('') is None
+
+
+def test_stream_completion_without_dom_message():
+    stream = {'count': 1, 'latest': {'state': 'received', 'http': 200, 'error': ''}}
+    browser = {
+        'cdp': lambda *args, **kwargs: {},
+        'js': lambda expression: (stream if expression == lifecycle.STREAM_STATE else
+                                  STREAM if expression == lifecycle.STREAM_BODY else
+                                  {'count': 0, 'answer': '', 'settled': True}),
+        'wait': lambda *_: None,
+    }
+    result = lifecycle.wait_for_answer(browser, {'thread_id': THREAD}, {}, 0, 2)
+    assert result['status'] == 'completed'
+    assert result['answer'] == 'VERIFIED-VISION'
+    assert 'webpage response stream' in result['verified_by']
+
+
+def test_stream_rejects_http_failure_without_fabricating_answer():
+    browser = {
+        'cdp': lambda *args, **kwargs: {},
+        'js': lambda expression: {'count': 1, 'latest': {'state': 'received', 'http': 403, 'error': ''}},
+    }
+    with pytest.raises(RuntimeError, match='HTTP 403'):
+        lifecycle.stream_result(browser)
+
+
+def test_stream_observer_uses_existing_page_fetch_only():
+    assert 'original.apply(this, args)' in lifecycle.STREAM_OBSERVER
+    assert 'response.clone().text()' in lifecycle.STREAM_OBSERVER
+    assert 'authorization' not in lifecycle.STREAM_OBSERVER.lower()
+
+
+def test_xhr_collector_handles_live_site_transport_and_pending_receipt():
+    assert 'XMLHttpRequest.prototype.open' in lifecycle.STREAM_OBSERVER
+    assert 'XMLHttpRequest.prototype.send' in lifecycle.STREAM_OBSERVER
+    browser = {
+        'cdp': lambda *args, **kwargs: {},
+        'js': lambda expression: {'count': 1, 'latest': {'state': 'reading', 'http': None, 'error': ''}},
+    }
+    assert lifecycle.stream_result(browser) == {'state': 'pending'}

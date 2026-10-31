@@ -76,10 +76,17 @@ If the result is `pending`, retain the same tab and use `{"resume": true}` to
 read the answer without uploading or submitting again. A timeout is not proof
 that submission failed. This action never automatically retries a submission.
 
-The final answer is read from `.ds-assistant-message-main-content`, excluding
-the separate reasoning panel. Completion requires the read-aloud control and
-the composer returning to its idle state. Attachment preview readiness is
-checked before submission; DeepSeek handles remaining server-side processing.
+The final answer is read from the **signed-in webpage's own** completion
+response (fetch/XHR observed without changing or issuing any request). The
+observer requires a matching user submission and durable thread URL, an SSE
+`ready` receipt, explicit `response/status = FINISHED`, a `close` event,
+and nonempty `RESPONSE` fragments. A DOM-rendered assistant answer remains a
+fallback. HTTP 200, a thread title, partial tokens, or a cleared composer alone
+are never treated as a completed answer. Browser background pages are woken via
+CDP lifecycle without foregrounding Chrome; React draft input uses the native
+value setter + bubbling input event so hidden-tab keyboard loss cannot submit
+an empty prompt. No developer API key is needed. Attachment preview readiness
+is checked before submission; DeepSeek handles server-side processing.
 
 Actions use semantic DOM controls, not screen coordinates. Callers must explicitly
 choose which local images to disclose to DeepSeek. Never upload private project
